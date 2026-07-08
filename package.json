@@ -1,0 +1,20 @@
+{
+  "name": "codistan-sales-automation",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Internal opportunity intelligence platform for Codistan sales prospecting and qualification.",
+  "packageManager": "pnpm@9.15.0",
+  "scripts": {
+    "build": "pnpm -r build",
+    "dev": "pnpm --filter @sales-automation/web dev",
+    "lint": "pnpm -r lint",
+    "test": "pnpm -r test",
+    "typecheck": "pnpm -r typecheck"
+  },
+  "engines": {
+    "node": ">=20.0.0"
+  },
+  "devDependencies": {
+    "typescript": "^5.7.2"
+  }
+}
