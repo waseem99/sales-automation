@@ -22,8 +22,8 @@ This sprint should prove that Codistan can evaluate an opportunity quickly and c
 6. Tag-based portfolio matching engine. ✅
 7. Sample fixtures for leads and portfolio items. ✅
 8. End-to-end evaluator. ✅
-9. Manual lead input API or CLI.
-10. Basic Upwork email/manual parsing model.
+9. Manual lead input CLI. ✅
+10. Basic Upwork email/manual parsing model. ✅
 11. Human-readable lead score explanation. ✅
 
 ### P1 — Should Have
@@ -32,6 +32,7 @@ This sprint should prove that Codistan can evaluate an opportunity quickly and c
 2. Hot alert interface.
 3. In-memory or local DB proof-of-concept.
 4. Sample leads for scoring tests. ✅
+5. Basic parser/evaluator smoke tests. ✅
 
 ### P2 — Later
 
@@ -138,16 +139,30 @@ End-to-end evaluation layer:
 - Runs profile routing.
 - Returns recommended next human action.
 
+### `@sales-automation/cli`
+
+Manual lead evaluation CLI:
+
+- Evaluates bundled sample leads.
+- Evaluates pasted/manual lead JSON files.
+- Returns score, urgency, red flags, recommended profile, matched portfolio, and next action.
+
+### `@sales-automation/parsers`
+
+Basic parser layer:
+
+- Parses simple Upwork job alert/digest style email text.
+- Extracts title, URL, budget signal, posted/freshness signal, service category, and normalized lead object.
+
 ---
 
 ## Sprint 1 Remaining Implementation Order
 
-1. Add manual lead input API or CLI.
-2. Add sample evaluation runner.
-3. Add scoring/evaluator tests.
-4. Add basic Upwork email parser.
-5. Add draft generator interface.
-6. Add hot alert interface.
+1. Add draft generator interface.
+2. Add hot alert interface.
+3. Add in-memory or local DB proof-of-concept.
+4. Add GitHub Actions CI.
+5. Add Gmail ingestion adapter later.
 
 ---
 
