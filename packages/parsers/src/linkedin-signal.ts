@@ -63,9 +63,9 @@ export function parseLinkedInSignal(input: ParseLinkedInSignalInput): ParsedLink
 function inferSignalType(text: string): LinkedInSignalType {
   const value = text.toLowerCase();
 
+  if (containsAny(value, ['automation expert', 'workflow automation', 'ai automation', 'zapier', 'make.com', 'n8n'])) return 'looking_for_automation_help';
   if (containsAny(value, ['looking for ai', 'ai partner', 'ai developer', 'llm', 'rag'])) return 'looking_for_ai_partner';
   if (containsAny(value, ['website developer', 'web developer', 'website team', 'webflow', 'wordpress'])) return 'looking_for_website_team';
-  if (containsAny(value, ['automation expert', 'workflow automation', 'zapier', 'make.com', 'n8n'])) return 'looking_for_automation_help';
   if (containsAny(value, ['ar developer', 'vr developer', '3d team', 'unity developer', 'unreal developer'])) return 'looking_for_ar_3d_team';
   if (containsAny(value, ['outsourcing partner', 'white-label', 'white label', 'delivery partner', 'overflow work'])) return 'agency_needs_delivery_partner';
   if (containsAny(value, ['hiring full-stack', 'hiring full stack', 'hiring developer', 'hiring engineer', 'hiring ai'])) return 'hiring_engineering_team';
