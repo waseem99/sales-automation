@@ -52,6 +52,7 @@ const context = {
   repository,
   portfolioItems: samplePortfolioItems,
   actor: 'web-route-test',
+  role: 'admin' as const,
   now: () => generatedAt,
 };
 
@@ -71,6 +72,12 @@ assert.equal(JSON.parse(summaryResponse.body).total, 1);
 const listResponse = handleSalesAutomationRequest({ method: 'GET', path: '/api/opportunities?savedView=hot_upwork_now' }, context);
 assert.equal(listResponse.status, 200);
 assert.equal(JSON.parse(listResponse.body).length, 1);
+
+const readOnlyListResponse = handleSalesAutomationRequest(
+  { method: 'GET', path: '/api/opportunities' },
+  { ...context, role: 'read_only' },
+);
+assert.equal(readOnlyListResponse.status, 200);
 
 const detailResponse = handleSalesAutomationRequest({ method: 'GET', path: `/api/opportunities/${escapedTitleLead.id}` }, context);
 assert.equal(detailResponse.status, 200);
@@ -111,6 +118,20 @@ const upworkIngestResponse = handleSalesAutomationRequest(
 assert.equal(upworkIngestResponse.status, 201);
 assert.equal(JSON.parse(upworkIngestResponse.body).totalCaptured, 1);
 
+const readOnlyIngestResponse = handleSalesAutomationRequest(
+  {
+    method: 'POST',
+    path: '/api/ingest/upwork-email',
+    body: {
+      receivedAt: generatedAt,
+      emailBody: `Job: Read-only should not ingest\nhttps://www.upwork.com/jobs/web-route-test-readonly\nAI automation work. Budget $5,000. Posted 15 minutes ago`,
+    },
+  },
+  { ...context, role: 'read_only' },
+);
+assert.equal(readOnlyIngestResponse.status, 403);
+assert.ok(JSON.parse(readOnlyIngestResponse.body).error.includes('Forbidden'));
+
 const linkedinIngestResponse = handleSalesAutomationRequest(
   {
     method: 'POST',
@@ -147,6 +168,12 @@ const manualIngestResponse = handleSalesAutomationRequest(
 );
 assert.equal(manualIngestResponse.status, 201);
 assert.equal(JSON.parse(manualIngestResponse.body).totalCaptured, 1);
+
+const readOnlyStatusResponse = handleSalesAutomationRequest(
+  { method: 'POST', path: `/api/opportunities/${escapedTitleLead.id}/status`, body: { status: 'sent_manually' } },
+  { ...context, role: 'read_only' },
+);
+assert.equal(readOnlyStatusResponse.status, 403);
 
 const badRequest = handleSalesAutomationRequest(
   { method: 'POST', path: '/api/ingest/upwork-email', body: { emailBody: '' } },
