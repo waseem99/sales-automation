@@ -159,21 +159,33 @@ function isAiFullstack(serviceCategory: ServiceCategory): boolean {
 }
 
 function isFounderLedBetter(lead: Lead): boolean {
-  const text = `${lead.title} ${lead.description}`.toLowerCase();
-  return [
-    'strategy',
-    'consultant',
-    'architecture',
-    'discovery',
+  const text = normalizeText(`${lead.title} ${lead.description}`);
+  const phraseKeywords = [
+    'ai strategy',
     'technical partner',
-    'cto',
-    'roadmap',
-    'scope',
     'ai transformation',
-  ].some((keyword) => text.includes(keyword));
+    'fractional cto',
+    'solution architecture',
+    'technical discovery',
+  ];
+  const wordKeywords = ['strategy', 'consultant', 'architecture', 'discovery', 'cto', 'roadmap', 'scope'];
+
+  return phraseKeywords.some((keyword) => text.includes(keyword)) || wordKeywords.some((keyword) => hasWholeWord(text, keyword));
 }
 
 function hasUsOnlyAmbiguity(lead: Lead): boolean {
   const text = `${lead.title} ${lead.description} ${lead.country ?? ''} ${lead.region ?? ''}`.toLowerCase();
   return text.includes('us only') || text.includes('u.s. only') || text.includes('united states only');
+}
+
+function normalizeText(value: string): string {
+  return value.toLowerCase().replace(/[^a-z0-9]+/g, ' ').replace(/\s+/g, ' ').trim();
+}
+
+function hasWholeWord(text: string, word: string): boolean {
+  return new RegExp(`(^|\\s)${escapeRegExp(word)}($|\\s)`).test(text);
+}
+
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
