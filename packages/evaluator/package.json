@@ -9,15 +9,18 @@
     "build": "tsc -p tsconfig.json",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "lint": "tsc -p tsconfig.json --noEmit",
-    "test": "echo 'Evaluator tests to be added in Sprint 1'"
+    "test": "tsx src/index.test.ts"
   },
   "dependencies": {
     "@sales-automation/shared": "workspace:*",
     "@sales-automation/scoring": "workspace:*",
     "@sales-automation/routing": "workspace:*",
-    "@sales-automation/portfolio-matching": "workspace:*"
+    "@sales-automation/portfolio-matching": "workspace:*",
+    "@sales-automation/drafting": "workspace:*",
+    "@sales-automation/alerts": "workspace:*"
   },
   "devDependencies": {
+    "tsx": "^4.19.2",
     "typescript": "^5.7.2"
   }
 }
