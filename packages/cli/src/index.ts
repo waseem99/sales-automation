@@ -79,6 +79,16 @@ function printEvaluation(evaluation: ReturnType<typeof evaluateLead>): void {
       matchedTags: match.matchedTags,
       reasons: match.reasons,
     })),
+    drafts: evaluation.drafts.map((draft) => ({
+      id: draft.id,
+      type: draft.type,
+      status: draft.status,
+      subject: draft.subject,
+      body: draft.body,
+      requiresHumanApproval: draft.metadata.requiresHumanApproval,
+      portfolioItemIds: draft.metadata.portfolioItemIds,
+    })),
+    alertPlan: evaluation.alertPlan,
     recommendedNextAction: evaluation.recommendedNextAction,
     explanation: evaluation.score.explanation,
   };
