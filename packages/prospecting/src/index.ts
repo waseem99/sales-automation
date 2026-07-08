@@ -167,7 +167,7 @@ export function scoreSolutionProspect(input: SolutionProspectInput): ProspectSco
   return {
     total,
     status: getProspectStatus(total),
-    urgency: total >= 85 && triggerStrength >= 20 ? 'urgent' : total >= 80 ? 'normal' : 'low',
+    urgency: total >= 85 && input.observedPainSignals.length > 0 ? 'urgent' : total >= 80 ? 'normal' : 'low',
     breakdown: { icpFit, triggerStrength, serviceGap, commercialPotential, proofFit },
     reasons,
     redFlags,
