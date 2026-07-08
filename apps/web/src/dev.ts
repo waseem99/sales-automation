@@ -1,31 +1,34 @@
-import { createSalesAutomationDashboardApi } from '@sales-automation/api';
-import { evaluateLead } from '@sales-automation/evaluator';
 import { sampleLeads, samplePortfolioItems } from '@sales-automation/fixtures';
-import { InMemoryLeadRepository } from '@sales-automation/storage';
-import { renderDashboardPage } from './index.js';
+import { LocalJsonLeadRepository } from '@sales-automation/storage';
+import { evaluateLead } from '@sales-automation/evaluator';
+import { createSalesAutomationHttpServer } from './server.js';
 
 const generatedAt = new Date().toISOString();
-const repository = new InMemoryLeadRepository();
+const port = Number(process.env.PORT ?? 3000);
+const storagePath = process.env.LOCAL_LEAD_STORE_PATH ?? '.data/leads.json';
+const repository = new LocalJsonLeadRepository({ filePath: storagePath });
 
-for (const lead of sampleLeads) {
-  repository.saveEvaluation(
-    evaluateLead({
-      lead,
-      portfolioItems: samplePortfolioItems,
-      generatedAt,
-    }),
-    'web-dev',
-  );
+if (repository.listLeads().length === 0) {
+  for (const lead of sampleLeads) {
+    repository.saveEvaluation(
+      evaluateLead({
+        lead,
+        portfolioItems: samplePortfolioItems,
+        generatedAt,
+      }),
+      'web-dev-seed',
+    );
+  }
 }
 
-const api = createSalesAutomationDashboardApi(repository);
-const opportunities = api.listOpportunities({ now: generatedAt });
-const selectedLead = opportunities[0] ? api.getLeadDetail(opportunities[0].id, generatedAt) : undefined;
-const html = renderDashboardPage({
-  title: 'Codistan Lead Desk — Local Preview',
-  summary: api.getDashboardSummary(generatedAt),
-  opportunities,
-  selectedLead,
+const server = createSalesAutomationHttpServer({
+  repository,
+  portfolioItems: samplePortfolioItems,
+  actor: 'web-dev',
+  now: () => new Date().toISOString(),
 });
 
-console.log(html);
+server.listen(port, () => {
+  console.log(`Codistan Lead Desk running at http://localhost:${port}`);
+  console.log(`Local lead store: ${storagePath}`);
+});
