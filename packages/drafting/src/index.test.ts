@@ -1,17 +1,26 @@
 import assert from 'node:assert/strict';
-import { evaluateLead } from '@sales-automation/evaluator';
+import { matchPortfolio } from '@sales-automation/portfolio-matching';
+import { recommendProfile } from '@sales-automation/routing';
+import { scoreLead } from '@sales-automation/scoring';
 import { sampleLeads, samplePortfolioItems } from '@sales-automation/fixtures';
 import { generateDrafts } from './index.js';
 
 const ragLead = sampleLeads.find((lead) => lead.id === 'lead-upwork-rag-001');
 assert.ok(ragLead, 'RAG sample lead should exist');
 
-const ragEvaluation = evaluateLead({ lead: ragLead, portfolioItems: samplePortfolioItems });
+const ragPortfolioMatches = matchPortfolio({ lead: ragLead, portfolioItems: samplePortfolioItems });
+const ragScore = scoreLead({
+  lead: ragLead,
+  matchingPortfolioCount: ragPortfolioMatches.length,
+  hasStrongBuyerSignal: true,
+  hasStrongBudgetSignal: true,
+});
+const ragProfile = recommendProfile(ragLead, ragScore);
 const ragDrafts = generateDrafts({
-  lead: ragEvaluation.lead,
-  score: ragEvaluation.score,
-  profileRecommendation: ragEvaluation.profileRecommendation,
-  portfolioMatches: ragEvaluation.portfolioMatches,
+  lead: ragLead,
+  score: ragScore,
+  profileRecommendation: ragProfile,
+  portfolioMatches: ragPortfolioMatches,
   generatedAt: '2026-07-08T18:30:00.000Z',
 });
 
@@ -23,12 +32,19 @@ assert.ok(!ragDrafts[0].body.toLowerCase().includes('private'));
 const linkedinLead = sampleLeads.find((lead) => lead.id === 'lead-linkedin-ai-001');
 assert.ok(linkedinLead, 'LinkedIn sample lead should exist');
 
-const linkedinEvaluation = evaluateLead({ lead: linkedinLead, portfolioItems: samplePortfolioItems });
+const linkedinPortfolioMatches = matchPortfolio({ lead: linkedinLead, portfolioItems: samplePortfolioItems });
+const linkedinScore = scoreLead({
+  lead: linkedinLead,
+  matchingPortfolioCount: linkedinPortfolioMatches.length,
+  hasStrongBuyerSignal: true,
+  hasStrongBudgetSignal: true,
+});
+const linkedinProfile = recommendProfile(linkedinLead, linkedinScore);
 const linkedinDrafts = generateDrafts({
-  lead: linkedinEvaluation.lead,
-  score: linkedinEvaluation.score,
-  profileRecommendation: linkedinEvaluation.profileRecommendation,
-  portfolioMatches: linkedinEvaluation.portfolioMatches,
+  lead: linkedinLead,
+  score: linkedinScore,
+  profileRecommendation: linkedinProfile,
+  portfolioMatches: linkedinPortfolioMatches,
   generatedAt: '2026-07-08T18:30:00.000Z',
 });
 
@@ -39,12 +55,22 @@ assert.ok(linkedinDrafts.some((draft) => draft.type === 'linkedin_dm'));
 const lowBudgetLead = sampleLeads.find((lead) => lead.id === 'lead-upwork-lowbudget-001');
 assert.ok(lowBudgetLead, 'Low budget sample lead should exist');
 
-const lowBudgetEvaluation = evaluateLead({ lead: lowBudgetLead, portfolioItems: samplePortfolioItems });
+const lowBudgetScore = scoreLead({
+  lead: lowBudgetLead,
+  matchingPortfolioCount: 0,
+  hasStrongBuyerSignal: false,
+  hasStrongBudgetSignal: false,
+  redFlags: [
+    { code: 'low_budget_signal', severity: 'high', reason: 'Budget signal appears too low for Codistan target opportunities.' },
+    { code: 'free_work_request', severity: 'high', reason: 'Lead appears to request free or unpaid sample work.' },
+  ],
+});
+const lowBudgetProfile = recommendProfile(lowBudgetLead, lowBudgetScore);
 const rejectedDrafts = generateDrafts({
-  lead: lowBudgetEvaluation.lead,
-  score: lowBudgetEvaluation.score,
-  profileRecommendation: lowBudgetEvaluation.profileRecommendation,
-  portfolioMatches: lowBudgetEvaluation.portfolioMatches,
+  lead: lowBudgetLead,
+  score: lowBudgetScore,
+  profileRecommendation: lowBudgetProfile,
+  portfolioMatches: [],
   generatedAt: '2026-07-08T18:30:00.000Z',
 });
 
