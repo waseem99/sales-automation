@@ -4,7 +4,7 @@
 
 Build the first useful internal loop:
 
-Manual or Upwork lead input → normalized lead object → score → urgency/status → profile recommendation → portfolio match → recommended human action → human-approved draft → hot alert plan → durable local storage → dashboard-ready lead review model → controller/API actions → lightweight rendered dashboard shell.
+Safe input source → normalized lead object → dedupe → score → urgency/status → profile recommendation → portfolio match → recommended human action → human-approved draft → hot alert plan → durable local storage → dashboard-ready lead review model → controller/API actions → lightweight rendered dashboard shell.
 
 This sprint should prove that Codistan can evaluate an opportunity quickly and consistently without relying on fixed daily limits.
 
@@ -38,13 +38,15 @@ This sprint should prove that Codistan can evaluate an opportunity quickly and c
 8. Dashboard controller/API layer. ✅
 9. Lightweight rendered dashboard shell. ✅
 10. Durable local JSON repository. ✅
+11. Safe ingestion orchestration with dedupe and immediate evaluation. ✅
+12. Cadence-aware ingestion worker runner. ✅
 
 ### P2 — Later
 
 1. Full interactive dashboard UI / route binding.
 2. Production database-backed repository.
 3. Gmail integration.
-4. Sales Navigator alert parser.
+4. Sales Navigator alert parser hardening.
 5. Enrichment providers.
 6. Analytics.
 
@@ -164,6 +166,29 @@ Basic parser layer:
 - Extracts title, URL, budget signal, posted/freshness signal, service category, and normalized lead object.
 - Parses safe manual/alert-text LinkedIn warm signals.
 
+### `@sales-automation/ingestion`
+
+Safe ingestion orchestration layer:
+
+- Ingests safe Upwork email parser outputs.
+- Ingests safe LinkedIn/manual signal parser outputs.
+- Ingests manual lead batches.
+- Deduplicates by normalized source URL or lead ID.
+- Triggers immediate evaluation after capture.
+- Saves evaluated leads to the configured repository.
+- Returns captured/skipped counts and alert eligibility.
+- Does not scrape or send anything externally.
+
+### `@sales-automation/workers`
+
+Cadence-aware worker runner:
+
+- Runs configured safe ingestion sources only when due.
+- Supports 30-minute Upwork and LinkedIn warm source checks.
+- Tracks last-run state by source ID.
+- Skips disabled and not-yet-due sources.
+- Does not contain scraping, sending, or credential logic.
+
 ### `@sales-automation/drafting`
 
 Human-approved draft generator:
@@ -238,11 +263,11 @@ Lightweight rendered dashboard shell:
 
 ## Sprint 1 Remaining Implementation Order
 
-1. Add ingestion orchestration with dedupe and immediate evaluation.
-2. Bind controller methods to actual HTTP or Next.js routes.
-3. Add Gmail ingestion adapter later.
-4. Add Sales Navigator / LinkedIn alert adapter.
-5. Add production alert delivery adapters.
+1. Bind controller methods to actual HTTP or Next.js routes.
+2. Add Gmail ingestion adapter later.
+3. Add Sales Navigator / LinkedIn alert adapter hardening.
+4. Add production alert delivery adapters.
+5. Add production database-backed repository.
 
 ---
 
@@ -260,6 +285,8 @@ By the end of Sprint 1, a user should be able to input a lead/job and get:
 - Matching portfolio proof.
 - Human-approved draft output.
 - Alert eligibility and alert plan.
+- Safe ingestion with dedupe and immediate evaluation.
+- Cadence-aware worker runner for 30-minute source checks.
 - Durable local storage for evaluated leads.
 - Dashboard-ready list/detail state.
 - Controller/API actions for status, owner, notes, and alert dedupe.
