@@ -250,6 +250,9 @@ function buildScoreBands(records: StoredLeadRecord[]): ScoreBandMetrics[] {
 }
 
 function hasReached(currentStatus: PipelineStatus, targetStatus: PipelineStatus): boolean {
+  if (currentStatus === 'rejected' && targetStatus !== 'rejected') {
+    return false;
+  }
   return pipelineOrder.indexOf(currentStatus) >= pipelineOrder.indexOf(targetStatus);
 }
 
