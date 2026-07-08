@@ -2,7 +2,6 @@ import type {
   CodistanProfile,
   LeadSource,
   PipelineStatus,
-  QualificationStatus,
   ServiceCategory,
 } from '@sales-automation/shared';
 import type { StoredLeadRecord } from '@sales-automation/storage';
@@ -91,9 +90,9 @@ export function buildAnalyticsReport(
     totalLeads: filtered.length,
     funnel,
     outcomes: buildOutcomeMetrics(funnel),
-    bySource: groupFunnelMetrics(filtered, (record) => record.lead.source),
-    byServiceCategory: groupFunnelMetrics(filtered, (record) => record.lead.serviceCategory),
-    byRecommendedProfile: groupFunnelMetrics(filtered, (record) => getRecommendedProfile(record)),
+    bySource: groupFunnelMetrics(filtered, (record) => record.lead.source) as Partial<Record<LeadSource, FunnelMetrics>>,
+    byServiceCategory: groupFunnelMetrics(filtered, (record) => record.lead.serviceCategory) as Partial<Record<ServiceCategory, FunnelMetrics>>,
+    byRecommendedProfile: groupFunnelMetrics(filtered, (record) => getRecommendedProfile(record)) as Partial<Record<CodistanProfile, FunnelMetrics>>,
     byOwner: groupFunnelMetrics(filtered, (record) => record.lead.owner ?? 'unassigned'),
     winReasons: collectReasonCounts(filtered, 'win'),
     lossReasons: collectReasonCounts(filtered, 'loss'),
@@ -193,18 +192,18 @@ function matchesAnalyticsFilters(record: StoredLeadRecord, filters: AnalyticsFil
   return true;
 }
 
-function groupFunnelMetrics<T extends string>(
+function groupFunnelMetrics(
   records: StoredLeadRecord[],
-  getKey: (record: StoredLeadRecord) => T | undefined,
-): Partial<Record<T, FunnelMetrics>> {
-  const groups = new Map<T, StoredLeadRecord[]>();
+  getKey: (record: StoredLeadRecord) => string | undefined,
+): Record<string, FunnelMetrics> {
+  const groups = new Map<string, StoredLeadRecord[]>();
   for (const record of records) {
     const key = getKey(record);
     if (!key) continue;
     groups.set(key, [...(groups.get(key) ?? []), record]);
   }
 
-  const result: Partial<Record<T, FunnelMetrics>> = {};
+  const result: Record<string, FunnelMetrics> = {};
   for (const [key, groupRecords] of groups.entries()) {
     result[key] = buildFunnelMetrics(groupRecords);
   }
