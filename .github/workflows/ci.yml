@@ -34,7 +34,24 @@ jobs:
         run: pnpm typecheck
 
       - name: Test
-        run: pnpm test
+        id: test
+        continue-on-error: true
+        run: pnpm test > test.log 2>&1
+
+      - name: Print test log tail
+        if: always()
+        run: tail -n 120 test.log || true
+
+      - name: Upload test log
+        if: always()
+        uses: actions/upload-artifact@v5
+        with:
+          name: test-log
+          path: test.log
+
+      - name: Fail if tests failed
+        if: steps.test.outcome != 'success'
+        run: exit 1
 
       - name: Build
         run: pnpm build
