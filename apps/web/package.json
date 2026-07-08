@@ -14,12 +14,14 @@
   },
   "dependencies": {
     "@sales-automation/api": "workspace:*",
-    "@sales-automation/dashboard": "workspace:*"
+    "@sales-automation/dashboard": "workspace:*",
+    "@sales-automation/ingestion": "workspace:*",
+    "@sales-automation/shared": "workspace:*",
+    "@sales-automation/storage": "workspace:*"
   },
   "devDependencies": {
     "@sales-automation/evaluator": "workspace:*",
     "@sales-automation/fixtures": "workspace:*",
-    "@sales-automation/storage": "workspace:*",
     "tsx": "^4.19.2",
     "typescript": "^5.7.2"
   }
