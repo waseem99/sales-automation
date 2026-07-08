@@ -4,7 +4,7 @@
 
 Build the first useful internal loop:
 
-Safe input source → normalized lead object → dedupe → score → urgency/status → profile recommendation → portfolio match → recommended human action → human-approved draft → hot alert plan → durable local storage → dashboard-ready lead review model → controller/API actions → route-level access control → lightweight rendered dashboard shell.
+Safe input source → normalized lead object → dedupe → score → urgency/status → profile recommendation → portfolio match → recommended human action → human-approved draft → hot alert plan → durable local storage → analytics/learning report → dashboard-ready lead review model → controller/API actions → route-level access control → lightweight rendered dashboard shell.
 
 This sprint should prove that Codistan can evaluate an opportunity quickly and consistently without relying on fixed daily limits.
 
@@ -42,6 +42,8 @@ This sprint should prove that Codistan can evaluate an opportunity quickly and c
 12. Cadence-aware ingestion worker runner. ✅
 13. HTTP route binding for dashboard, ingestion, and reviewer actions. ✅
 14. Role/permission foundation with route-level enforcement. ✅
+15. Analytics and scoring calibration foundation. ✅
+16. Partner and solution-led prospect scoring foundation. ✅
 
 ### P2 — Later
 
@@ -51,7 +53,8 @@ This sprint should prove that Codistan can evaluate an opportunity quickly and c
 4. Gmail integration.
 5. Sales Navigator alert parser hardening.
 6. Enrichment providers.
-7. Analytics.
+7. Admin scoring-weight adjustment UI/API.
+8. Production alert delivery adapters.
 
 ---
 
@@ -78,7 +81,10 @@ This sprint should prove that Codistan can evaluate an opportunity quickly and c
 ### Partner / Solution Prospecting
 
 - Daily or weekly cadence.
-- Not treated as urgent unless score is very high or there is a direct buying signal.
+- Partner priority if score is 80+.
+- Partner urgent only if score is 90+ or strong direct buying/overflow/partnership trigger exists.
+- Solution-led priority if score is 80+.
+- Solution-led urgent if score is 85+ with strong observed pain signal.
 
 ---
 
@@ -201,6 +207,19 @@ Cadence-aware worker runner:
 - Skips disabled and not-yet-due sources.
 - Does not contain scraping, sending, or credential logic.
 
+### `@sales-automation/prospecting`
+
+Partner and solution-led prospecting foundation:
+
+- Defines partner target types and buying triggers.
+- Scores partner prospects across ICP fit, trigger strength, service gap, commercial potential, and portfolio/proof fit.
+- Provides partner recommended angle and next action.
+- Converts partner prospects into normalized lead objects.
+- Defines solution campaign catalog for airline refund automation, banking private intelligence, enterprise AI automation, and B2B website intelligence.
+- Scores solution-led prospects across ICP fit, pain trigger strength, service gap, commercial potential, and campaign proof fit.
+- Converts solution-led prospects into normalized lead objects.
+- Does not scrape, enrich, or send outreach automatically.
+
 ### `@sales-automation/drafting`
 
 Human-approved draft generator:
@@ -238,13 +257,24 @@ Repository layer:
 - Reloads saved records across repository instances.
 - Throws clear errors for invalid local JSON/schema.
 
+### `@sales-automation/analytics`
+
+Analytics and learning-loop foundation:
+
+- Builds funnel metrics for captured, scored, hot, qualified, approved, sent, replied, meeting booked, proposal sent, won, lost, rejected, and archived leads.
+- Calculates win, reply, meeting, proposal, loss, and rejection rates.
+- Breaks down metrics by source, service category, recommended profile, and owner.
+- Records win/loss/rejection reasons in audit metadata.
+- Builds scoring calibration reports with average scores, false positives, false negatives, and score-band outcomes.
+- Avoids counting rejected leads as outreach/reply/meeting/proposal progress.
+
 ### `@sales-automation/dashboard`
 
 Dashboard-ready model layer:
 
 - Builds opportunity list rows.
 - Supports filters by source, lead type, score, urgency, profile, owner, status, and service category.
-- Supports saved views like Hot Upwork Now, Hot LinkedIn Warm Posts, AI Automation Leads, Partner Prospects, Solution-Led Prospects, Needs Human Review, and Overdue Hot Leads.
+- Supports saved views like Hot Upwork Now, Hot LinkedIn Warm Posts, AI Automation Leads, AR/3D Leads, Partner Prospects, Solution-Led Prospects, Needs Human Review, and Overdue Hot Leads.
 - Builds lead detail payloads with evidence, score breakdown, red flags, profile reasoning, portfolio matches, drafts, notes, and audit log.
 - Exposes allowed status transitions for reviewer actions.
 - Calculates summary counts and SLA overdue state.
@@ -280,9 +310,11 @@ Lightweight rendered dashboard and HTTP adapter:
 1. Add real authentication/session integration.
 2. Add Gmail ingestion adapter later.
 3. Add Sales Navigator / LinkedIn alert adapter hardening.
-4. Add production alert delivery adapters.
-5. Add production database-backed repository.
-6. Add interactive frontend forms/components.
+4. Add enrichment policy and cost-control layer.
+5. Add production alert delivery adapters.
+6. Add production database-backed repository.
+7. Add interactive frontend forms/components.
+8. Add admin scoring-weight adjustment UI/API.
 
 ---
 
@@ -301,8 +333,10 @@ By the end of Sprint 1, a user should be able to input a lead/job and get:
 - Human-approved draft output.
 - Alert eligibility and alert plan.
 - Safe ingestion with dedupe and immediate evaluation.
+- Partner and solution-led prospect scoring and lead normalization.
 - Cadence-aware worker runner for 30-minute source checks.
 - Durable local storage for evaluated leads.
+- Analytics and calibration reporting foundation.
 - Dashboard-ready list/detail state.
 - Controller/API actions for status, owner, notes, and alert dedupe.
 - Route-level permission enforcement.
