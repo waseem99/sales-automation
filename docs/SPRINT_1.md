@@ -4,7 +4,7 @@
 
 Build the first useful internal loop:
 
-Manual or Upwork lead input → normalized lead object → score → urgency/status → profile recommendation → portfolio match → recommended human action → proposal draft next → alert next.
+Manual or Upwork lead input → normalized lead object → score → urgency/status → profile recommendation → portfolio match → recommended human action → human-approved draft → hot alert plan.
 
 This sprint should prove that Codistan can evaluate an opportunity quickly and consistently without relying on fixed daily limits.
 
@@ -28,11 +28,12 @@ This sprint should prove that Codistan can evaluate an opportunity quickly and c
 
 ### P1 — Should Have
 
-1. Draft generator interface.
-2. Hot alert interface.
+1. Draft generator interface. ✅
+2. Hot alert interface. ✅
 3. In-memory or local DB proof-of-concept.
 4. Sample leads for scoring tests. ✅
 5. Basic parser/evaluator smoke tests. ✅
+6. GitHub Actions CI. ✅
 
 ### P2 — Later
 
@@ -137,6 +138,8 @@ End-to-end evaluation layer:
 - Runs portfolio matching.
 - Runs scoring.
 - Runs profile routing.
+- Generates human-approved drafts.
+- Builds a hot alert plan.
 - Returns recommended next human action.
 
 ### `@sales-automation/cli`
@@ -145,7 +148,7 @@ Manual lead evaluation CLI:
 
 - Evaluates bundled sample leads.
 - Evaluates pasted/manual lead JSON files.
-- Returns score, urgency, red flags, recommended profile, matched portfolio, and next action.
+- Returns score, urgency, red flags, recommended profile, matched portfolio, draft outputs, alert plan, and next action.
 
 ### `@sales-automation/parsers`
 
@@ -154,15 +157,35 @@ Basic parser layer:
 - Parses simple Upwork job alert/digest style email text.
 - Extracts title, URL, budget signal, posted/freshness signal, service category, and normalized lead object.
 
+### `@sales-automation/drafting`
+
+Human-approved draft generator:
+
+- Generates Upwork proposals.
+- Generates LinkedIn comment and DM variants.
+- Generates partner outreach drafts.
+- Generates solution-led outreach drafts.
+- Never sends externally.
+- References only public/anonymized proof.
+
+### `@sales-automation/alerts`
+
+Hot alert planner:
+
+- Determines alert eligibility.
+- Supports dashboard/log/email/slack/WhatsApp channel planning.
+- Defaults safely to log/dashboard when channels are not configured.
+- Includes dedupe keys.
+- Does not send externally.
+
 ---
 
 ## Sprint 1 Remaining Implementation Order
 
-1. Add draft generator interface.
-2. Add hot alert interface.
-3. Add in-memory or local DB proof-of-concept.
-4. Add GitHub Actions CI.
-5. Add Gmail ingestion adapter later.
+1. Add in-memory or local DB proof-of-concept.
+2. Add Gmail ingestion adapter later.
+3. Add Sales Navigator / LinkedIn alert parser.
+4. Add dashboard shell.
 
 ---
 
@@ -178,6 +201,8 @@ By the end of Sprint 1, a user should be able to input a lead/job and get:
 - Recommended next action.
 - Recommended profile.
 - Matching portfolio proof.
+- Human-approved draft output.
+- Alert eligibility and alert plan.
 
 ---
 
