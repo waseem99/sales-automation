@@ -1,28 +1,37 @@
 import assert from 'node:assert/strict';
 import { generateDrafts } from '@sales-automation/drafting';
-import { evaluateLead } from '@sales-automation/evaluator';
+import { matchPortfolio } from '@sales-automation/portfolio-matching';
+import { recommendProfile } from '@sales-automation/routing';
+import { scoreLead } from '@sales-automation/scoring';
 import { sampleLeads, samplePortfolioItems } from '@sales-automation/fixtures';
 import { buildAlertPlan, isDuplicateAlert } from './index.js';
 
 const ragLead = sampleLeads.find((lead) => lead.id === 'lead-upwork-rag-001');
 assert.ok(ragLead, 'RAG sample lead should exist');
 
-const ragEvaluation = evaluateLead({ lead: ragLead, portfolioItems: samplePortfolioItems });
+const ragPortfolioMatches = matchPortfolio({ lead: ragLead, portfolioItems: samplePortfolioItems });
+const ragScore = scoreLead({
+  lead: ragLead,
+  matchingPortfolioCount: ragPortfolioMatches.length,
+  hasStrongBuyerSignal: true,
+  hasStrongBudgetSignal: true,
+});
+const ragProfile = recommendProfile(ragLead, ragScore);
 const ragDrafts = generateDrafts({
-  lead: ragEvaluation.lead,
-  score: ragEvaluation.score,
-  profileRecommendation: ragEvaluation.profileRecommendation,
-  portfolioMatches: ragEvaluation.portfolioMatches,
+  lead: ragLead,
+  score: ragScore,
+  profileRecommendation: ragProfile,
+  portfolioMatches: ragPortfolioMatches,
   generatedAt: '2026-07-08T18:30:00.000Z',
 });
 
 const ragAlert = buildAlertPlan({
-  lead: ragEvaluation.lead,
-  score: ragEvaluation.score,
-  profileRecommendation: ragEvaluation.profileRecommendation,
-  portfolioMatches: ragEvaluation.portfolioMatches,
+  lead: ragLead,
+  score: ragScore,
+  profileRecommendation: ragProfile,
+  portfolioMatches: ragPortfolioMatches,
   drafts: ragDrafts,
-  recommendedNextAction: ragEvaluation.recommendedNextAction,
+  recommendedNextAction: 'Review immediately and prepare a tailored response.',
 });
 
 assert.equal(ragAlert.shouldAlert, true);
@@ -34,14 +43,24 @@ assert.equal(isDuplicateAlert(ragAlert.dedupeKey, new Set([ragAlert.dedupeKey]))
 const lowBudgetLead = sampleLeads.find((lead) => lead.id === 'lead-upwork-lowbudget-001');
 assert.ok(lowBudgetLead, 'Low budget sample lead should exist');
 
-const lowBudgetEvaluation = evaluateLead({ lead: lowBudgetLead, portfolioItems: samplePortfolioItems });
+const lowBudgetScore = scoreLead({
+  lead: lowBudgetLead,
+  matchingPortfolioCount: 0,
+  hasStrongBuyerSignal: false,
+  hasStrongBudgetSignal: false,
+  redFlags: [
+    { code: 'low_budget_signal', severity: 'high', reason: 'Budget signal appears too low for Codistan target opportunities.' },
+    { code: 'free_work_request', severity: 'high', reason: 'Lead appears to request free or unpaid sample work.' },
+  ],
+});
+const lowBudgetProfile = recommendProfile(lowBudgetLead, lowBudgetScore);
 const lowBudgetAlert = buildAlertPlan({
-  lead: lowBudgetEvaluation.lead,
-  score: lowBudgetEvaluation.score,
-  profileRecommendation: lowBudgetEvaluation.profileRecommendation,
-  portfolioMatches: lowBudgetEvaluation.portfolioMatches,
+  lead: lowBudgetLead,
+  score: lowBudgetScore,
+  profileRecommendation: lowBudgetProfile,
+  portfolioMatches: [],
   drafts: [],
-  recommendedNextAction: lowBudgetEvaluation.recommendedNextAction,
+  recommendedNextAction: 'Reject or archive.',
 });
 
 assert.equal(lowBudgetAlert.shouldAlert, false);
