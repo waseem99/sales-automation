@@ -20,6 +20,7 @@
     "@sales-automation/alerts": "workspace:*"
   },
   "devDependencies": {
+    "@sales-automation/fixtures": "workspace:*",
     "tsx": "^4.19.2",
     "typescript": "^5.7.2"
   }
