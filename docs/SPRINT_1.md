@@ -4,7 +4,7 @@
 
 Build the first useful internal loop:
 
-Manual or Upwork lead input → normalized lead object → score → urgency/status → profile recommendation → portfolio match → recommended human action → human-approved draft → hot alert plan.
+Manual or Upwork lead input → normalized lead object → score → urgency/status → profile recommendation → portfolio match → recommended human action → human-approved draft → hot alert plan → dashboard-ready lead review model.
 
 This sprint should prove that Codistan can evaluate an opportunity quickly and consistently without relying on fixed daily limits.
 
@@ -30,14 +30,15 @@ This sprint should prove that Codistan can evaluate an opportunity quickly and c
 
 1. Draft generator interface. ✅
 2. Hot alert interface. ✅
-3. In-memory or local DB proof-of-concept.
+3. In-memory or local DB proof-of-concept. ✅
 4. Sample leads for scoring tests. ✅
 5. Basic parser/evaluator smoke tests. ✅
 6. GitHub Actions CI. ✅
+7. Dashboard-ready list/detail/saved-view model. ✅
 
 ### P2 — Later
 
-1. Full dashboard.
+1. Full rendered dashboard UI.
 2. Gmail integration.
 3. Sales Navigator alert parser.
 4. Enrichment providers.
@@ -110,6 +111,7 @@ Profile routing engine:
 - Suggests secondary profiles.
 - Flags profile/compliance risk.
 - Handles partner and solution-led identities.
+- Uses safer whole-word keyword matching to avoid false positives.
 
 ### `@sales-automation/portfolio-matching`
 
@@ -156,6 +158,7 @@ Basic parser layer:
 
 - Parses simple Upwork job alert/digest style email text.
 - Extracts title, URL, budget signal, posted/freshness signal, service category, and normalized lead object.
+- Parses safe manual/alert-text LinkedIn warm signals.
 
 ### `@sales-automation/drafting`
 
@@ -178,14 +181,36 @@ Hot alert planner:
 - Includes dedupe keys.
 - Does not send externally.
 
+### `@sales-automation/storage`
+
+In-memory proof-of-concept repository:
+
+- Stores leads and latest evaluations.
+- Supports status updates.
+- Supports owner assignment.
+- Supports notes.
+- Tracks alert dedupe keys.
+- Maintains an audit log for key actions.
+
+### `@sales-automation/dashboard`
+
+Dashboard-ready model layer:
+
+- Builds opportunity list rows.
+- Supports filters by source, lead type, score, urgency, profile, owner, status, and service category.
+- Supports saved views like Hot Upwork Now, Hot LinkedIn Warm Posts, AI Automation Leads, Partner Prospects, Solution-Led Prospects, Needs Human Review, and Overdue Hot Leads.
+- Builds lead detail payloads with evidence, score breakdown, red flags, profile reasoning, portfolio matches, drafts, notes, and audit log.
+- Exposes allowed status transitions for reviewer actions.
+- Calculates summary counts and SLA overdue state.
+
 ---
 
 ## Sprint 1 Remaining Implementation Order
 
-1. Add in-memory or local DB proof-of-concept.
-2. Add Gmail ingestion adapter later.
-3. Add Sales Navigator / LinkedIn alert parser.
-4. Add dashboard shell.
+1. Add API route/controller layer for dashboard list/detail/actions.
+2. Add rendered dashboard shell.
+3. Add Gmail ingestion adapter later.
+4. Add Sales Navigator / LinkedIn alert adapter.
 
 ---
 
@@ -203,6 +228,7 @@ By the end of Sprint 1, a user should be able to input a lead/job and get:
 - Matching portfolio proof.
 - Human-approved draft output.
 - Alert eligibility and alert plan.
+- Dashboard-ready list/detail state.
 
 ---
 
