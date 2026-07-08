@@ -4,6 +4,7 @@ import type {
   LeadType,
   PipelineStatus,
   QualificationStatus,
+  ScoreBreakdown,
   ServiceCategory,
   UrgencyStatus,
 } from '@sales-automation/shared';
@@ -75,6 +76,7 @@ export interface OpportunityListItem {
   alertEligible: boolean;
   overdue: boolean;
   owner?: string;
+  freshnessMinutes?: number;
   capturedAt: string;
   updatedAt: string;
   sourceUrl?: string;
@@ -85,9 +87,8 @@ export interface LeadDetailView extends OpportunityListItem {
   description: string;
   budgetSignal?: string;
   timelineSignal?: string;
-  freshnessMinutes?: number;
   rawPayload?: unknown;
-  scoreBreakdown?: Record<string, number>;
+  scoreBreakdown?: ScoreBreakdown;
   redFlags: string[];
   profileReasons: string[];
   profileRisks: string[];
@@ -159,7 +160,6 @@ export function buildLeadDetail(record: StoredLeadRecord, now = new Date().toISO
     description: record.lead.description,
     budgetSignal: record.lead.budgetSignal,
     timelineSignal: record.lead.timelineSignal,
-    freshnessMinutes: record.lead.freshnessMinutes,
     rawPayload: record.lead.rawPayload,
     scoreBreakdown: evaluation?.score.breakdown,
     redFlags: evaluation?.score.redFlags.map((flag) => `${flag.severity}: ${flag.reason}`) ?? [],
@@ -271,6 +271,7 @@ function toOpportunityListItem(record: StoredLeadRecord, now: string): Opportuni
     alertEligible: evaluation?.alertPlan.shouldAlert ?? false,
     overdue: isOverdue(record, now),
     owner: record.lead.owner,
+    freshnessMinutes: record.lead.freshnessMinutes,
     capturedAt: record.lead.capturedAt,
     updatedAt: record.lead.updatedAt,
     sourceUrl: record.lead.sourceUrl,
@@ -367,7 +368,7 @@ function compareListItems(
   const modifier = direction === 'asc' ? 1 : -1;
   const diff = getSortValue(a, sortBy) - getSortValue(b, sortBy);
   if (diff !== 0) return diff * modifier;
-  return (Date.parse(b.capturedAt) - Date.parse(a.capturedAt));
+  return Date.parse(b.capturedAt) - Date.parse(a.capturedAt);
 }
 
 function getSortValue(item: OpportunityListItem, sortBy: DashboardSortKey): number {
