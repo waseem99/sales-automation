@@ -4,7 +4,7 @@
 
 Build the first useful internal loop:
 
-Manual or Upwork lead input → normalized lead object → score → urgency/status → profile recommendation → portfolio match → recommended human action → human-approved draft → hot alert plan → dashboard-ready lead review model → controller/API actions → lightweight rendered dashboard shell.
+Manual or Upwork lead input → normalized lead object → score → urgency/status → profile recommendation → portfolio match → recommended human action → human-approved draft → hot alert plan → durable local storage → dashboard-ready lead review model → controller/API actions → lightweight rendered dashboard shell.
 
 This sprint should prove that Codistan can evaluate an opportunity quickly and consistently without relying on fixed daily limits.
 
@@ -37,11 +37,12 @@ This sprint should prove that Codistan can evaluate an opportunity quickly and c
 7. Dashboard-ready list/detail/saved-view model. ✅
 8. Dashboard controller/API layer. ✅
 9. Lightweight rendered dashboard shell. ✅
+10. Durable local JSON repository. ✅
 
 ### P2 — Later
 
 1. Full interactive dashboard UI / route binding.
-2. Durable persistence.
+2. Production database-backed repository.
 3. Gmail integration.
 4. Sales Navigator alert parser.
 5. Enrichment providers.
@@ -186,7 +187,7 @@ Hot alert planner:
 
 ### `@sales-automation/storage`
 
-In-memory proof-of-concept repository:
+Repository layer:
 
 - Stores leads and latest evaluations.
 - Supports status updates.
@@ -194,6 +195,11 @@ In-memory proof-of-concept repository:
 - Supports notes.
 - Tracks alert dedupe keys.
 - Maintains an audit log for key actions.
+- Provides `InMemoryLeadRepository` for tests/dev.
+- Provides `LocalJsonLeadRepository` for durable MVP/local persistence.
+- Auto-creates local JSON storage file when missing.
+- Reloads saved records across repository instances.
+- Throws clear errors for invalid local JSON/schema.
 
 ### `@sales-automation/dashboard`
 
@@ -232,7 +238,7 @@ Lightweight rendered dashboard shell:
 
 ## Sprint 1 Remaining Implementation Order
 
-1. Add durable persistence / database-backed repository.
+1. Add ingestion orchestration with dedupe and immediate evaluation.
 2. Bind controller methods to actual HTTP or Next.js routes.
 3. Add Gmail ingestion adapter later.
 4. Add Sales Navigator / LinkedIn alert adapter.
@@ -254,6 +260,7 @@ By the end of Sprint 1, a user should be able to input a lead/job and get:
 - Matching portfolio proof.
 - Human-approved draft output.
 - Alert eligibility and alert plan.
+- Durable local storage for evaluated leads.
 - Dashboard-ready list/detail state.
 - Controller/API actions for status, owner, notes, and alert dedupe.
 - Lightweight dashboard HTML preview.
