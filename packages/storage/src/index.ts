@@ -1,3 +1,5 @@
+import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
+import { dirname } from 'node:path';
 import type { LeadEvaluation } from '@sales-automation/evaluator';
 import type { Lead, PipelineStatus } from '@sales-automation/shared';
 
@@ -40,8 +42,18 @@ export interface LeadRepository {
   listAuditLog(leadId: string): AuditEntry[];
 }
 
+export interface LocalJsonLeadRepositoryOptions {
+  filePath: string;
+}
+
+interface PersistedLeadRepositoryFile {
+  version: 1;
+  updatedAt: string;
+  records: StoredLeadRecord[];
+}
+
 export class InMemoryLeadRepository implements LeadRepository {
-  private readonly records = new Map<string, StoredLeadRecord>();
+  protected readonly records = new Map<string, StoredLeadRecord>();
 
   upsertLead(lead: Lead, actor = 'system'): StoredLeadRecord {
     const existing = this.records.get(lead.id);
@@ -60,6 +72,7 @@ export class InMemoryLeadRepository implements LeadRepository {
 
     this.addAudit(record, 'lead_upserted', actor, 'Lead was created or updated.');
     this.records.set(lead.id, record);
+    this.afterMutation();
     return record;
   }
 
@@ -72,6 +85,7 @@ export class InMemoryLeadRepository implements LeadRepository {
       recommendedProfile: evaluation.profileRecommendation.primaryProfile,
       alertShouldSend: evaluation.alertPlan.shouldAlert,
     });
+    this.afterMutation();
     return record;
   }
 
@@ -87,6 +101,7 @@ export class InMemoryLeadRepository implements LeadRepository {
       previousStatus,
       status,
     });
+    this.afterMutation();
     return record;
   }
 
@@ -98,6 +113,7 @@ export class InMemoryLeadRepository implements LeadRepository {
       updatedAt: new Date().toISOString(),
     };
     this.addAudit(record, 'owner_assigned', actor, `Owner assigned to ${owner}.`, { owner });
+    this.afterMutation();
     return record;
   }
 
@@ -105,6 +121,7 @@ export class InMemoryLeadRepository implements LeadRepository {
     const record = this.requireRecord(leadId);
     record.notes.push(note);
     this.addAudit(record, 'note_added', actor, 'Note added.', { note });
+    this.afterMutation();
     return record;
   }
 
@@ -113,6 +130,7 @@ export class InMemoryLeadRepository implements LeadRepository {
     if (!record.alertDedupeKeysSent.includes(dedupeKey)) {
       record.alertDedupeKeysSent.push(dedupeKey);
       this.addAudit(record, 'alert_marked_sent', actor, 'Alert was marked as sent.', { dedupeKey });
+      this.afterMutation();
     }
     return record;
   }
@@ -131,6 +149,17 @@ export class InMemoryLeadRepository implements LeadRepository {
 
   listAuditLog(leadId: string): AuditEntry[] {
     return this.records.get(leadId)?.auditLog ?? [];
+  }
+
+  protected afterMutation(): void {
+    // In-memory implementation has no persistence side effect.
+  }
+
+  protected replaceRecords(records: StoredLeadRecord[]): void {
+    this.records.clear();
+    for (const record of records) {
+      this.records.set(record.lead.id, record);
+    }
   }
 
   private requireRecord(leadId: string): StoredLeadRecord {
@@ -158,4 +187,68 @@ export class InMemoryLeadRepository implements LeadRepository {
       metadata,
     });
   }
+}
+
+export class LocalJsonLeadRepository extends InMemoryLeadRepository {
+  private readonly filePath: string;
+
+  constructor(options: LocalJsonLeadRepositoryOptions) {
+    super();
+    this.filePath = options.filePath;
+    this.loadFromDisk();
+  }
+
+  protected override afterMutation(): void {
+    this.persistToDisk();
+  }
+
+  private loadFromDisk(): void {
+    ensureParentDirectory(this.filePath);
+
+    if (!existsSync(this.filePath)) {
+      this.persistToDisk();
+      return;
+    }
+
+    const raw = readFileSync(this.filePath, 'utf8').trim();
+    if (!raw) {
+      this.persistToDisk();
+      return;
+    }
+
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(raw);
+    } catch (error) {
+      throw new Error(`Invalid local lead repository JSON at ${this.filePath}: ${(error as Error).message}`);
+    }
+
+    if (!isPersistedLeadRepositoryFile(parsed)) {
+      throw new Error(`Invalid local lead repository schema at ${this.filePath}. Expected version 1 with records array.`);
+    }
+
+    this.replaceRecords(parsed.records);
+  }
+
+  private persistToDisk(): void {
+    ensureParentDirectory(this.filePath);
+    const payload: PersistedLeadRepositoryFile = {
+      version: 1,
+      updatedAt: new Date().toISOString(),
+      records: this.listLeads(),
+    };
+    const tempPath = `${this.filePath}.tmp`;
+    writeFileSync(tempPath, `${JSON.stringify(payload, null, 2)}\n`, 'utf8');
+    renameSync(tempPath, this.filePath);
+  }
+}
+
+function ensureParentDirectory(filePath: string): void {
+  mkdirSync(dirname(filePath), { recursive: true });
+}
+
+function isPersistedLeadRepositoryFile(value: unknown): value is PersistedLeadRepositoryFile {
+  if (!value || typeof value !== 'object') return false;
+  const candidate = value as Partial<PersistedLeadRepositoryFile>;
+  return candidate.version === 1 && Array.isArray(candidate.records);
 }
