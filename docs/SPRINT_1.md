@@ -4,7 +4,7 @@
 
 Build the first useful internal loop:
 
-Manual or Upwork lead input → normalized lead object → score → urgency/status → profile recommendation → portfolio match → recommended human action → human-approved draft → hot alert plan → dashboard-ready lead review model.
+Manual or Upwork lead input → normalized lead object → score → urgency/status → profile recommendation → portfolio match → recommended human action → human-approved draft → hot alert plan → dashboard-ready lead review model → controller/API actions → lightweight rendered dashboard shell.
 
 This sprint should prove that Codistan can evaluate an opportunity quickly and consistently without relying on fixed daily limits.
 
@@ -35,14 +35,17 @@ This sprint should prove that Codistan can evaluate an opportunity quickly and c
 5. Basic parser/evaluator smoke tests. ✅
 6. GitHub Actions CI. ✅
 7. Dashboard-ready list/detail/saved-view model. ✅
+8. Dashboard controller/API layer. ✅
+9. Lightweight rendered dashboard shell. ✅
 
 ### P2 — Later
 
-1. Full rendered dashboard UI.
-2. Gmail integration.
-3. Sales Navigator alert parser.
-4. Enrichment providers.
-5. Analytics.
+1. Full interactive dashboard UI / route binding.
+2. Durable persistence.
+3. Gmail integration.
+4. Sales Navigator alert parser.
+5. Enrichment providers.
+6. Analytics.
 
 ---
 
@@ -203,14 +206,37 @@ Dashboard-ready model layer:
 - Exposes allowed status transitions for reviewer actions.
 - Calculates summary counts and SLA overdue state.
 
+### `@sales-automation/api`
+
+Dashboard controller/API layer:
+
+- Lists opportunities using dashboard filters and saved views.
+- Returns dashboard summary metrics.
+- Returns lead detail payloads.
+- Supports status updates with safe transition enforcement.
+- Supports owner assignment.
+- Supports notes.
+- Supports alert-sent dedupe marking.
+- Validates missing records and invalid empty inputs.
+
+### `@sales-automation/web`
+
+Lightweight rendered dashboard shell:
+
+- Renders a static HTML dashboard preview without heavy UI dependencies.
+- Shows summary metrics, lead list, selected lead detail, allowed status actions, and notes.
+- Includes a local dev entrypoint that renders sample evaluated leads.
+- Escapes dynamic content to avoid raw HTML/script injection in rendered lead data.
+
 ---
 
 ## Sprint 1 Remaining Implementation Order
 
-1. Add API route/controller layer for dashboard list/detail/actions.
-2. Add rendered dashboard shell.
+1. Add durable persistence / database-backed repository.
+2. Bind controller methods to actual HTTP or Next.js routes.
 3. Add Gmail ingestion adapter later.
 4. Add Sales Navigator / LinkedIn alert adapter.
+5. Add production alert delivery adapters.
 
 ---
 
@@ -229,6 +255,8 @@ By the end of Sprint 1, a user should be able to input a lead/job and get:
 - Human-approved draft output.
 - Alert eligibility and alert plan.
 - Dashboard-ready list/detail state.
+- Controller/API actions for status, owner, notes, and alert dedupe.
+- Lightweight dashboard HTML preview.
 
 ---
 
