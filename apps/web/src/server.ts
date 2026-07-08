@@ -1,4 +1,5 @@
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
+import { assertPermission, type UserRole } from '@sales-automation/access-control';
 import { createSalesAutomationDashboardApi } from '@sales-automation/api';
 import type { DashboardSavedViewKey } from '@sales-automation/dashboard';
 import {
@@ -24,6 +25,7 @@ export interface SalesAutomationHttpContext {
   repository: LeadRepository;
   portfolioItems: PortfolioItem[];
   actor?: string;
+  role?: UserRole;
   now?: () => string;
 }
 
@@ -51,6 +53,7 @@ export function handleSalesAutomationRequest(
   const api = createSalesAutomationDashboardApi(context.repository);
   const now = context.now?.() ?? new Date().toISOString();
   const actor = context.actor ?? 'web-api';
+  const role = context.role ?? 'admin';
 
   try {
     if (method === 'GET' && pathname === '/health') {
@@ -58,6 +61,7 @@ export function handleSalesAutomationRequest(
     }
 
     if (method === 'GET' && pathname === '/') {
+      assertPermission(role, 'view_opportunities');
       const opportunities = api.listOpportunities({ now });
       const selectedLead = opportunities[0] ? api.getLeadDetail(opportunities[0].id, now) : undefined;
       return htmlResponse(
@@ -71,19 +75,23 @@ export function handleSalesAutomationRequest(
     }
 
     if (method === 'GET' && pathname === '/api/summary') {
+      assertPermission(role, 'view_opportunities');
       return jsonResponse(api.getDashboardSummary(now));
     }
 
     if (method === 'GET' && pathname === '/api/opportunities') {
+      assertPermission(role, 'view_opportunities');
       return jsonResponse(api.listOpportunities(buildListOptions(url, now)));
     }
 
     if (method === 'GET' && pathname.startsWith('/api/opportunities/')) {
+      assertPermission(role, 'view_opportunities');
       const leadId = decodeURIComponent(pathname.replace('/api/opportunities/', ''));
       return jsonResponse(api.getLeadDetail(leadId, now));
     }
 
     if (method === 'POST' && pathname === '/api/ingest/upwork-email') {
+      assertPermission(role, 'ingest_leads');
       const body = requireObjectBody(request.body);
       const result = ingestUpworkEmail({
         email: {
@@ -99,6 +107,7 @@ export function handleSalesAutomationRequest(
     }
 
     if (method === 'POST' && pathname === '/api/ingest/linkedin-signal') {
+      assertPermission(role, 'ingest_leads');
       const body = requireObjectBody(request.body);
       const result = ingestLinkedInSignal({
         signal: {
@@ -120,6 +129,7 @@ export function handleSalesAutomationRequest(
     }
 
     if (method === 'POST' && pathname === '/api/ingest/manual-leads') {
+      assertPermission(role, 'ingest_leads');
       const body = requireObjectBody(request.body);
       const leads = requireLeadArray(body.leads);
       const result = ingestLeads({
@@ -140,19 +150,23 @@ export function handleSalesAutomationRequest(
       const body = requireObjectBody(request.body);
 
       if (action === 'status') {
+        assertPermission(role, 'update_pipeline_status');
         const status = requireString(body.status, 'status') as PipelineStatus;
         return jsonResponse(api.updateLeadStatus({ leadId, status, actor }));
       }
 
       if (action === 'owner') {
+        assertPermission(role, 'assign_owner');
         return jsonResponse(api.assignLeadOwner({ leadId, owner: requireString(body.owner, 'owner'), actor }));
       }
 
       if (action === 'notes') {
+        assertPermission(role, 'add_notes');
         return jsonResponse(api.addLeadNote({ leadId, note: requireString(body.note, 'note'), actor }));
       }
 
       if (action === 'alert-sent') {
+        assertPermission(role, 'mark_alert_sent');
         return jsonResponse(api.markAlertSent({ leadId, dedupeKey: optionalString(body.dedupeKey), actor }));
       }
     }
@@ -305,6 +319,7 @@ async function readJsonBody(request: IncomingMessage): Promise<unknown> {
 
 function getErrorStatus(error: unknown): number {
   const message = (error as Error).message;
+  if (message.includes('Forbidden')) return 403;
   if (message.includes('not found') || message.includes('Lead not found')) return 404;
   if (message.includes('required') || message.includes('Invalid status transition')) return 400;
   return 500;
