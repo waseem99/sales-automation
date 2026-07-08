@@ -11,20 +11,6 @@
     "resolveJsonModule": true,
     "declaration": true,
     "sourceMap": true,
-    "outDir": "dist",
-    "baseUrl": ".",
-    "paths": {
-      "@sales-automation/alerts": ["packages/alerts/src/index.ts"],
-      "@sales-automation/cli": ["packages/cli/src/index.ts"],
-      "@sales-automation/drafting": ["packages/drafting/src/index.ts"],
-      "@sales-automation/evaluator": ["packages/evaluator/src/index.ts"],
-      "@sales-automation/fixtures": ["packages/fixtures/src/index.ts"],
-      "@sales-automation/parsers": ["packages/parsers/src/index.ts"],
-      "@sales-automation/portfolio-matching": ["packages/portfolio-matching/src/index.ts"],
-      "@sales-automation/routing": ["packages/routing/src/index.ts"],
-      "@sales-automation/scoring": ["packages/scoring/src/index.ts"],
-      "@sales-automation/shared": ["packages/shared/src/index.ts"],
-      "@sales-automation/storage": ["packages/storage/src/index.ts"]
-    }
+    "outDir": "dist"
   }
 }
