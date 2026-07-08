@@ -4,7 +4,7 @@
 
 Build the first useful internal loop:
 
-Safe input source → normalized lead object → dedupe → score → urgency/status → profile recommendation → portfolio match → recommended human action → human-approved draft → hot alert plan → durable local storage → dashboard-ready lead review model → controller/API actions → lightweight rendered dashboard shell.
+Safe input source → normalized lead object → dedupe → score → urgency/status → profile recommendation → portfolio match → recommended human action → human-approved draft → hot alert plan → durable local storage → dashboard-ready lead review model → controller/API actions → route-level access control → lightweight rendered dashboard shell.
 
 This sprint should prove that Codistan can evaluate an opportunity quickly and consistently without relying on fixed daily limits.
 
@@ -40,15 +40,18 @@ This sprint should prove that Codistan can evaluate an opportunity quickly and c
 10. Durable local JSON repository. ✅
 11. Safe ingestion orchestration with dedupe and immediate evaluation. ✅
 12. Cadence-aware ingestion worker runner. ✅
+13. HTTP route binding for dashboard, ingestion, and reviewer actions. ✅
+14. Role/permission foundation with route-level enforcement. ✅
 
 ### P2 — Later
 
-1. Full interactive dashboard UI / route binding.
+1. Full interactive dashboard UI components/forms.
 2. Production database-backed repository.
-3. Gmail integration.
-4. Sales Navigator alert parser hardening.
-5. Enrichment providers.
-6. Analytics.
+3. Real authentication/session integration.
+4. Gmail integration.
+5. Sales Navigator alert parser hardening.
+6. Enrichment providers.
+7. Analytics.
 
 ---
 
@@ -95,6 +98,15 @@ Contains shared types and config:
 - Score breakdown schema.
 - Qualification thresholds.
 - Cadence rules.
+
+### `@sales-automation/access-control`
+
+Role and permission foundation:
+
+- Roles: admin, founder, BD manager, reviewer, read-only.
+- Permission checks for viewing opportunities, ingesting leads, updating status, assigning owner, adding notes, marking alerts, viewing private portfolio, managing settings, managing compliance rules, and managing users.
+- Shared helpers for checking and asserting permissions.
+- Route-level enforcement in the web adapter.
 
 ### `@sales-automation/scoring`
 
@@ -252,22 +264,25 @@ Dashboard controller/API layer:
 
 ### `@sales-automation/web`
 
-Lightweight rendered dashboard shell:
+Lightweight rendered dashboard and HTTP adapter:
 
 - Renders a static HTML dashboard preview without heavy UI dependencies.
 - Shows summary metrics, lead list, selected lead detail, allowed status actions, and notes.
-- Includes a local dev entrypoint that renders sample evaluated leads.
+- Exposes lightweight HTTP routes for health, dashboard, summary, opportunity list/detail, safe ingestion, status updates, owner assignment, notes, and alert dedupe.
+- Uses `LocalJsonLeadRepository` in dev mode.
+- Enforces route-level permissions through `@sales-automation/access-control`.
 - Escapes dynamic content to avoid raw HTML/script injection in rendered lead data.
 
 ---
 
 ## Sprint 1 Remaining Implementation Order
 
-1. Bind controller methods to actual HTTP or Next.js routes.
+1. Add real authentication/session integration.
 2. Add Gmail ingestion adapter later.
 3. Add Sales Navigator / LinkedIn alert adapter hardening.
 4. Add production alert delivery adapters.
 5. Add production database-backed repository.
+6. Add interactive frontend forms/components.
 
 ---
 
@@ -290,7 +305,8 @@ By the end of Sprint 1, a user should be able to input a lead/job and get:
 - Durable local storage for evaluated leads.
 - Dashboard-ready list/detail state.
 - Controller/API actions for status, owner, notes, and alert dedupe.
-- Lightweight dashboard HTML preview.
+- Route-level permission enforcement.
+- Lightweight dashboard HTML preview and HTTP API.
 
 ---
 
