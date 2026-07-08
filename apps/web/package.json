@@ -13,6 +13,7 @@
     "test": "tsx src/index.test.ts"
   },
   "dependencies": {
+    "@sales-automation/access-control": "workspace:*",
     "@sales-automation/api": "workspace:*",
     "@sales-automation/dashboard": "workspace:*",
     "@sales-automation/ingestion": "workspace:*",
