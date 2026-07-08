@@ -1,3 +1,5 @@
+import { buildAlertPlan, type AlertPlan } from '@sales-automation/alerts';
+import { generateDrafts, type GeneratedDraft } from '@sales-automation/drafting';
 import { matchPortfolio, type PortfolioMatch } from '@sales-automation/portfolio-matching';
 import { recommendProfile, type ProfileRecommendation } from '@sales-automation/routing';
 import { scoreLead } from '@sales-automation/scoring';
@@ -9,12 +11,15 @@ export interface LeadEvaluation {
   profileRecommendation: ProfileRecommendation;
   portfolioMatches: PortfolioMatch[];
   recommendedNextAction: string;
+  drafts: GeneratedDraft[];
+  alertPlan: AlertPlan;
 }
 
 export interface EvaluateLeadInput {
   lead: Lead;
   portfolioItems: PortfolioItem[];
   includePrivatePortfolio?: boolean;
+  generatedAt?: string;
 }
 
 export function evaluateLead(input: EvaluateLeadInput): LeadEvaluation {
@@ -38,6 +43,21 @@ export function evaluateLead(input: EvaluateLeadInput): LeadEvaluation {
 
   const profileRecommendation = recommendProfile(input.lead, score);
   const recommendedNextAction = getRecommendedNextAction(score, profileRecommendation, portfolioMatches);
+  const drafts = generateDrafts({
+    lead: input.lead,
+    score,
+    profileRecommendation,
+    portfolioMatches,
+    generatedAt: input.generatedAt,
+  });
+  const alertPlan = buildAlertPlan({
+    lead: input.lead,
+    score,
+    profileRecommendation,
+    portfolioMatches,
+    drafts,
+    recommendedNextAction,
+  });
 
   return {
     lead: input.lead,
@@ -45,6 +65,8 @@ export function evaluateLead(input: EvaluateLeadInput): LeadEvaluation {
     profileRecommendation,
     portfolioMatches,
     recommendedNextAction,
+    drafts,
+    alertPlan,
   };
 }
 
