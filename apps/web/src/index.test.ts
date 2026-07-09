@@ -39,6 +39,8 @@ const html = renderDashboardPage({
   opportunities,
   selectedLead,
   activeSavedView: 'hot_upwork_now',
+  activeQuery: 'RAG',
+  activePipelineStatus: 'new',
 });
 
 assert.ok(html.startsWith('<!doctype html>'));
@@ -48,14 +50,18 @@ assert.ok(html.includes('Evaluate lead'));
 assert.ok(html.includes('Use Upwork sample'));
 assert.ok(html.includes('Use LinkedIn sample'));
 assert.ok(html.includes('Refresh dashboard'));
+assert.ok(html.includes('Reset local data'));
 assert.ok(html.includes('Saved views'));
+assert.ok(html.includes('Search and filters'));
 assert.ok(html.includes('Hot Upwork Now'));
 assert.ok(html.includes('data-lead-id="lead-upwork-rag-001"'));
-assert.ok(html.includes('?savedView=hot_upwork_now&amp;leadId=lead-upwork-rag-001'));
+assert.ok(html.includes('?savedView=hot_upwork_now&amp;query=RAG&amp;status=new&amp;leadId=lead-upwork-rag-001'));
 assert.ok(html.includes('data-status-form'));
 assert.ok(html.includes('data-owner-form'));
 assert.ok(html.includes('data-note-form'));
 assert.ok(html.includes('Safe Review Actions'));
+assert.ok(html.includes('Source Evidence'));
+assert.ok(html.includes('Copy draft for manual review'));
 assert.ok(html.includes('approved to contact'));
 assert.ok(html.includes('Draft Preview'));
 assert.ok(html.includes('Portfolio Proof'));
@@ -103,14 +109,24 @@ assert.equal(dashboardResponse.headers['content-type'], 'text/html; charset=utf-
 assert.ok(dashboardResponse.body.includes('Codistan Lead Desk'));
 assert.ok(dashboardResponse.body.includes('Try the MVP flow'));
 assert.ok(dashboardResponse.body.includes('Saved views'));
+assert.ok(dashboardResponse.body.includes('Search and filters'));
 assert.ok(dashboardResponse.body.includes('Safe Review Actions'));
+assert.ok(dashboardResponse.body.includes('Source Evidence'));
 
 const savedViewDashboardResponse = handleSalesAutomationRequest(
-  { method: 'GET', path: `/?savedView=hot_upwork_now&leadId=${escapedTitleLead.id}` },
+  { method: 'GET', path: `/?savedView=hot_upwork_now&query=RAG&status=new&leadId=${escapedTitleLead.id}` },
   context,
 );
 assert.equal(savedViewDashboardResponse.status, 200);
-assert.ok(savedViewDashboardResponse.body.includes('?savedView=hot_upwork_now&amp;leadId=lead-upwork-rag-001'));
+assert.ok(savedViewDashboardResponse.body.includes('?savedView=hot_upwork_now&amp;query=RAG&amp;status=new&amp;leadId=lead-upwork-rag-001'));
+
+const filteredDashboardResponse = handleSalesAutomationRequest(
+  { method: 'GET', path: '/?query=RAG&status=new' },
+  context,
+);
+assert.equal(filteredDashboardResponse.status, 200);
+assert.ok(filteredDashboardResponse.body.includes('value="RAG"'));
+assert.ok(filteredDashboardResponse.body.includes('value="new" selected'));
 
 const staleLeadDashboardResponse = handleSalesAutomationRequest(
   { method: 'GET', path: '/?leadId=missing-lead' },
@@ -320,6 +336,12 @@ const readOnlyStatusResponse = handleSalesAutomationRequest(
 );
 assert.equal(readOnlyStatusResponse.status, 403);
 
+const readOnlyResetResponse = handleSalesAutomationRequest(
+  { method: 'POST', path: '/api/dev/reset-local-data', body: { confirmed: true } },
+  { ...context, role: 'read_only' },
+);
+assert.equal(readOnlyResetResponse.status, 403);
+
 const badRequest = handleSalesAutomationRequest(
   { method: 'POST', path: '/api/ingest/upwork-email', body: { emailBody: '' } },
   context,
@@ -329,4 +351,12 @@ assert.equal(badRequest.status, 400);
 const notFound = handleSalesAutomationRequest({ method: 'GET', path: '/api/missing' }, context);
 assert.equal(notFound.status, 404);
 
-console.log('Web dashboard renderer, visible MVP intake, UX controls, route binding, and session resolution tests passed.');
+const resetResponse = handleSalesAutomationRequest(
+  { method: 'POST', path: '/api/dev/reset-local-data', body: { confirmed: true } },
+  context,
+);
+assert.equal(resetResponse.status, 200);
+assert.equal(JSON.parse(resetResponse.body).ok, true);
+assert.equal(repository.listLeads().length, 0);
+
+console.log('Web dashboard renderer, visible MVP intake, demo readiness controls, route binding, and session resolution tests passed.');

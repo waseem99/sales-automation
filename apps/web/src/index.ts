@@ -5,6 +5,7 @@ import {
   type LeadDetailView,
   type OpportunityListItem,
 } from '@sales-automation/dashboard';
+import type { PipelineStatus } from '@sales-automation/shared';
 
 export interface RenderDashboardPageInput {
   title?: string;
@@ -12,7 +13,26 @@ export interface RenderDashboardPageInput {
   opportunities: OpportunityListItem[];
   selectedLead?: LeadDetailView;
   activeSavedView?: DashboardSavedViewKey;
+  activeQuery?: string;
+  activePipelineStatus?: PipelineStatus;
 }
+
+const pipelineStatusOptions: PipelineStatus[] = [
+  'new',
+  'scored',
+  'needs_human_review',
+  'approved_to_contact',
+  'draft_ready',
+  'hot_alert_sent',
+  'sent_manually',
+  'replied',
+  'meeting_booked',
+  'proposal_sent',
+  'won',
+  'lost',
+  'rejected',
+  'archived',
+];
 
 export function renderDashboardPage(input: RenderDashboardPageInput): string {
   const title = input.title ?? 'Codistan Lead Desk';
@@ -33,9 +53,10 @@ export function renderDashboardPage(input: RenderDashboardPageInput): string {
       </header>
       ${renderSummary(input.summary)}
       ${renderManualLeadForm()}
-      ${renderSavedViewBar(input.activeSavedView)}
+      ${renderSavedViewBar(input.activeSavedView, input.activeQuery, input.activePipelineStatus)}
+      ${renderFilterBar(input.activeSavedView, input.activeQuery, input.activePipelineStatus)}
       <section class="grid">
-        ${renderOpportunityList(input.opportunities, input.selectedLead?.id, input.activeSavedView)}
+        ${renderOpportunityList(input.opportunities, input.selectedLead?.id, input.activeSavedView, input.activeQuery, input.activePipelineStatus)}
         ${input.selectedLead ? renderLeadDetail(input.selectedLead) : renderEmptyDetail()}
       </section>
     </main>
@@ -93,6 +114,7 @@ Looking for AI automation partner to reduce support backlog. https://www.linkedi
         <button type="button" id="sample-upwork">Use Upwork sample</button>
         <button type="button" id="sample-linkedin">Use LinkedIn sample</button>
         <button type="button" id="refresh-dashboard">Refresh dashboard</button>
+        <button type="button" id="reset-local-data" class="danger-button">Reset local data</button>
       </div>
     </form>
     <pre id="lead-result" class="result" hidden></pre>
@@ -101,7 +123,11 @@ Looking for AI automation partner to reduce support backlog. https://www.linkedi
   </section>`;
 }
 
-function renderSavedViewBar(activeSavedView?: DashboardSavedViewKey): string {
+function renderSavedViewBar(
+  activeSavedView?: DashboardSavedViewKey,
+  activeQuery?: string,
+  activePipelineStatus?: PipelineStatus,
+): string {
   const viewEntries = Object.entries(savedViewLabels) as Array<[DashboardSavedViewKey, string]>;
 
   return `<section class="panel saved-views" aria-label="Saved views">
@@ -110,12 +136,43 @@ function renderSavedViewBar(activeSavedView?: DashboardSavedViewKey): string {
         <h2>Saved views</h2>
         <p class="muted">Quick filters for the BD team. These only change what is shown locally.</p>
       </div>
-      <a class="text-link" href="/">Clear view</a>
+      <a class="text-link" href="${escapeHtml(createListHref({ query: activeQuery, status: activePipelineStatus }))}">Clear view</a>
     </div>
     <div class="view-chips">
-      <a class="chip ${activeSavedView ? '' : 'active'}" href="/">All opportunities</a>
-      ${viewEntries.map(([key, label]) => `<a class="chip ${activeSavedView === key ? 'active' : ''}" href="?savedView=${encodeURIComponent(key)}">${escapeHtml(label)}</a>`).join('')}
+      <a class="chip ${activeSavedView ? '' : 'active'}" href="${escapeHtml(createListHref({ query: activeQuery, status: activePipelineStatus }))}">All opportunities</a>
+      ${viewEntries.map(([key, label]) => `<a class="chip ${activeSavedView === key ? 'active' : ''}" href="${escapeHtml(createListHref({ savedView: key, query: activeQuery, status: activePipelineStatus }))}">${escapeHtml(label)}</a>`).join('')}
     </div>
+  </section>`;
+}
+
+function renderFilterBar(
+  activeSavedView?: DashboardSavedViewKey,
+  activeQuery?: string,
+  activePipelineStatus?: PipelineStatus,
+): string {
+  return `<section class="panel filters" aria-label="Opportunity filters">
+    <div class="panel-header compact">
+      <div>
+        <h2>Search and filters</h2>
+        <p class="muted">Narrow the local pipeline without changing source data.</p>
+      </div>
+      <a class="text-link" href="${escapeHtml(createListHref({ savedView: activeSavedView }))}">Clear filters</a>
+    </div>
+    <form class="filter-form" method="get" action="/">
+      ${activeSavedView ? `<input type="hidden" name="savedView" value="${escapeHtml(activeSavedView)}" />` : ''}
+      <label>
+        Search
+        <input name="query" value="${escapeHtml(activeQuery ?? '')}" placeholder="Search title, company, contact, service..." />
+      </label>
+      <label>
+        Pipeline status
+        <select name="status">
+          <option value="">Any status</option>
+          ${pipelineStatusOptions.map((status) => `<option value="${escapeHtml(status)}" ${activePipelineStatus === status ? 'selected' : ''}>${escapeHtml(formatStatusLabel(status))}</option>`).join('')}
+        </select>
+      </label>
+      <button type="submit">Apply filters</button>
+    </form>
   </section>`;
 }
 
@@ -123,19 +180,27 @@ function renderOpportunityList(
   opportunities: OpportunityListItem[],
   selectedLeadId?: string,
   activeSavedView?: DashboardSavedViewKey,
+  activeQuery?: string,
+  activePipelineStatus?: PipelineStatus,
 ): string {
   if (opportunities.length === 0) {
-    return `<section class="panel"><h2>Opportunities</h2><p class="muted">No opportunities match this view. Evaluate a sample lead or clear the saved view.</p></section>`;
+    return `<section class="panel"><h2>Opportunities</h2><p class="muted">No opportunities match this view. Evaluate a sample lead, clear filters, or reset local demo data if needed.</p></section>`;
   }
 
   return `<section class="panel"><div class="panel-header"><h2>Opportunities</h2><span>${opportunities.length} shown</span></div>
     <div class="list">
-      ${opportunities.map((item) => renderOpportunityCard(item, selectedLeadId === item.id, activeSavedView)).join('')}
+      ${opportunities.map((item) => renderOpportunityCard(item, selectedLeadId === item.id, activeSavedView, activeQuery, activePipelineStatus)).join('')}
     </div>
   </section>`;
 }
 
-function renderOpportunityCard(item: OpportunityListItem, isSelected: boolean, activeSavedView?: DashboardSavedViewKey): string {
+function renderOpportunityCard(
+  item: OpportunityListItem,
+  isSelected: boolean,
+  activeSavedView?: DashboardSavedViewKey,
+  activeQuery?: string,
+  activePipelineStatus?: PipelineStatus,
+): string {
   const badges = [
     item.qualificationStatus,
     item.urgency,
@@ -143,7 +208,7 @@ function renderOpportunityCard(item: OpportunityListItem, isSelected: boolean, a
     item.overdue ? 'overdue' : undefined,
   ].filter(Boolean);
 
-  return `<a class="lead-card ${isSelected ? 'selected' : ''}" href="${escapeHtml(createLeadHref(item.id, activeSavedView))}" data-lead-id="${escapeHtml(item.id)}">
+  return `<a class="lead-card ${isSelected ? 'selected' : ''}" href="${escapeHtml(createLeadHref(item.id, activeSavedView, activeQuery, activePipelineStatus))}" data-lead-id="${escapeHtml(item.id)}">
     <div>
       <h3>${escapeHtml(item.title)}</h3>
       <p>${escapeHtml([item.source, item.leadType, item.serviceCategory].join(' · '))}</p>
@@ -170,6 +235,8 @@ function renderLeadDetail(lead: LeadDetailView): string {
     </dl>
     <h4>Recommended Action</h4>
     <p>${escapeHtml(lead.recommendedNextAction ?? 'No action generated yet.')}</p>
+    <h4>Source Evidence</h4>
+    ${renderSourceEvidence(lead)}
     <h4>Safe Review Actions</h4>
     <p class="muted small">These actions only update the internal local pipeline. They do not send emails, submit Upwork proposals, or message LinkedIn contacts.</p>
     ${renderStatusActionForm(lead)}
@@ -184,6 +251,20 @@ function renderLeadDetail(lead: LeadDetailView): string {
     <h4>Notes</h4>
     <ul>${lead.notes.map((note) => `<li>${escapeHtml(note)}</li>`).join('') || '<li>No notes yet.</li>'}</ul>
   </aside>`;
+}
+
+function renderSourceEvidence(lead: LeadDetailView): string {
+  return `<div class="source-evidence">
+    <dl class="facts compact-facts">
+      <div><dt>Source</dt><dd>${escapeHtml(lead.source)}</dd></div>
+      <div><dt>Lead Type</dt><dd>${escapeHtml(lead.leadType)}</dd></div>
+      <div><dt>Captured</dt><dd>${escapeHtml(lead.capturedAt)}</dd></div>
+      <div><dt>Budget</dt><dd>${escapeHtml(lead.budgetSignal ?? '—')}</dd></div>
+      <div><dt>Timeline</dt><dd>${escapeHtml(lead.timelineSignal ?? '—')}</dd></div>
+      <div><dt>URL</dt><dd>${lead.sourceUrl ? `<a href="${escapeHtml(lead.sourceUrl)}" target="_blank" rel="noreferrer">Open source</a>` : '—'}</dd></div>
+    </dl>
+    ${lead.rawPayload ? `<details><summary>Raw evidence preview</summary><pre class="evidence-json">${escapeHtml(formatRawPayload(lead.rawPayload))}</pre></details>` : '<p class="muted small">No raw payload attached to this lead.</p>'}
+  </div>`;
 }
 
 function renderStatusActionForm(lead: LeadDetailView): string {
@@ -219,7 +300,7 @@ function renderNoteForm(lead: LeadDetailView): string {
 function renderDraftPreview(lead: LeadDetailView): string {
   const draft = lead.drafts[0];
   if (!draft) return '<p class="muted">No draft generated yet.</p>';
-  return `<div class="preview-block"><strong>${escapeHtml(draft.type)}</strong><p>${escapeHtml(draft.body)}</p></div>`;
+  return `<div class="preview-block"><strong>${escapeHtml(draft.type)}</strong><p>${escapeHtml(draft.body)}</p><button type="button" data-copy-draft>Copy draft for manual review</button><template>${escapeHtml(draft.body)}</template></div>`;
 }
 
 function renderPortfolioPreview(lead: LeadDetailView): string {
@@ -253,7 +334,7 @@ function baseStyles(): string {
     .metric strong { font-size: 28px; display: block; margin-top: 4px; }
     .grid { display: grid; grid-template-columns: minmax(0, 1.2fr) minmax(360px, .8fr); gap: 20px; align-items: start; }
     .panel { background: white; border: 1px solid #e5e7eb; border-radius: 22px; padding: 20px; box-shadow: 0 10px 30px rgba(17, 24, 39, .04); }
-    .intake, .saved-views { margin-bottom: 20px; }
+    .intake, .saved-views, .filters { margin-bottom: 20px; }
     .panel-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; margin-bottom: 14px; }
     .panel-header.compact { margin-bottom: 10px; }
     .panel-header h2 { margin: 0 0 6px; }
@@ -263,8 +344,10 @@ function baseStyles(): string {
     select, textarea, input { width: 100%; border: 1px solid #d1d5db; border-radius: 14px; padding: 12px; font: inherit; background: white; color: #111827; }
     textarea { resize: vertical; }
     .form-actions, .action-strip, .view-chips { display: flex; flex-wrap: wrap; gap: 10px; }
+    .filter-form { display: grid; grid-template-columns: minmax(0, 1fr) 220px auto; gap: 10px; align-items: end; }
     button, .chip { border: 0; border-radius: 999px; padding: 10px 16px; background: #111827; color: white; font-weight: 800; cursor: pointer; text-decoration: none; font-size: 14px; }
     button[type="button"], .chip { background: #eef2ff; color: #3730a3; }
+    .danger-button { background: #fee2e2 !important; color: #991b1b !important; }
     .chip.active { background: #111827; color: white; }
     .text-link { color: #3730a3; font-weight: 800; text-decoration: none; }
     .result { margin: 14px 0 0; padding: 14px; border-radius: 14px; background: #0f172a; color: #e5e7eb; white-space: pre-wrap; overflow: auto; }
@@ -280,15 +363,18 @@ function baseStyles(): string {
     .small { font-size: 13px; }
     .detail { position: sticky; top: 20px; }
     .facts { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin: 18px 0; }
-    .facts div, .preview-block { background: #f9fafb; border-radius: 12px; padding: 12px; }
-    .preview-block p { white-space: pre-wrap; margin: 8px 0 0; }
+    .compact-facts { margin: 0; }
+    .facts div, .preview-block, .source-evidence { background: #f9fafb; border-radius: 12px; padding: 12px; }
+    .source-evidence a { color: #3730a3; font-weight: 800; }
+    .evidence-json { max-height: 220px; overflow: auto; white-space: pre-wrap; background: #111827; color: #e5e7eb; border-radius: 12px; padding: 12px; }
+    .preview-block p { white-space: pre-wrap; margin: 8px 0 12px; }
     .inline-form { display: grid; grid-template-columns: 1fr auto; gap: 10px; align-items: end; margin: 12px 0; }
     .note-form { grid-template-columns: 1fr; }
     .note-form button { justify-self: start; }
     dt { color: #6b7280; font-size: 12px; }
-    dd { margin: 4px 0 0; font-weight: 800; }
+    dd { margin: 4px 0 0; font-weight: 800; overflow-wrap: anywhere; }
     ul { padding-left: 20px; }
-    @media (max-width: 900px) { .metrics, .grid, .inline-form { grid-template-columns: 1fr; } .detail { position: static; } }
+    @media (max-width: 900px) { .metrics, .grid, .inline-form, .filter-form { grid-template-columns: 1fr; } .detail { position: static; } }
   `;
 }
 
@@ -312,6 +398,42 @@ function clientScript(): string {
 
     document.getElementById('refresh-dashboard').addEventListener('click', () => {
       window.location.reload();
+    });
+
+    document.getElementById('reset-local-data').addEventListener('click', async () => {
+      const confirmed = window.confirm('Reset local demo lead data? This only clears the local JSON store and does not touch any external system.');
+      if (!confirmed) return;
+      showResult('Resetting local demo data...');
+      try {
+        const response = await fetch('/api/dev/reset-local-data', {
+          method: 'POST',
+          headers: { 'content-type': 'application/json', 'x-sales-automation-session': 'dev-founder-token' },
+          body: JSON.stringify({ confirmed: true }),
+        });
+        const json = await response.json();
+        showResult(JSON.stringify(json, null, 2) + (response.ok ? '\n\nReset complete. Reloading dashboard...' : ''));
+        if (response.ok) setTimeout(() => window.location.href = '/', 700);
+      } catch (error) {
+        showResult(String(error));
+      }
+    });
+
+    document.querySelectorAll('[data-copy-draft]').forEach((button) => {
+      button.addEventListener('click', async () => {
+        const template = button.parentElement?.querySelector('template');
+        const draftText = template ? decodeHtml(template.innerHTML) : '';
+        try {
+          if (navigator.clipboard?.writeText) {
+            await navigator.clipboard.writeText(draftText);
+          } else {
+            fallbackCopy(draftText);
+          }
+          showResult('Draft copied for manual review. Nothing was sent automatically.');
+        } catch (error) {
+          fallbackCopy(draftText);
+          showResult('Draft copied with fallback copy method. Nothing was sent automatically.');
+        }
+      });
     });
 
     document.getElementById('lead-form').addEventListener('submit', async (event) => {
@@ -384,6 +506,15 @@ function clientScript(): string {
       result.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
     }
 
+    function fallbackCopy(value) {
+      const textarea = document.createElement('textarea');
+      textarea.value = value;
+      document.body.appendChild(textarea);
+      textarea.select();
+      document.execCommand('copy');
+      textarea.remove();
+    }
+
     function decodeHtml(value) {
       const textarea = document.createElement('textarea');
       textarea.innerHTML = value;
@@ -392,15 +523,37 @@ function clientScript(): string {
   `;
 }
 
-function createLeadHref(leadId: string, activeSavedView?: DashboardSavedViewKey): string {
+function createLeadHref(
+  leadId: string,
+  activeSavedView?: DashboardSavedViewKey,
+  activeQuery?: string,
+  activePipelineStatus?: PipelineStatus,
+): string {
+  return createListHref({ savedView: activeSavedView, query: activeQuery, status: activePipelineStatus, leadId });
+}
+
+function createListHref(input: {
+  savedView?: DashboardSavedViewKey;
+  query?: string;
+  status?: PipelineStatus;
+  leadId?: string;
+}): string {
   const params = new URLSearchParams();
-  if (activeSavedView) params.set('savedView', activeSavedView);
-  params.set('leadId', leadId);
-  return `?${params.toString()}`;
+  if (input.savedView) params.set('savedView', input.savedView);
+  if (input.query) params.set('query', input.query);
+  if (input.status) params.set('status', input.status);
+  if (input.leadId) params.set('leadId', input.leadId);
+  const query = params.toString();
+  return query ? `?${query}` : '/';
 }
 
 function formatStatusLabel(value: string): string {
   return value.replace(/_/g, ' ');
+}
+
+function formatRawPayload(value: unknown): string {
+  const formatted = JSON.stringify(value, null, 2) ?? String(value);
+  return formatted.length > 1200 ? `${formatted.slice(0, 1200)}\n...truncated for local review` : formatted;
 }
 
 function escapeHtml(value: string): string {
