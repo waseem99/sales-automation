@@ -1,0 +1,14 @@
+node_modules
+.pnpm-store
+.data
+dist
+coverage
+.git
+.github
+.env
+.env.*
+!.env.example
+.vercel
+.DS_Store
+npm-debug.log*
+pnpm-debug.log*
