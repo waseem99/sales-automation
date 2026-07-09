@@ -1,0 +1,18 @@
+services:
+  - type: web
+    name: codistan-lead-desk
+    runtime: docker
+    plan: starter
+    dockerfilePath: ./Dockerfile
+    healthCheckPath: /health
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: 3000
+      - key: LOCAL_LEAD_STORE_PATH
+        value: /data/leads.json
+    disk:
+      name: codistan-lead-desk-data
+      mountPath: /data
+      sizeGB: 1

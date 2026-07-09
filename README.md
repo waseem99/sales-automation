@@ -47,6 +47,25 @@ rm -f .data/leads.json
 
 The reset action only clears the local JSON demo store. It does not touch Gmail, LinkedIn, Upwork, CRM data, or any external system.
 
+## Production deployment path
+
+The recommended production deployment path is a containerized Node web service using the real `apps/web` server.
+
+This branch includes:
+
+- `Dockerfile`
+- `render.yaml`
+- production-safe root scripts
+- `docs/PRODUCTION_DEPLOYMENT.md`
+
+Read the deployment plan here:
+
+```text
+docs/PRODUCTION_DEPLOYMENT.md
+```
+
+The Vercel preview workaround should remain preview-only until the real deployment path is approved.
+
 ## Try the MVP flow
 
 On the dashboard:
@@ -161,6 +180,7 @@ Do not build an unsafe scraping or auto-spam tool. Build a compliant sales intel
 - [`docs/BACKLOG.md`](docs/BACKLOG.md) — full epic and task backlog.
 - [`docs/SPRINT_1.md`](docs/SPRINT_1.md) — current sprint implementation summary.
 - [`docs/DEMO_READINESS.md`](docs/DEMO_READINESS.md) — demo verification checklist and screenshot plan.
+- [`docs/PRODUCTION_DEPLOYMENT.md`](docs/PRODUCTION_DEPLOYMENT.md) — containerized real-app deployment architecture.
 
 ## Initial MVP focus
 
