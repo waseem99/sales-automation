@@ -146,12 +146,12 @@ function renderLeadDetail(lead: LeadDetailView): string {
 function renderDraftPreview(lead: LeadDetailView): string {
   const draft = lead.drafts[0];
   if (!draft) return '<p class="muted">No draft generated yet.</p>';
-  return `<div class="preview-block"><strong>${escapeHtml(draft.channel)}</strong><p>${escapeHtml(draft.body)}</p></div>`;
+  return `<div class="preview-block"><strong>${escapeHtml(draft.type)}</strong><p>${escapeHtml(draft.body)}</p></div>`;
 }
 
 function renderPortfolioPreview(lead: LeadDetailView): string {
   if (lead.portfolioMatches.length === 0) return '<p class="muted">No portfolio proof matched yet.</p>';
-  return `<ul>${lead.portfolioMatches.slice(0, 3).map((match) => `<li><strong>${escapeHtml(match.projectName)}</strong> — ${escapeHtml(String(match.matchScore))}</li>`).join('')}</ul>`;
+  return `<ul>${lead.portfolioMatches.slice(0, 3).map((match) => `<li><strong>${escapeHtml(match.projectName)}</strong> — ${escapeHtml(String(match.score))}</li>`).join('')}</ul>`;
 }
 
 function renderEmptyDetail(): string {
