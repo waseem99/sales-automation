@@ -97,12 +97,19 @@ Role: COO
 Need: funded B2B SaaS hiring support operations and discussing AI automation internally.
 No direct buying post yet. Needs manual research and verification before outreach.
 https://www.linkedin.com/in/example-coo`;
+  const sampleBatch = `${sampleUpwork}
+
+---
+${sampleLinkedIn}
+
+---
+${sampleColdProspect}`;
 
   return `<section class="panel intake" aria-label="Manual lead intake">
     <div class="panel-header">
       <div>
         <h2>Lead / Prospect Intake</h2>
-        <p class="muted">Paste Upwork jobs, LinkedIn warm signals, or cold prospect research notes. Nothing is sent automatically.</p>
+        <p class="muted">Paste one source item or a bulk list separated by <strong>---</strong>. Nothing is sent automatically.</p>
       </div>
       <span>Local MVP</span>
     </div>
@@ -112,26 +119,29 @@ https://www.linkedin.com/in/example-coo`;
         <select id="lead-source" name="lead-source">
           <option value="upwork">Upwork job/email text</option>
           <option value="linkedin">LinkedIn / Sales Navigator signal or prospect note</option>
+          <option value="batch">Bulk mixed source batch</option>
         </select>
       </label>
       <label>
         Paste lead text
-        <textarea id="lead-text" name="lead-text" rows="8">${escapeHtml(sampleUpwork)}</textarea>
+        <textarea id="lead-text" name="lead-text" rows="9">${escapeHtml(sampleUpwork)}</textarea>
       </label>
       <div class="form-actions">
         <button type="submit">Evaluate lead</button>
         <button type="button" id="sample-upwork">Upwork warm lead</button>
         <button type="button" id="sample-linkedin">LinkedIn warm signal</button>
         <button type="button" id="sample-cold-prospect">Cold prospect research note</button>
+        <button type="button" id="sample-bulk-batch">Bulk mixed batch</button>
         <button type="button" id="refresh-dashboard">Refresh</button>
         <button type="button" id="reset-local-data" class="danger-button">Reset local data</button>
       </div>
-      <p class="muted small">Cold prospect notes should land in <strong>Needs Research</strong>; they are not contact-ready until a human approves them.</p>
+      <p class="muted small">Bulk mode accepts Upwork jobs, LinkedIn warm signals, and cold prospect notes separated by <strong>---</strong>. Cold prospects still land in <strong>Needs Research</strong>.</p>
     </form>
     <pre id="lead-result" class="result" hidden></pre>
     <template id="sample-upwork-text">${escapeHtml(sampleUpwork)}</template>
     <template id="sample-linkedin-text">${escapeHtml(sampleLinkedIn)}</template>
     <template id="sample-cold-prospect-text">${escapeHtml(sampleColdProspect)}</template>
+    <template id="sample-bulk-batch-text">${escapeHtml(sampleBatch)}</template>
   </section>`;
 }
 
@@ -376,6 +386,7 @@ function clientScript(): string {
     const sampleUpwork = document.getElementById('sample-upwork-text').innerHTML;
     const sampleLinkedIn = document.getElementById('sample-linkedin-text').innerHTML;
     const sampleColdProspect = document.getElementById('sample-cold-prospect-text').innerHTML;
+    const sampleBatch = document.getElementById('sample-bulk-batch-text').innerHTML;
 
     document.getElementById('sample-upwork').addEventListener('click', () => {
       source.value = 'upwork';
@@ -390,6 +401,11 @@ function clientScript(): string {
     document.getElementById('sample-cold-prospect').addEventListener('click', () => {
       source.value = 'linkedin';
       text.value = decodeHtml(sampleColdProspect);
+    });
+
+    document.getElementById('sample-bulk-batch').addEventListener('click', () => {
+      source.value = 'batch';
+      text.value = decodeHtml(sampleBatch);
     });
 
     document.getElementById('refresh-dashboard').addEventListener('click', () => window.location.reload());
@@ -429,11 +445,17 @@ function clientScript(): string {
 
     document.getElementById('lead-form').addEventListener('submit', async (event) => {
       event.preventDefault();
-      showResult('Evaluating lead...');
-      const endpoint = source.value === 'upwork' ? '/api/ingest/upwork-email' : '/api/ingest/linkedin-signal';
+      showResult('Evaluating lead source input...');
+      const endpoint = source.value === 'upwork'
+        ? '/api/ingest/upwork-email'
+        : source.value === 'batch'
+          ? '/api/ingest/source-batch'
+          : '/api/ingest/linkedin-signal';
       const payload = source.value === 'upwork'
         ? { emailBody: text.value, receivedAt: new Date().toISOString() }
-        : { text: text.value, capturedAt: new Date().toISOString() };
+        : source.value === 'batch'
+          ? { batchText: text.value, capturedAt: new Date().toISOString() }
+          : { text: text.value, capturedAt: new Date().toISOString() };
 
       try {
         const response = await fetch(endpoint, {
