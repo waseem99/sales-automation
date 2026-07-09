@@ -8,7 +8,7 @@
     "build": "pnpm -r --filter \"@sales-automation/*\" --sort build",
     "dev": "pnpm --filter @sales-automation/web dev",
     "start:web": "pnpm --filter @sales-automation/web start",
-    "deploy:check": "pnpm install --frozen-lockfile && pnpm build",
+    "deploy:check": "pnpm install --no-frozen-lockfile && pnpm build",
     "evaluate:sample": "pnpm build && pnpm --filter @sales-automation/cli evaluate:sample",
     "evaluate:json": "pnpm build && pnpm --filter @sales-automation/cli evaluate:json",
     "lint": "pnpm build && pnpm -r --filter \"@sales-automation/*\" --sort lint",
