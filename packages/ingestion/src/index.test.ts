@@ -1,7 +1,15 @@
 import assert from 'node:assert/strict';
 import { samplePortfolioItems } from '@sales-automation/fixtures';
 import { InMemoryLeadRepository } from '@sales-automation/storage';
-import { getLeadDedupeKey, ingestLinkedInSignal, ingestLeads, ingestUpworkEmail } from './index.js';
+import {
+  getLeadDedupeKey,
+  ingestLinkedInSignal,
+  ingestLeads,
+  ingestSourceBatch,
+  ingestUpworkEmail,
+  parseSourceBatch,
+  splitSourceBlocks,
+} from './index.js';
 import type { Lead } from '@sales-automation/shared';
 
 const generatedAt = '2026-07-08T20:15:00.000Z';
@@ -76,6 +84,63 @@ assert.equal(linkedinResult.captured[0].evaluation.lead.leadType, 'linkedin_warm
 assert.equal(linkedinResult.captured[0].evaluation.score.urgency, 'urgent');
 assert.ok(repository.getLead(linkedinResult.captured[0].leadId)?.latestEvaluation);
 
+const batchText = `Job: Need AI automation dashboard
+https://www.upwork.com/jobs/batch-ai-dashboard-001
+We need an AI automation expert for n8n and RAG. Budget $5,000. Posted 15 minutes ago.
+
+---
+Sales Navigator saved search alert
+New lead alert: Jane Founder — COO at Example SaaS
+Company: Example SaaS
+Role: COO
+Posted 35 minutes ago
+Looking for AI automation partner to reduce support backlog.
+https://www.linkedin.com/in/batch-jane-founder
+
+---
+Manual research note
+Target account: Example Growth SaaS
+Target prospect: Example COO — COO at Example Growth SaaS
+Company: Example Growth SaaS
+Role: COO
+Need: funded B2B SaaS hiring support operations and discussing AI automation internally.
+No direct buying post yet. Needs manual research and verification before outreach.
+https://www.linkedin.com/in/batch-example-coo`;
+
+const batchBlocks = splitSourceBlocks(batchText);
+assert.equal(batchBlocks.length, 3);
+
+const parsedBatchLeads = parseSourceBatch(batchText, generatedAt);
+assert.equal(parsedBatchLeads.length, 3);
+assert.equal(parsedBatchLeads[0].source, 'upwork');
+assert.equal(parsedBatchLeads[1].source, 'sales_navigator');
+assert.equal(parsedBatchLeads[1].prospectStage, 'warm_lead');
+assert.equal(parsedBatchLeads[2].leadType, 'linkedin_cold_prospect');
+assert.equal(parsedBatchLeads[2].pipelineStatus, 'needs_research');
+
+const batchResult = ingestSourceBatch({
+  batchText,
+  capturedAt: generatedAt,
+  repository,
+  portfolioItems: samplePortfolioItems,
+  generatedAt,
+  actor: 'batch-test',
+});
+assert.equal(batchResult.sourceKind, 'source_batch');
+assert.equal(batchResult.totalInput, 3);
+assert.equal(batchResult.totalCaptured, 3);
+assert.equal(batchResult.captured.some((item) => item.evaluation.lead.pipelineStatus === 'needs_research'), true);
+
+const duplicateBatchResult = ingestSourceBatch({
+  batchText,
+  capturedAt: generatedAt,
+  repository,
+  portfolioItems: samplePortfolioItems,
+  generatedAt,
+});
+assert.equal(duplicateBatchResult.totalCaptured, 0);
+assert.equal(duplicateBatchResult.totalSkipped, 3);
+
 const manualLead: Lead = {
   id: 'manual-enterprise-ai-001',
   source: 'manual',
@@ -105,4 +170,4 @@ assert.equal(manualResult.totalSkipped, 1);
 assert.equal(manualResult.skippedDuplicates[0].reason, 'duplicate_lead_id');
 assert.equal(getLeadDedupeKey(manualLead), 'lead_id:manual-enterprise-ai-001');
 
-console.log('Ingestion orchestrator tests passed.');
+console.log('Ingestion orchestrator and bulk source intake tests passed.');
