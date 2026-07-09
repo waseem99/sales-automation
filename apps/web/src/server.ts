@@ -6,6 +6,7 @@ import type { DashboardSavedViewKey, OpportunityListItem } from '@sales-automati
 import {
   ingestLeads,
   ingestLinkedInSignal,
+  ingestSourceBatch,
   ingestUpworkEmail,
   type IngestionResult,
 } from '@sales-automation/ingestion';
@@ -144,6 +145,20 @@ export function handleSalesAutomationRequest(
           country: optionalString(body.country),
           region: optionalString(body.region),
         },
+        repository: context.repository,
+        portfolioItems: context.portfolioItems,
+        actor,
+        generatedAt: now,
+      });
+      return jsonResponse(summarizeIngestionResult(result), 201);
+    }
+
+    if (method === 'POST' && pathname === '/api/ingest/source-batch') {
+      assertPermission(role, 'ingest_leads');
+      const body = requireObjectBody(request.body);
+      const result = ingestSourceBatch({
+        batchText: requireString(body.batchText, 'batchText'),
+        capturedAt: optionalString(body.capturedAt) ?? now,
         repository: context.repository,
         portfolioItems: context.portfolioItems,
         actor,
@@ -298,6 +313,9 @@ function summarizeIngestionResult(result: IngestionResult) {
     captured: result.captured.map((item) => ({
       leadId: item.leadId,
       sourceUrl: item.sourceUrl,
+      source: item.evaluation.lead.source,
+      leadType: item.evaluation.lead.leadType,
+      pipelineStatus: item.evaluation.lead.pipelineStatus,
       score: item.evaluation.score.total,
       status: item.evaluation.score.status,
       urgency: item.evaluation.score.urgency,
@@ -376,36 +394,33 @@ function optionalBoolean(url: URL, key: string): boolean | undefined {
   return undefined;
 }
 
+function trimTrailingSlash(pathname: string): string {
+  return pathname.length > 1 ? pathname.replace(/\/$/, '') : pathname;
+}
+
 function normalizeNodeHeaders(headers: IncomingMessage['headers']): Record<string, string | string[] | undefined> {
-  const normalized: Record<string, string | string[] | undefined> = {};
-  for (const [key, value] of Object.entries(headers)) {
-    normalized[key] = Array.isArray(value) ? value : value?.toString();
-  }
-  return normalized;
+  return headers;
 }
 
 async function readJsonBody(request: IncomingMessage): Promise<unknown> {
+  if (!['POST', 'PUT', 'PATCH'].includes(request.method ?? 'GET')) return undefined;
+
   const chunks: Buffer[] = [];
   for await (const chunk of request) {
     chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
   }
+
+  if (chunks.length === 0) return undefined;
   const raw = Buffer.concat(chunks).toString('utf8').trim();
   if (!raw) return undefined;
-  try {
-    return JSON.parse(raw);
-  } catch (error) {
-    throw new Error(`Invalid JSON request body: ${(error as Error).message}`);
-  }
+  return JSON.parse(raw);
 }
 
 function getErrorStatus(error: unknown): number {
   const message = (error as Error).message;
   if (message.includes('Forbidden')) return 403;
-  if (message.includes('not found') || message.includes('Lead not found')) return 404;
-  if (message.includes('required') || message.includes('Invalid status transition')) return 400;
+  if (message.includes('not found')) return 404;
+  if (message.includes('required')) return 400;
+  if (message.includes('must be')) return 400;
   return 500;
-}
-
-function trimTrailingSlash(pathname: string): string {
-  return pathname.length > 1 ? pathname.replace(/\/+$/, '') : pathname;
 }
