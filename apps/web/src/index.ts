@@ -398,6 +398,8 @@ function renderLeadDetail(lead: LeadDetailView): string {
       <div><dt>Owner</dt><dd>${escapeHtml(lead.owner ?? 'Unassigned')}</dd></div>
       <div><dt>Freshness</dt><dd>${typeof lead.freshnessMinutes === 'number' ? `${lead.freshnessMinutes}m` : '—'}</dd></div>
     </dl>
+    <h4>BD Decision Brief</h4>
+    ${renderDecisionBrief(lead)}
     <h4>Recommended Action</h4>
     <p>${escapeHtml(lead.recommendedNextAction ?? 'No action generated yet.')}</p>
     <h4>Source Evidence</h4>
@@ -416,6 +418,80 @@ function renderLeadDetail(lead: LeadDetailView): string {
     <h4>Notes</h4>
     <ul>${lead.notes.map((note) => `<li>${escapeHtml(note)}</li>`).join('') || '<li>No notes yet.</li>'}</ul>
   </aside>`;
+}
+
+function renderDecisionBrief(lead: LeadDetailView): string {
+  const checklist = getDecisionChecklist(lead);
+  return `<div class="decision-brief">
+    <div class="decision-banner">
+      <span>Suggested decision</span>
+      <strong>${escapeHtml(getSuggestedDecision(lead))}</strong>
+    </div>
+    <div class="brief-grid">
+      <div class="brief-card"><span>Why qualified</span><p>${escapeHtml(getLeadQualificationSummary(lead))}</p></div>
+      <div class="brief-card"><span>Why now</span><p>${escapeHtml(getTimingReason(lead))}</p></div>
+      <div class="brief-card"><span>Service angle</span><p>${escapeHtml(formatStatusLabel(lead.serviceCategory))}</p></div>
+      <div class="brief-card"><span>Profile</span><p>${escapeHtml(lead.recommendedProfile ?? 'Needs profile review')}</p></div>
+      <div class="brief-card"><span>Proof</span><p>${escapeHtml(getLeadProofSummary(lead))}</p></div>
+      <div class="brief-card"><span>Risk</span><p>${escapeHtml(getRiskReason(lead))}</p></div>
+    </div>
+    <div class="checklist">
+      <strong>BD checklist before action</strong>
+      <ul>${checklist.map((item) => `<li>${escapeHtml(item)}</li>`).join('')}</ul>
+    </div>
+    <p class="muted small">Approval gate: use the status buttons below. The system only changes the internal pipeline; it never sends outreach automatically.</p>
+  </div>`;
+}
+
+function getSuggestedDecision(lead: LeadDetailView): string {
+  if (lead.pipelineStatus === 'needs_research' || lead.prospectStage === 'cold_prospect') return 'Research before outreach';
+  if (lead.pipelineStatus === 'approved_to_contact' || lead.pipelineStatus === 'draft_ready') return 'Ready for manual contact';
+  if (lead.qualificationStatus === 'rejected' || lead.redFlagCount > 0 || lead.pipelineStatus === 'rejected') return 'Reject or archive unless overridden';
+  if (lead.qualificationStatus === 'hot' || lead.urgency === 'urgent' || lead.overdue) return 'Review and approve quickly';
+  if (lead.pipelineStatus === 'needs_human_review') return 'Human review required';
+  return 'Review and decide next status';
+}
+
+function getLeadQualificationSummary(lead: LeadDetailView): string {
+  if (lead.profileReasons.length > 0) return shorten(lead.profileReasons[0], 140);
+  return getQualificationReason(lead);
+}
+
+function getLeadProofSummary(lead: LeadDetailView): string {
+  const topMatch = lead.portfolioMatches[0];
+  if (!topMatch) return 'No portfolio proof matched yet; add proof before contact.';
+  return `${topMatch.projectName} matched at ${topMatch.score} with ${topMatch.matchedTags.length} tag${topMatch.matchedTags.length === 1 ? '' : 's'}.`;
+}
+
+function getDecisionChecklist(lead: LeadDetailView): string[] {
+  const items = [
+    'Confirm the lead source and URL/evidence are legitimate.',
+    'Confirm buyer role, company, and service fit.',
+    'Confirm budget/timeline signal is acceptable for Codistan.',
+  ];
+
+  if (lead.prospectStage === 'cold_prospect' || lead.pipelineStatus === 'needs_research') {
+    items.push('Verify account priority and buyer relevance before approving outreach.');
+    items.push('Add a research note before moving to approved_to_contact.');
+  }
+
+  if (lead.redFlagCount > 0) {
+    items.push('Resolve red flags before approving contact.');
+  }
+
+  if (lead.drafts.length > 0) {
+    items.push('Review and manually personalize the draft before sending.');
+  } else {
+    items.push('Create or request a draft before contact.');
+  }
+
+  if (lead.portfolioMatches.length > 0) {
+    items.push('Use the strongest matched portfolio proof in the response.');
+  } else {
+    items.push('Attach relevant proof manually before outreach.');
+  }
+
+  return items;
 }
 
 function renderSourceEvidence(lead: LeadDetailView): string {
@@ -518,6 +594,15 @@ function baseStyles(): string {
     .queue-item { display: grid; gap: 6px; color: inherit; text-decoration: none; border: 1px solid #e5e7eb; background: white; border-radius: 14px; padding: 12px; margin-top: 10px; }
     .queue-item strong { font-size: 14px; }
     .queue-item span { color: #374151; font-size: 12px; line-height: 1.35; }
+    .decision-brief { display: grid; gap: 12px; }
+    .decision-banner { background: #111827; color: white; border-radius: 14px; padding: 14px; display: grid; gap: 4px; }
+    .decision-banner span { color: #d1d5db; font-size: 12px; text-transform: uppercase; letter-spacing: .08em; }
+    .decision-banner strong { font-size: 17px; }
+    .brief-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+    .brief-card, .checklist { background: #f9fafb; border-radius: 12px; padding: 12px; }
+    .brief-card span { display: block; color: #6b7280; font-size: 12px; margin-bottom: 5px; }
+    .brief-card p { margin: 0; font-weight: 700; }
+    .checklist ul { margin-bottom: 0; }
     .muted { color: #6b7280; }
     .small { font-size: 13px; }
     .detail { position: sticky; top: 20px; }
@@ -530,7 +615,7 @@ function baseStyles(): string {
     dt { color: #6b7280; font-size: 12px; }
     dd { margin: 4px 0 0; font-weight: 800; overflow-wrap: anywhere; }
     @media (max-width: 1100px) { .queue-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
-    @media (max-width: 900px) { .metrics, .grid, .inline-form, .filter-form, .queue-grid { grid-template-columns: 1fr; } .detail { position: static; } }
+    @media (max-width: 900px) { .metrics, .grid, .inline-form, .filter-form, .queue-grid, .brief-grid { grid-template-columns: 1fr; } .detail { position: static; } }
   `;
 }
 
