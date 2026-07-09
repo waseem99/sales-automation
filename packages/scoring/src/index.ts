@@ -3,6 +3,7 @@ import {
   scoreWeights,
   type Lead,
   type LeadScore,
+  type LeadType,
   type QualificationStatus,
   type RedFlag,
   type ServiceCategory,
@@ -18,6 +19,13 @@ const highFitServices = new Set<ServiceCategory>([
   'voice_ai_agent',
   'ar_3d_unity_unreal',
   'cybersecurity_compliance',
+]);
+
+const coldProspectLeadTypes = new Set<LeadType>([
+  'linkedin_cold_prospect',
+  'sales_navigator_cold_prospect',
+  'partner_prospect',
+  'solution_led_prospect',
 ]);
 
 export interface ScoreLeadInput {
@@ -97,6 +105,12 @@ function scoreTiming(lead: Lead): number {
     return 4;
   }
 
+  if (coldProspectLeadTypes.has(lead.leadType)) {
+    if (freshness <= 1440) return 8;
+    if (freshness <= 10_080) return 5;
+    return 3;
+  }
+
   return Math.round(scoreWeights.timingUrgency * 0.5);
 }
 
@@ -132,6 +146,10 @@ function getUrgencyStatus(lead: Lead, total: number, status: QualificationStatus
   const config = leadTypeConfig[lead.leadType];
   const freshRule = config.urgentFreshnessRule;
 
+  if (coldProspectLeadTypes.has(lead.leadType)) {
+    return status === 'hot' || status === 'qualified' ? 'normal' : 'low';
+  }
+
   if (total >= config.thresholds.hot) return 'urgent';
 
   if (
@@ -158,6 +176,10 @@ function buildExplanation(
     `Urgency is ${urgency}.`,
     `Lead type is ${lead.leadType} and service category is ${lead.serviceCategory}.`,
   ];
+
+  if (coldProspectLeadTypes.has(lead.leadType)) {
+    parts.push('This is a cold prospect, so it should move through research and human-approved outreach rather than urgent auto-action.');
+  }
 
   if (redFlags.length > 0) {
     parts.push(`Red flags: ${redFlags.map((flag) => `${flag.code}: ${flag.reason}`).join('; ')}.`);
