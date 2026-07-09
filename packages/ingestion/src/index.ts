@@ -8,7 +8,7 @@ import {
 import type { Lead, PortfolioItem } from '@sales-automation/shared';
 import type { LeadRepository, StoredLeadRecord } from '@sales-automation/storage';
 
-export type IngestionSourceKind = 'upwork_email' | 'linkedin_signal' | 'manual_leads';
+export type IngestionSourceKind = 'upwork_email' | 'linkedin_signal' | 'manual_leads' | 'source_batch';
 
 export interface IngestLeadsInput {
   sourceKind: IngestionSourceKind;
@@ -26,6 +26,11 @@ export interface IngestUpworkEmailInput extends Omit<IngestLeadsInput, 'sourceKi
 
 export interface IngestLinkedInSignalInput extends Omit<IngestLeadsInput, 'sourceKind' | 'leads'> {
   signal: ParseLinkedInSignalInput;
+}
+
+export interface IngestSourceBatchInput extends Omit<IngestLeadsInput, 'sourceKind' | 'leads'> {
+  batchText: string;
+  capturedAt: string;
 }
 
 export interface IngestedLeadResult {
@@ -130,9 +135,45 @@ export function ingestLinkedInSignal(input: IngestLinkedInSignalInput): Ingestio
   });
 }
 
+export function ingestSourceBatch(input: IngestSourceBatchInput): IngestionResult {
+  const leads = parseSourceBatch(input.batchText, input.capturedAt);
+  return ingestLeads({
+    sourceKind: 'source_batch',
+    leads,
+    repository: input.repository,
+    portfolioItems: input.portfolioItems,
+    actor: input.actor,
+    generatedAt: input.generatedAt,
+    includePrivatePortfolio: input.includePrivatePortfolio,
+  });
+}
+
+export function parseSourceBatch(batchText: string, capturedAt: string): Lead[] {
+  return splitSourceBlocks(batchText).flatMap((block) => {
+    if (looksLikeUpwork(block)) {
+      return parseUpworkEmail({ emailBody: block, receivedAt: capturedAt });
+    }
+
+    return [parseLinkedInSignal({ text: block, capturedAt })];
+  });
+}
+
+export function splitSourceBlocks(batchText: string): string[] {
+  return batchText
+    .replace(/\r\n/g, '\n')
+    .split(/\n\s*(?:---+|===+|###\s*(?:lead|prospect|item)?\s*\d*|\[\[lead\]\])\s*\n/gi)
+    .map((block) => block.trim())
+    .filter(Boolean);
+}
+
 export function getLeadDedupeKey(lead: Lead): string {
   if (lead.sourceUrl) return `source_url:${normalizeUrl(lead.sourceUrl)}`;
   return `lead_id:${lead.id}`;
+}
+
+function looksLikeUpwork(block: string): boolean {
+  const value = block.toLowerCase();
+  return value.includes('upwork.com/jobs') || value.includes('job:') || value.includes('upwork');
 }
 
 function buildExistingLeadIndex(records: StoredLeadRecord[]): Map<string, StoredLeadRecord> {
