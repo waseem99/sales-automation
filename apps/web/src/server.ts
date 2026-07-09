@@ -76,6 +76,8 @@ export function handleSalesAutomationRequest(
     if (method === 'GET' && pathname === '/') {
       assertPermission(role, 'view_opportunities');
       const activeSavedView = optionalQuery(url, 'savedView') as DashboardSavedViewKey | undefined;
+      const activeQuery = optionalQuery(url, 'query');
+      const activePipelineStatus = optionalQuery(url, 'status') as PipelineStatus | undefined;
       const opportunities = api.listOpportunities(buildListOptions(url, now));
       const selectedLead = selectLeadDetail({
         leadId: optionalQuery(url, 'leadId'),
@@ -90,6 +92,8 @@ export function handleSalesAutomationRequest(
           opportunities,
           selectedLead,
           activeSavedView,
+          activeQuery,
+          activePipelineStatus,
         }),
       );
     }
@@ -161,6 +165,16 @@ export function handleSalesAutomationRequest(
         generatedAt: now,
       });
       return jsonResponse(summarizeIngestionResult(result), 201);
+    }
+
+    if (method === 'POST' && pathname === '/api/dev/reset-local-data') {
+      assertPermission(role, 'manage_sensitive_settings');
+      const cleared = context.repository.clearAll(actor);
+      return jsonResponse({
+        ok: true,
+        cleared,
+        message: 'Local demo lead data reset. No external data, Gmail, LinkedIn, or Upwork account was touched.',
+      });
     }
 
     const statusActionMatch = pathname.match(/^\/api\/opportunities\/([^/]+)\/(status|owner|notes|alert-sent)$/);
