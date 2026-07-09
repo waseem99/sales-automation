@@ -42,9 +42,14 @@ const html = renderDashboardPage({
 
 assert.ok(html.startsWith('<!doctype html>'));
 assert.ok(html.includes('Codistan Lead Desk'));
-assert.ok(html.includes('No fixed daily lead limits'));
+assert.ok(html.includes('Try the MVP flow'));
+assert.ok(html.includes('Evaluate lead'));
+assert.ok(html.includes('Use Upwork sample'));
+assert.ok(html.includes('Use LinkedIn sample'));
 assert.ok(html.includes('data-lead-id="lead-upwork-rag-001"'));
 assert.ok(html.includes('Allowed Next Statuses'));
+assert.ok(html.includes('Draft Preview'));
+assert.ok(html.includes('Portfolio Proof'));
 assert.ok(html.includes('Review with Waseem before sending.'));
 assert.ok(html.includes('Need &lt;script&gt;alert(&quot;x&quot;)&lt;/script&gt; AI RAG chatbot'));
 assert.ok(!html.includes('<script>alert'));
@@ -86,6 +91,7 @@ const dashboardResponse = handleSalesAutomationRequest({ method: 'GET', path: '/
 assert.equal(dashboardResponse.status, 200);
 assert.equal(dashboardResponse.headers['content-type'], 'text/html; charset=utf-8');
 assert.ok(dashboardResponse.body.includes('Codistan Lead Desk'));
+assert.ok(dashboardResponse.body.includes('Try the MVP flow'));
 
 const anonymousSession = handleSalesAutomationRequest(
   { method: 'GET', path: '/api/session' },
@@ -285,4 +291,4 @@ assert.equal(badRequest.status, 400);
 const notFound = handleSalesAutomationRequest({ method: 'GET', path: '/api/missing' }, context);
 assert.equal(notFound.status, 404);
 
-console.log('Web dashboard renderer, route binding, and session resolution tests passed.');
+console.log('Web dashboard renderer, visible MVP intake, route binding, and session resolution tests passed.');
