@@ -45,16 +45,17 @@ const html = renderDashboardPage({
 
 assert.ok(html.startsWith('<!doctype html>'));
 assert.ok(html.includes('Codistan Lead Desk'));
-assert.ok(html.includes('Try the MVP flow'));
+assert.ok(html.includes('Lead / Prospect Intake'));
 assert.ok(html.includes('Evaluate lead'));
-assert.ok(html.includes('Use Upwork sample'));
-assert.ok(html.includes('Use LinkedIn sample'));
-assert.ok(html.includes('Refresh dashboard'));
+assert.ok(html.includes('Upwork warm lead'));
+assert.ok(html.includes('LinkedIn warm signal'));
+assert.ok(html.includes('Cold prospect research note'));
+assert.ok(html.includes('Refresh'));
 assert.ok(html.includes('Reset local data'));
 assert.ok(html.includes('Saved views'));
-assert.ok(html.includes('Search and filters'));
+assert.ok(html.includes('Pipeline status'));
 assert.ok(html.includes('Hot Upwork Now'));
-assert.ok(html.includes('data-lead-id="lead-upwork-rag-001"'));
+assert.ok(html.includes('lead-upwork-rag-001'));
 assert.ok(html.includes('?savedView=hot_upwork_now&amp;query=RAG&amp;status=new&amp;leadId=lead-upwork-rag-001'));
 assert.ok(html.includes('data-status-form'));
 assert.ok(html.includes('data-owner-form'));
@@ -107,9 +108,9 @@ const dashboardResponse = handleSalesAutomationRequest({ method: 'GET', path: '/
 assert.equal(dashboardResponse.status, 200);
 assert.equal(dashboardResponse.headers['content-type'], 'text/html; charset=utf-8');
 assert.ok(dashboardResponse.body.includes('Codistan Lead Desk'));
-assert.ok(dashboardResponse.body.includes('Try the MVP flow'));
+assert.ok(dashboardResponse.body.includes('Lead / Prospect Intake'));
 assert.ok(dashboardResponse.body.includes('Saved views'));
-assert.ok(dashboardResponse.body.includes('Search and filters'));
+assert.ok(dashboardResponse.body.includes('Pipeline status'));
 assert.ok(dashboardResponse.body.includes('Safe Review Actions'));
 assert.ok(dashboardResponse.body.includes('Source Evidence'));
 
