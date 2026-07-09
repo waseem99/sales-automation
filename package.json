@@ -6,6 +6,7 @@
   "packageManager": "pnpm@9.15.0",
   "scripts": {
     "build": "pnpm -r --filter \"@sales-automation/*\" --sort build",
+    "build:vercel": "pnpm build",
     "dev": "pnpm --filter @sales-automation/web dev",
     "evaluate:sample": "pnpm build && pnpm --filter @sales-automation/cli evaluate:sample",
     "evaluate:json": "pnpm build && pnpm --filter @sales-automation/cli evaluate:json",
