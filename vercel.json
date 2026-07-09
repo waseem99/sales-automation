@@ -3,6 +3,13 @@
   "installCommand": "echo 'Skipping dependency install for standalone Vercel preview'",
   "buildCommand": "echo 'Building standalone Codistan Lead Desk preview'",
   "outputDirectory": "public",
+  "redirects": [
+    {
+      "source": "/",
+      "destination": "/api/preview",
+      "permanent": false
+    }
+  ],
   "rewrites": [
     {
       "source": "/((?!api).*)",
