@@ -38,6 +38,7 @@ const html = renderDashboardPage({
   summary: api.getDashboardSummary(generatedAt),
   opportunities,
   selectedLead,
+  activeSavedView: 'hot_upwork_now',
 });
 
 assert.ok(html.startsWith('<!doctype html>'));
@@ -46,10 +47,19 @@ assert.ok(html.includes('Try the MVP flow'));
 assert.ok(html.includes('Evaluate lead'));
 assert.ok(html.includes('Use Upwork sample'));
 assert.ok(html.includes('Use LinkedIn sample'));
+assert.ok(html.includes('Refresh dashboard'));
+assert.ok(html.includes('Saved views'));
+assert.ok(html.includes('Hot Upwork Now'));
 assert.ok(html.includes('data-lead-id="lead-upwork-rag-001"'));
-assert.ok(html.includes('Allowed Next Statuses'));
+assert.ok(html.includes('?savedView=hot_upwork_now&amp;leadId=lead-upwork-rag-001'));
+assert.ok(html.includes('data-status-form'));
+assert.ok(html.includes('data-owner-form'));
+assert.ok(html.includes('data-note-form'));
+assert.ok(html.includes('Safe Review Actions'));
+assert.ok(html.includes('approved to contact'));
 assert.ok(html.includes('Draft Preview'));
 assert.ok(html.includes('Portfolio Proof'));
+assert.ok(html.includes('Red Flags'));
 assert.ok(html.includes('Review with Waseem before sending.'));
 assert.ok(html.includes('Need &lt;script&gt;alert(&quot;x&quot;)&lt;/script&gt; AI RAG chatbot'));
 assert.ok(!html.includes('<script>alert'));
@@ -92,6 +102,22 @@ assert.equal(dashboardResponse.status, 200);
 assert.equal(dashboardResponse.headers['content-type'], 'text/html; charset=utf-8');
 assert.ok(dashboardResponse.body.includes('Codistan Lead Desk'));
 assert.ok(dashboardResponse.body.includes('Try the MVP flow'));
+assert.ok(dashboardResponse.body.includes('Saved views'));
+assert.ok(dashboardResponse.body.includes('Safe Review Actions'));
+
+const savedViewDashboardResponse = handleSalesAutomationRequest(
+  { method: 'GET', path: `/?savedView=hot_upwork_now&leadId=${escapedTitleLead.id}` },
+  context,
+);
+assert.equal(savedViewDashboardResponse.status, 200);
+assert.ok(savedViewDashboardResponse.body.includes('?savedView=hot_upwork_now&amp;leadId=lead-upwork-rag-001'));
+
+const staleLeadDashboardResponse = handleSalesAutomationRequest(
+  { method: 'GET', path: '/?leadId=missing-lead' },
+  context,
+);
+assert.equal(staleLeadDashboardResponse.status, 200);
+assert.ok(staleLeadDashboardResponse.body.includes('Lead Detail'));
 
 const anonymousSession = handleSalesAutomationRequest(
   { method: 'GET', path: '/api/session' },
@@ -122,7 +148,9 @@ const anonymousIngestDenied = handleSalesAutomationRequest(
     path: '/api/ingest/upwork-email',
     body: {
       receivedAt: generatedAt,
-      emailBody: `Job: Anonymous should not ingest\nhttps://www.upwork.com/jobs/anonymous-denied\nAI automation work. Budget $5,000. Posted 15 minutes ago`,
+      emailBody: `Job: Anonymous should not ingest
+https://www.upwork.com/jobs/anonymous-denied
+AI automation work. Budget $5,000. Posted 15 minutes ago`,
     },
   },
   { repository, portfolioItems: samplePortfolioItems, now: () => generatedAt },
@@ -174,7 +202,9 @@ const upworkIngestResponse = handleSalesAutomationRequest(
     path: '/api/ingest/upwork-email',
     body: {
       receivedAt: generatedAt,
-      emailBody: `Job: Need AI automation support\nhttps://www.upwork.com/jobs/web-route-test-001\nWe need an AI automation expert for n8n and LLM workflows. Budget $5,000. Posted 15 minutes ago`,
+      emailBody: `Job: Need AI automation support
+https://www.upwork.com/jobs/web-route-test-001
+We need an AI automation expert for n8n and LLM workflows. Budget $5,000. Posted 15 minutes ago`,
     },
   },
   context,
@@ -189,7 +219,9 @@ const sessionIngestResponse = handleSalesAutomationRequest(
     headers: { authorization: 'Bearer founder-token' },
     body: {
       receivedAt: generatedAt,
-      emailBody: `Job: Founder session can ingest\nhttps://www.upwork.com/jobs/founder-session-ingest\nAI automation work. Budget $5,000. Posted 15 minutes ago`,
+      emailBody: `Job: Founder session can ingest
+https://www.upwork.com/jobs/founder-session-ingest
+AI automation work. Budget $5,000. Posted 15 minutes ago`,
     },
   },
   { repository, portfolioItems: samplePortfolioItems, sessionAdapter, now: () => generatedAt },
@@ -204,7 +236,9 @@ const readOnlySessionIngestResponse = handleSalesAutomationRequest(
     headers: { authorization: 'Bearer readonly-token' },
     body: {
       receivedAt: generatedAt,
-      emailBody: `Job: Read-only session should not ingest\nhttps://www.upwork.com/jobs/readonly-session-denied\nAI automation work. Budget $5,000. Posted 15 minutes ago`,
+      emailBody: `Job: Read-only session should not ingest
+https://www.upwork.com/jobs/readonly-session-denied
+AI automation work. Budget $5,000. Posted 15 minutes ago`,
     },
   },
   { repository, portfolioItems: samplePortfolioItems, sessionAdapter, now: () => generatedAt },
@@ -218,7 +252,9 @@ const inactiveSessionIngestResponse = handleSalesAutomationRequest(
     headers: { authorization: 'Bearer inactive-token' },
     body: {
       receivedAt: generatedAt,
-      emailBody: `Job: Inactive session should not ingest\nhttps://www.upwork.com/jobs/inactive-session-denied\nAI automation work. Budget $5,000. Posted 15 minutes ago`,
+      emailBody: `Job: Inactive session should not ingest
+https://www.upwork.com/jobs/inactive-session-denied
+AI automation work. Budget $5,000. Posted 15 minutes ago`,
     },
   },
   { repository, portfolioItems: samplePortfolioItems, sessionAdapter, now: () => generatedAt },
@@ -231,7 +267,9 @@ const readOnlyIngestResponse = handleSalesAutomationRequest(
     path: '/api/ingest/upwork-email',
     body: {
       receivedAt: generatedAt,
-      emailBody: `Job: Read-only should not ingest\nhttps://www.upwork.com/jobs/web-route-test-readonly\nAI automation work. Budget $5,000. Posted 15 minutes ago`,
+      emailBody: `Job: Read-only should not ingest
+https://www.upwork.com/jobs/web-route-test-readonly
+AI automation work. Budget $5,000. Posted 15 minutes ago`,
     },
   },
   { ...context, role: 'read_only' },
@@ -291,4 +329,4 @@ assert.equal(badRequest.status, 400);
 const notFound = handleSalesAutomationRequest({ method: 'GET', path: '/api/missing' }, context);
 assert.equal(notFound.status, 404);
 
-console.log('Web dashboard renderer, visible MVP intake, route binding, and session resolution tests passed.');
+console.log('Web dashboard renderer, visible MVP intake, UX controls, route binding, and session resolution tests passed.');
