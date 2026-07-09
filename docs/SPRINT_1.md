@@ -4,7 +4,7 @@
 
 Build the first useful internal loop:
 
-Safe input source → normalized lead object → dedupe → score → urgency/status → profile recommendation → portfolio match → recommended human action → human-approved draft → hot alert plan → durable local storage → analytics/learning report → dashboard-ready lead review model → controller/API actions → route-level access control → lightweight rendered dashboard shell.
+Safe input source → normalized lead object → dedupe → score → urgency/status → profile recommendation → portfolio match → recommended human action → human-approved draft → hot alert plan → enrichment policy/verification → durable local storage → analytics/learning report → dashboard-ready lead review model → controller/API actions → route-level access control → lightweight rendered dashboard shell.
 
 This sprint should prove that Codistan can evaluate an opportunity quickly and consistently without relying on fixed daily limits.
 
@@ -44,6 +44,7 @@ This sprint should prove that Codistan can evaluate an opportunity quickly and c
 14. Role/permission foundation with route-level enforcement. ✅
 15. Analytics and scoring calibration foundation. ✅
 16. Partner and solution-led prospect scoring foundation. ✅
+17. Enrichment policy, cost-control, and human-verification foundation. ✅
 
 ### P2 — Later
 
@@ -52,7 +53,7 @@ This sprint should prove that Codistan can evaluate an opportunity quickly and c
 3. Real authentication/session integration.
 4. Gmail integration.
 5. Sales Navigator alert parser hardening.
-6. Enrichment providers.
+6. Real enrichment provider adapters/imports.
 7. Admin scoring-weight adjustment UI/API.
 8. Production alert delivery adapters.
 
@@ -220,6 +221,21 @@ Partner and solution-led prospecting foundation:
 - Converts solution-led prospects into normalized lead objects.
 - Does not scrape, enrich, or send outreach automatically.
 
+### `@sales-automation/enrichment`
+
+Enrichment policy and verification foundation:
+
+- Defines allowed enrichment providers such as manual research, company website, Google search, LinkedIn manual review, Sales Navigator manual review, paid data provider, and CRM import.
+- Defines enrichment fields for company, contact, business email, LinkedIn URLs, phone, and CRM account IDs.
+- Blocks enrichment for rejected leads.
+- Disables paid enrichment by default.
+- Guards paid enrichment with minimum score, allowed qualification statuses, and monthly budget checks.
+- Captures evidence with field, value, provider, source URL, confidence, cost, verification status, verifier, timestamp, and notes.
+- Requires human verification before outreach readiness.
+- Produces enrichment summary with verified fields, rejected fields, review-needed fields, paid cost, verified business email, and outreach-ready flag.
+- Stores enrichment evidence/summary through audit metadata for the local MVP.
+- Does not call external vendors, scrape, or send outreach.
+
 ### `@sales-automation/drafting`
 
 Human-approved draft generator:
@@ -310,7 +326,7 @@ Lightweight rendered dashboard and HTTP adapter:
 1. Add real authentication/session integration.
 2. Add Gmail ingestion adapter later.
 3. Add Sales Navigator / LinkedIn alert adapter hardening.
-4. Add enrichment policy and cost-control layer.
+4. Add enrichment UI/API and real provider adapters/imports.
 5. Add production alert delivery adapters.
 6. Add production database-backed repository.
 7. Add interactive frontend forms/components.
@@ -334,6 +350,7 @@ By the end of Sprint 1, a user should be able to input a lead/job and get:
 - Alert eligibility and alert plan.
 - Safe ingestion with dedupe and immediate evaluation.
 - Partner and solution-led prospect scoring and lead normalization.
+- Enrichment policy/cost-control decision and human-verification evidence model.
 - Cadence-aware worker runner for 30-minute source checks.
 - Durable local storage for evaluated leads.
 - Analytics and calibration reporting foundation.
@@ -350,5 +367,7 @@ By the end of Sprint 1, a user should be able to input a lead/job and get:
 - No auto-bidding.
 - No auto-DM.
 - No fake-account workflow.
+- No paid enrichment unless explicitly enabled and within score/status/budget policy.
+- No outreach-ready contact data without human verification.
 - Human approval before any external communication.
 - Every recommendation should include reasoning.
