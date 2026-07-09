@@ -34,11 +34,11 @@ export const leadTypeConfig: Record<LeadType, LeadTypeConfig> = {
     defaultCadenceMinutes: 30,
   },
   linkedin_cold_prospect: {
-    thresholds: { hot: 82, qualified: 64, nurture: 45 },
+    thresholds: { hot: 95, qualified: 64, nurture: 45 },
     defaultCadenceMinutes: 1440,
   },
   sales_navigator_cold_prospect: {
-    thresholds: { hot: 82, qualified: 64, nurture: 45 },
+    thresholds: { hot: 95, qualified: 64, nurture: 45 },
     defaultCadenceMinutes: 1440,
   },
   partner_prospect: {
