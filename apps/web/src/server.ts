@@ -2,7 +2,7 @@ import { createServer, type IncomingMessage, type ServerResponse } from 'node:ht
 import { assertPermission, type UserRole } from '@sales-automation/access-control';
 import { resolveSession, type SessionAdapter } from '@sales-automation/auth';
 import { createSalesAutomationDashboardApi } from '@sales-automation/api';
-import type { DashboardSavedViewKey } from '@sales-automation/dashboard';
+import type { DashboardSavedViewKey, OpportunityListItem } from '@sales-automation/dashboard';
 import {
   ingestLeads,
   ingestLinkedInSignal,
@@ -75,14 +75,21 @@ export function handleSalesAutomationRequest(
 
     if (method === 'GET' && pathname === '/') {
       assertPermission(role, 'view_opportunities');
-      const opportunities = api.listOpportunities({ now });
-      const selectedLead = opportunities[0] ? api.getLeadDetail(opportunities[0].id, now) : undefined;
+      const activeSavedView = optionalQuery(url, 'savedView') as DashboardSavedViewKey | undefined;
+      const opportunities = api.listOpportunities(buildListOptions(url, now));
+      const selectedLead = selectLeadDetail({
+        leadId: optionalQuery(url, 'leadId'),
+        opportunities,
+        now,
+        getLeadDetail: (leadId) => api.getLeadDetail(leadId, now),
+      });
       return htmlResponse(
         renderDashboardPage({
           title: 'Codistan Lead Desk',
           summary: api.getDashboardSummary(now),
           opportunities,
           selectedLead,
+          activeSavedView,
         }),
       );
     }
@@ -249,6 +256,23 @@ function buildListOptions(url: URL, now: string) {
       overdueOnly: optionalBoolean(url, 'overdueOnly'),
     },
   };
+}
+
+function selectLeadDetail(input: {
+  leadId?: string;
+  opportunities: OpportunityListItem[];
+  now: string;
+  getLeadDetail: (leadId: string) => ReturnType<ReturnType<typeof createSalesAutomationDashboardApi>['getLeadDetail']>;
+}) {
+  if (input.leadId) {
+    try {
+      return input.getLeadDetail(input.leadId);
+    } catch {
+      // Fall back to the first visible lead if the URL points to a stale or filtered-out lead.
+    }
+  }
+
+  return input.opportunities[0] ? input.getLeadDetail(input.opportunities[0].id) : undefined;
 }
 
 function summarizeIngestionResult(result: IngestionResult) {
