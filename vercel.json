@@ -1,6 +1,6 @@
 {
   "version": 2,
-  "installCommand": "corepack enable && corepack prepare pnpm@10.14.0 --activate && pnpm install --frozen-lockfile=false",
+  "installCommand": "npm install --global pnpm@10.14.0 && pnpm install --frozen-lockfile=false --fetch-retries=5",
   "buildCommand": "pnpm build:vercel",
   "rewrites": [
     {
