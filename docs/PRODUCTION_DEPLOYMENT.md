@@ -8,6 +8,32 @@ The current Vercel preview branch is useful for browser review, but it is intent
 
 Recommended first production target: **Render / Railway / Fly / any Docker-capable Node host**.
 
+## Delivery and cost-control rules
+
+To keep development velocity high and deployment spend controlled:
+
+1. Keep only one active implementation PR at a time.
+2. Batch related Sprint 2 work into one PR when the work is mainly infra/planning/doc/skeleton work.
+3. Do not create a new PR for every tiny issue.
+4. Use GitHub CI as the normal review gate.
+5. Do not depend on manual local review.
+6. Avoid Vercel preview deployments for ordinary feature branches.
+7. Use Vercel only for the existing lightweight preview path or selected demo branches.
+8. Use Docker/Render/Railway/Fly for the real Node app deployment.
+
+## Vercel deployment guard
+
+`vercel.json` uses an ignore command so non-preview branches can be skipped by Vercel.
+
+Allowed Vercel refs:
+
+```text
+main
+fix-vercel-preview
+```
+
+All other branches should be reviewed through GitHub CI unless we intentionally allow a demo deployment.
+
 ## Why this path
 
 The actual app is a Node HTTP server in `apps/web`, not a static frontend or Next.js app. A containerized Node service lets us run the real server directly without reshaping the product around Vercel serverless functions.
