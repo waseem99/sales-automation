@@ -47,6 +47,7 @@ This sprint should prove that Codistan can evaluate an opportunity quickly and c
 17. Enrichment policy, cost-control, and human-verification foundation. ✅
 18. Safe alert delivery adapter foundation. ✅
 19. Read-only Gmail/email source adapter foundation. ✅
+20. Hardened LinkedIn/Sales Navigator parser with extraction, confidence, and skip reasons. ✅
 
 ### P2 — Later
 
@@ -54,10 +55,9 @@ This sprint should prove that Codistan can evaluate an opportunity quickly and c
 2. Production database-backed repository.
 3. Real authentication/session integration.
 4. Real Gmail API runtime wiring.
-5. Sales Navigator alert parser hardening.
-6. Real enrichment provider adapters/imports.
-7. Admin scoring-weight adjustment UI/API.
-8. Real external alert provider configuration.
+5. Real enrichment provider adapters/imports.
+6. Admin scoring-weight adjustment UI/API.
+7. Real external alert provider configuration.
 
 ---
 
@@ -80,6 +80,8 @@ This sprint should prove that Codistan can evaluate an opportunity quickly and c
 - Check every 30 minutes where source input is available.
 - Hot if score is 75+.
 - Also urgent if score is 70+ and post freshness is <= 2 hours.
+- Sales Navigator alerts normalize separately as source `sales_navigator` and lead type `linkedin_sales_nav_alert`.
+- Low-confidence LinkedIn/Sales Navigator signals move to human review instead of being treated as clean leads.
 
 ### Partner / Solution Prospecting
 
@@ -181,11 +183,17 @@ Manual lead evaluation CLI:
 
 ### `@sales-automation/parsers`
 
-Basic parser layer:
+Parser layer:
 
 - Parses simple Upwork job alert/digest style email text.
-- Extracts title, URL, budget signal, posted/freshness signal, service category, and normalized lead object.
+- Extracts Upwork title, URL, budget signal, posted/freshness signal, service category, and normalized lead object.
 - Parses safe manual/alert-text LinkedIn warm signals.
+- Detects Sales Navigator saved-search/lead alerts.
+- Distinguishes LinkedIn notification, manual post, Sales Navigator alert, and unknown source types.
+- Extracts LinkedIn/source URL, contact name, contact role, company name, freshness minutes, and timeline signal.
+- Produces parser confidence and diagnostic reasons.
+- Produces skip reasons for low-confidence, newsletter/digest, and non-actionable signals.
+- Normalizes Sales Navigator alerts as source `sales_navigator` and lead type `linkedin_sales_nav_alert`.
 
 ### `@sales-automation/ingestion`
 
@@ -347,12 +355,11 @@ Lightweight rendered dashboard and HTTP adapter:
 
 1. Add real authentication/session integration.
 2. Add real Gmail API runtime wiring.
-3. Add Sales Navigator / LinkedIn alert parser hardening.
-4. Add enrichment UI/API and real provider adapters/imports.
-5. Add real external alert provider configuration.
-6. Add production database-backed repository.
-7. Add interactive frontend forms/components.
-8. Add admin scoring-weight adjustment UI/API.
+3. Add enrichment UI/API and real provider adapters/imports.
+4. Add real external alert provider configuration.
+5. Add production database-backed repository.
+6. Add interactive frontend forms/components.
+7. Add admin scoring-weight adjustment UI/API.
 
 ---
 
@@ -371,6 +378,7 @@ By the end of Sprint 1, a user should be able to input a lead/job and get:
 - Human-approved draft output.
 - Alert eligibility and alert plan.
 - Safe alert delivery decision with dedupe and dry-run default.
+- Hardened LinkedIn/Sales Navigator parser output with confidence, extraction, and skip reasons.
 - Safe Gmail/email source classification and read-only ingestion handoff.
 - Safe ingestion with dedupe and immediate evaluation.
 - Partner and solution-led prospect scoring and lead normalization.
@@ -393,6 +401,7 @@ By the end of Sprint 1, a user should be able to input a lead/job and get:
 - No fake-account workflow.
 - Email source adapters must remain read-only unless explicitly reviewed and changed later.
 - No email sending, archiving, deleting, labeling, or modifying from ingestion adapters.
+- Low-confidence LinkedIn/Sales Navigator signals must remain human-reviewed.
 - No paid enrichment unless explicitly enabled and within score/status/budget policy.
 - No outreach-ready contact data without human verification.
 - No external alert delivery unless a real provider adapter is explicitly configured.
