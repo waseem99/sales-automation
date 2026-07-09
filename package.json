@@ -3,21 +3,22 @@
   "version": "0.1.0",
   "private": true,
   "description": "Internal opportunity intelligence platform for Codistan sales prospecting and qualification.",
-  "packageManager": "pnpm@9.15.0",
+  "packageManager": "pnpm@10.14.0",
   "scripts": {
-    "build": "pnpm -r --sort build",
+    "build": "pnpm -r --filter \"@sales-automation/*\" --sort build",
+    "build:vercel": "pnpm build",
     "dev": "pnpm --filter @sales-automation/web dev",
     "evaluate:sample": "pnpm build && pnpm --filter @sales-automation/cli evaluate:sample",
     "evaluate:json": "pnpm build && pnpm --filter @sales-automation/cli evaluate:json",
-    "lint": "pnpm build && pnpm -r --sort lint",
-    "test": "pnpm build && pnpm -r --sort test",
-    "typecheck": "pnpm build && pnpm -r --sort typecheck"
+    "lint": "pnpm build && pnpm -r --filter \"@sales-automation/*\" --sort lint",
+    "test": "pnpm build && pnpm -r --filter \"@sales-automation/*\" --sort test",
+    "typecheck": "pnpm build && pnpm -r --filter \"@sales-automation/*\" --sort typecheck"
   },
   "engines": {
-    "node": ">=20.0.0"
+    "node": "24.x"
   },
   "devDependencies": {
-    "@types/node": "^22.10.2",
+    "@types/node": "^24.0.0",
     "tsx": "^4.19.2",
     "typescript": "^5.7.2"
   }
