@@ -1,11 +1,11 @@
 {
   "version": 2,
-  "installCommand": "npm install --global pnpm@10.14.0 && pnpm install --frozen-lockfile=false --fetch-retries=5",
-  "buildCommand": "pnpm build:vercel",
+  "installCommand": "echo 'Skipping dependency install for standalone Vercel preview'",
+  "buildCommand": "echo 'Building standalone Codistan Lead Desk preview'",
   "rewrites": [
     {
       "source": "/((?!api).*)",
-      "destination": "/api"
+      "destination": "/api/preview"
     }
   ],
   "env": {
