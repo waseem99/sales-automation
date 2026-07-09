@@ -3,7 +3,7 @@ import { StaticSessionAdapter } from '@sales-automation/auth';
 import { evaluateLead } from '@sales-automation/evaluator';
 import { sampleLeads, samplePortfolioItems } from '@sales-automation/fixtures';
 import { LocalJsonLeadRepository } from '@sales-automation/storage';
-import { handleSalesAutomationRequest } from '../apps/web/src/server.js';
+import { handleSalesAutomationRequest } from '../apps/web/dist/server.js';
 
 type VercelRequestLike = {
   method?: string;
