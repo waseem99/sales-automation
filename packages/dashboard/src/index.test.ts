@@ -8,6 +8,7 @@ import {
   buildLeadDetail,
   buildOpportunityList,
   getAllowedStatusActions,
+  isFollowUpOverdue,
   isOverdue,
 } from './index.js';
 
@@ -62,6 +63,15 @@ for (const lead of [overdueUpworkLead, linkedinLead, coldProspect, lowBudgetLead
 
 repository.assignOwner(overdueUpworkLead.id, 'bd-owner', 'dashboard-test');
 repository.addNote(overdueUpworkLead.id, 'Needs immediate review.', 'dashboard-test');
+repository.scheduleFollowUp(overdueUpworkLead.id, {
+  nextFollowUpAt: '2026-07-08T19:00:00.000Z',
+  followUpNote: 'Follow up before end of day.',
+}, 'dashboard-test');
+repository.recordOutcome(lowBudgetLead.id, {
+  outcomeStatus: 'rejected',
+  outcomeReason: 'Budget and timeline are not a fit.',
+  outcomeRecordedAt: now,
+}, 'dashboard-test');
 
 const records = repository.listLeads();
 const list = buildOpportunityList(records, { now });
@@ -69,12 +79,18 @@ const list = buildOpportunityList(records, { now });
 assert.equal(list.length, 4);
 assert.equal(list[0].id, overdueUpworkLead.id, 'Overdue hot Upwork lead should sort first by default priority.');
 assert.equal(list[0].overdue, true);
+assert.equal(list[0].followUpOverdue, true);
 assert.equal(list[0].owner, 'bd-owner');
 
 const hotUpworkNow = buildOpportunityList(records, { savedView: 'hot_upwork_now', now });
 assert.equal(hotUpworkNow.length, 1);
 assert.equal(hotUpworkNow[0].source, 'upwork');
 assert.equal(hotUpworkNow[0].alertEligible, true);
+
+const dueFollowUps = buildOpportunityList(records, { savedView: 'due_follow_ups', now });
+assert.equal(dueFollowUps.length, 1);
+assert.equal(dueFollowUps[0].id, overdueUpworkLead.id);
+assert.equal(dueFollowUps[0].nextFollowUpAt, '2026-07-08T19:00:00.000Z');
 
 const warmLeads = buildOpportunityList(records, { savedView: 'warm_leads', now });
 assert.ok(warmLeads.some((item) => item.id === overdueUpworkLead.id));
@@ -104,6 +120,8 @@ const rejected = buildOpportunityList(records, {
 });
 assert.equal(rejected.length, 1);
 assert.equal(rejected[0].id, lowBudgetLead.id);
+assert.equal(rejected[0].outcomeStatus, 'rejected');
+assert.equal(rejected[0].outcomeReason, 'Budget and timeline are not a fit.');
 
 const ragRecord = repository.getLead(overdueUpworkLead.id);
 assert.ok(ragRecord, 'RAG lead should be saved.');
@@ -114,9 +132,11 @@ assert.equal(detail.prospectStage, 'warm_lead');
 assert.ok(detail.portfolioMatches.length > 0);
 assert.ok(detail.drafts.length > 0);
 assert.equal(detail.notes.length, 1);
+assert.equal(detail.followUpNote, 'Follow up before end of day.');
 assert.ok(detail.allowedStatusActions.includes('approved_to_contact'));
 assert.ok(detail.allowedStatusActions.includes('needs_research'));
 assert.equal(isOverdue(ragRecord, now), true);
+assert.equal(isFollowUpOverdue(ragRecord, now), true);
 
 const summary = buildDashboardSummary(records, now);
 assert.equal(summary.total, 4);
@@ -124,6 +144,8 @@ assert.equal(summary.hot, 2);
 assert.equal(summary.qualified, 1);
 assert.equal(summary.rejected, 1);
 assert.equal(summary.overdue, 1);
+assert.equal(summary.dueFollowUps, 1);
+assert.equal(summary.outcomesRecorded, 1);
 assert.equal(summary.bySource.upwork, 2);
 assert.equal(summary.bySource.linkedin, 1);
 assert.equal(summary.bySource.sales_navigator, 1);
