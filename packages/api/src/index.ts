@@ -8,7 +8,7 @@ import {
   type LeadDetailView,
   type OpportunityListItem,
 } from '@sales-automation/dashboard';
-import type { PipelineStatus } from '@sales-automation/shared';
+import type { LeadOutcomeStatus, PipelineStatus } from '@sales-automation/shared';
 import type { LeadRepository, StoredLeadRecord } from '@sales-automation/storage';
 
 export interface ApiActorContext {
@@ -31,6 +31,19 @@ export interface AddLeadNoteInput extends ApiActorContext {
   note: string;
 }
 
+export interface ScheduleLeadFollowUpInput extends ApiActorContext {
+  leadId: string;
+  nextFollowUpAt: string;
+  followUpNote?: string;
+}
+
+export interface RecordLeadOutcomeInput extends ApiActorContext {
+  leadId: string;
+  outcomeStatus: LeadOutcomeStatus;
+  outcomeReason: string;
+  outcomeRecordedAt?: string;
+}
+
 export interface MarkAlertSentInput extends ApiActorContext {
   leadId: string;
   dedupeKey?: string;
@@ -43,6 +56,8 @@ export interface SalesAutomationDashboardApi {
   updateLeadStatus(input: UpdateLeadStatusInput): LeadDetailView;
   assignLeadOwner(input: AssignLeadOwnerInput): LeadDetailView;
   addLeadNote(input: AddLeadNoteInput): LeadDetailView;
+  scheduleLeadFollowUp(input: ScheduleLeadFollowUpInput): LeadDetailView;
+  recordLeadOutcome(input: RecordLeadOutcomeInput): LeadDetailView;
   markAlertSent(input: MarkAlertSentInput): LeadDetailView;
 }
 
@@ -93,6 +108,41 @@ export class SalesAutomationDashboardController implements SalesAutomationDashbo
     }
 
     const updated = this.repository.addNote(input.leadId, note, input.actor);
+    return buildLeadDetail(updated);
+  }
+
+  scheduleLeadFollowUp(input: ScheduleLeadFollowUpInput): LeadDetailView {
+    const nextFollowUpAt = input.nextFollowUpAt.trim();
+    if (!nextFollowUpAt || Number.isNaN(Date.parse(nextFollowUpAt))) {
+      throw new Error('Valid nextFollowUpAt is required.');
+    }
+
+    const updated = this.repository.scheduleFollowUp(
+      input.leadId,
+      {
+        nextFollowUpAt,
+        followUpNote: input.followUpNote?.trim() || undefined,
+      },
+      input.actor,
+    );
+    return buildLeadDetail(updated);
+  }
+
+  recordLeadOutcome(input: RecordLeadOutcomeInput): LeadDetailView {
+    const outcomeReason = input.outcomeReason.trim();
+    if (!outcomeReason) {
+      throw new Error('Outcome reason is required.');
+    }
+
+    const updated = this.repository.recordOutcome(
+      input.leadId,
+      {
+        outcomeStatus: input.outcomeStatus,
+        outcomeReason,
+        outcomeRecordedAt: input.outcomeRecordedAt,
+      },
+      input.actor,
+    );
     return buildLeadDetail(updated);
   }
 
