@@ -4,7 +4,7 @@
 
 Build the first useful internal loop:
 
-Safe input source → normalized lead object → dedupe → score → urgency/status → profile recommendation → portfolio match → recommended human action → human-approved draft → hot alert plan → enrichment policy/verification → durable local storage → analytics/learning report → dashboard-ready lead review model → controller/API actions → route-level access control → lightweight rendered dashboard shell.
+Safe input source → normalized lead object → dedupe → score → urgency/status → profile recommendation → portfolio match → recommended human action → human-approved draft → hot alert plan → safe alert delivery decision → enrichment policy/verification → durable local storage → analytics/learning report → dashboard-ready lead review model → controller/API actions → route-level access control → lightweight rendered dashboard shell.
 
 This sprint should prove that Codistan can evaluate an opportunity quickly and consistently without relying on fixed daily limits.
 
@@ -45,6 +45,7 @@ This sprint should prove that Codistan can evaluate an opportunity quickly and c
 15. Analytics and scoring calibration foundation. ✅
 16. Partner and solution-led prospect scoring foundation. ✅
 17. Enrichment policy, cost-control, and human-verification foundation. ✅
+18. Safe alert delivery adapter foundation. ✅
 
 ### P2 — Later
 
@@ -55,7 +56,7 @@ This sprint should prove that Codistan can evaluate an opportunity quickly and c
 5. Sales Navigator alert parser hardening.
 6. Real enrichment provider adapters/imports.
 7. Admin scoring-weight adjustment UI/API.
-8. Production alert delivery adapters.
+8. Real external alert provider configuration.
 
 ---
 
@@ -249,13 +250,19 @@ Human-approved draft generator:
 
 ### `@sales-automation/alerts`
 
-Hot alert planner:
+Hot alert planner and safe delivery foundation:
 
 - Determines alert eligibility.
 - Supports dashboard/log/email/slack/WhatsApp channel planning.
-- Defaults safely to log/dashboard when channels are not configured.
-- Includes dedupe keys.
-- Does not send externally.
+- Defaults safely to log/dashboard channels when channels are not configured.
+- Includes alert dedupe keys.
+- Provides safe delivery adapter interface.
+- Dry-runs delivery by default.
+- Suppresses duplicate alerts before delivery using prior dedupe keys.
+- Provides safe log and dashboard adapters.
+- Provides email, Slack, and WhatsApp placeholder adapters that skip instead of sending when not configured.
+- Converts adapter exceptions into failed delivery records.
+- Does not contact prospects or clients.
 
 ### `@sales-automation/storage`
 
@@ -327,7 +334,7 @@ Lightweight rendered dashboard and HTTP adapter:
 2. Add Gmail ingestion adapter later.
 3. Add Sales Navigator / LinkedIn alert adapter hardening.
 4. Add enrichment UI/API and real provider adapters/imports.
-5. Add production alert delivery adapters.
+5. Add real external alert provider configuration.
 6. Add production database-backed repository.
 7. Add interactive frontend forms/components.
 8. Add admin scoring-weight adjustment UI/API.
@@ -348,6 +355,7 @@ By the end of Sprint 1, a user should be able to input a lead/job and get:
 - Matching portfolio proof.
 - Human-approved draft output.
 - Alert eligibility and alert plan.
+- Safe alert delivery decision with dedupe and dry-run default.
 - Safe ingestion with dedupe and immediate evaluation.
 - Partner and solution-led prospect scoring and lead normalization.
 - Enrichment policy/cost-control decision and human-verification evidence model.
@@ -369,5 +377,6 @@ By the end of Sprint 1, a user should be able to input a lead/job and get:
 - No fake-account workflow.
 - No paid enrichment unless explicitly enabled and within score/status/budget policy.
 - No outreach-ready contact data without human verification.
+- No external alert delivery unless a real provider adapter is explicitly configured.
 - Human approval before any external communication.
 - Every recommendation should include reasoning.
