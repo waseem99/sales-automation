@@ -4,7 +4,7 @@
 
 Build the first useful internal loop:
 
-Safe input source → normalized lead object → dedupe → score → urgency/status → profile recommendation → portfolio match → recommended human action → human-approved draft → hot alert plan → safe alert delivery decision → enrichment policy/verification → durable local storage → analytics/learning report → dashboard-ready lead review model → controller/API actions → route-level access control → lightweight rendered dashboard shell.
+Safe input source → normalized lead object → dedupe → score → urgency/status → profile recommendation → portfolio match → recommended human action → human-approved draft → hot alert plan → safe alert delivery decision → enrichment policy/verification → durable local storage → analytics/learning report → dashboard-ready lead review model → controller/API actions → session-aware route-level access control → lightweight rendered dashboard shell.
 
 This sprint should prove that Codistan can evaluate an opportunity quickly and consistently without relying on fixed daily limits.
 
@@ -48,12 +48,13 @@ This sprint should prove that Codistan can evaluate an opportunity quickly and c
 18. Safe alert delivery adapter foundation. ✅
 19. Read-only Gmail/email source adapter foundation. ✅
 20. Hardened LinkedIn/Sales Navigator parser with extraction, confidence, and skip reasons. ✅
+21. Auth/session adapter foundation with anonymous read-only default. ✅
 
 ### P2 — Later
 
 1. Full interactive dashboard UI components/forms.
 2. Production database-backed repository.
-3. Real authentication/session integration.
+3. Real identity provider/session middleware integration.
 4. Real Gmail API runtime wiring.
 5. Real enrichment provider adapters/imports.
 6. Admin scoring-weight adjustment UI/API.
@@ -118,6 +119,19 @@ Role and permission foundation:
 - Permission checks for viewing opportunities, ingesting leads, updating status, assigning owner, adding notes, marking alerts, viewing private portfolio, managing settings, managing compliance rules, and managing users.
 - Shared helpers for checking and asserting permissions.
 - Route-level enforcement in the web adapter.
+
+### `@sales-automation/auth`
+
+Auth/session foundation:
+
+- Defines authenticated user model with ID, email/name, role, and active flag.
+- Defines session adapter interface for future real auth providers.
+- Provides `StaticSessionAdapter` for tests and local/dev use.
+- Resolves bearer tokens and `x-sales-automation-session` headers.
+- Defaults anonymous/no-session access to `read_only`.
+- Falls inactive users back to the safe default role.
+- Formats actor identity for audit usage.
+- Powers `/api/session` and session-aware web route permissions.
 
 ### `@sales-automation/scoring`
 
@@ -344,8 +358,10 @@ Lightweight rendered dashboard and HTTP adapter:
 
 - Renders a static HTML dashboard preview without heavy UI dependencies.
 - Shows summary metrics, lead list, selected lead detail, allowed status actions, and notes.
-- Exposes lightweight HTTP routes for health, dashboard, summary, opportunity list/detail, safe ingestion, status updates, owner assignment, notes, and alert dedupe.
+- Exposes lightweight HTTP routes for health, session, dashboard, summary, opportunity list/detail, safe ingestion, status updates, owner assignment, notes, and alert dedupe.
 - Uses `LocalJsonLeadRepository` in dev mode.
+- Resolves route actor/role from `@sales-automation/auth` when a session adapter is configured.
+- Defaults anonymous/no-session access to read-only.
 - Enforces route-level permissions through `@sales-automation/access-control`.
 - Escapes dynamic content to avoid raw HTML/script injection in rendered lead data.
 
@@ -353,7 +369,7 @@ Lightweight rendered dashboard and HTTP adapter:
 
 ## Sprint 1 Remaining Implementation Order
 
-1. Add real authentication/session integration.
+1. Add real identity provider/session middleware integration.
 2. Add real Gmail API runtime wiring.
 3. Add enrichment UI/API and real provider adapters/imports.
 4. Add real external alert provider configuration.
@@ -383,6 +399,7 @@ By the end of Sprint 1, a user should be able to input a lead/job and get:
 - Safe ingestion with dedupe and immediate evaluation.
 - Partner and solution-led prospect scoring and lead normalization.
 - Enrichment policy/cost-control decision and human-verification evidence model.
+- Session-aware route permissions with anonymous read-only fallback.
 - Cadence-aware worker runner for 30-minute source checks.
 - Durable local storage for evaluated leads.
 - Analytics and calibration reporting foundation.
@@ -399,6 +416,8 @@ By the end of Sprint 1, a user should be able to input a lead/job and get:
 - No auto-bidding.
 - No auto-DM.
 - No fake-account workflow.
+- Anonymous/no-session access must default to read-only.
+- Inactive users must fall back to safe default permissions.
 - Email source adapters must remain read-only unless explicitly reviewed and changed later.
 - No email sending, archiving, deleting, labeling, or modifying from ingestion adapters.
 - Low-confidence LinkedIn/Sales Navigator signals must remain human-reviewed.
