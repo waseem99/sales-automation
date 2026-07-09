@@ -1,0 +1,6 @@
+{
+  "version": 2,
+  "installCommand": "npm install --global pnpm@10.14.0 && pnpm install --no-frozen-lockfile",
+  "buildCommand": "pnpm build && mkdir -p public && printf 'Codistan Lead Desk production deployment branch builds the real Node app. Use Docker/Render deployment from docs/PRODUCTION_DEPLOYMENT.md.' > public/index.html",
+  "outputDirectory": "public"
+}
