@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import { createSalesAutomationDashboardApi } from '@sales-automation/api';
+import { StaticSessionAdapter } from '@sales-automation/auth';
 import { evaluateLead } from '@sales-automation/evaluator';
 import { sampleLeads, samplePortfolioItems } from '@sales-automation/fixtures';
 import type { Lead } from '@sales-automation/shared';
@@ -56,6 +57,27 @@ const context = {
   now: () => generatedAt,
 };
 
+const sessionAdapter = new StaticSessionAdapter({
+  'founder-token': {
+    id: 'user-founder',
+    email: 'founder@codistan.org',
+    role: 'founder',
+    isActive: true,
+  },
+  'readonly-token': {
+    id: 'user-readonly',
+    email: 'readonly@codistan.org',
+    role: 'read_only',
+    isActive: true,
+  },
+  'inactive-token': {
+    id: 'user-inactive',
+    email: 'inactive@codistan.org',
+    role: 'admin',
+    isActive: false,
+  },
+});
+
 const health = handleSalesAutomationRequest({ method: 'GET', path: '/health' }, context);
 assert.equal(health.status, 200);
 assert.ok(health.body.includes('sales-automation-web'));
@@ -64,6 +86,42 @@ const dashboardResponse = handleSalesAutomationRequest({ method: 'GET', path: '/
 assert.equal(dashboardResponse.status, 200);
 assert.equal(dashboardResponse.headers['content-type'], 'text/html; charset=utf-8');
 assert.ok(dashboardResponse.body.includes('Codistan Lead Desk'));
+
+const anonymousSession = handleSalesAutomationRequest(
+  { method: 'GET', path: '/api/session' },
+  { repository, portfolioItems: samplePortfolioItems, now: () => generatedAt },
+);
+assert.equal(anonymousSession.status, 200);
+assert.equal(JSON.parse(anonymousSession.body).authenticated, false);
+assert.equal(JSON.parse(anonymousSession.body).role, 'read_only');
+
+const founderSession = handleSalesAutomationRequest(
+  { method: 'GET', path: '/api/session', headers: { authorization: 'Bearer founder-token' } },
+  { repository, portfolioItems: samplePortfolioItems, sessionAdapter, now: () => generatedAt },
+);
+assert.equal(founderSession.status, 200);
+assert.equal(JSON.parse(founderSession.body).authenticated, true);
+assert.equal(JSON.parse(founderSession.body).role, 'founder');
+assert.equal(JSON.parse(founderSession.body).actor, 'founder@codistan.org');
+
+const anonymousDashboard = handleSalesAutomationRequest(
+  { method: 'GET', path: '/' },
+  { repository, portfolioItems: samplePortfolioItems, now: () => generatedAt },
+);
+assert.equal(anonymousDashboard.status, 200);
+
+const anonymousIngestDenied = handleSalesAutomationRequest(
+  {
+    method: 'POST',
+    path: '/api/ingest/upwork-email',
+    body: {
+      receivedAt: generatedAt,
+      emailBody: `Job: Anonymous should not ingest\nhttps://www.upwork.com/jobs/anonymous-denied\nAI automation work. Budget $5,000. Posted 15 minutes ago`,
+    },
+  },
+  { repository, portfolioItems: samplePortfolioItems, now: () => generatedAt },
+);
+assert.equal(anonymousIngestDenied.status, 403);
 
 const summaryResponse = handleSalesAutomationRequest({ method: 'GET', path: '/api/summary' }, context);
 assert.equal(summaryResponse.status, 200);
@@ -117,6 +175,49 @@ const upworkIngestResponse = handleSalesAutomationRequest(
 );
 assert.equal(upworkIngestResponse.status, 201);
 assert.equal(JSON.parse(upworkIngestResponse.body).totalCaptured, 1);
+
+const sessionIngestResponse = handleSalesAutomationRequest(
+  {
+    method: 'POST',
+    path: '/api/ingest/upwork-email',
+    headers: { authorization: 'Bearer founder-token' },
+    body: {
+      receivedAt: generatedAt,
+      emailBody: `Job: Founder session can ingest\nhttps://www.upwork.com/jobs/founder-session-ingest\nAI automation work. Budget $5,000. Posted 15 minutes ago`,
+    },
+  },
+  { repository, portfolioItems: samplePortfolioItems, sessionAdapter, now: () => generatedAt },
+);
+assert.equal(sessionIngestResponse.status, 201);
+assert.equal(JSON.parse(sessionIngestResponse.body).totalCaptured, 1);
+
+const readOnlySessionIngestResponse = handleSalesAutomationRequest(
+  {
+    method: 'POST',
+    path: '/api/ingest/upwork-email',
+    headers: { authorization: 'Bearer readonly-token' },
+    body: {
+      receivedAt: generatedAt,
+      emailBody: `Job: Read-only session should not ingest\nhttps://www.upwork.com/jobs/readonly-session-denied\nAI automation work. Budget $5,000. Posted 15 minutes ago`,
+    },
+  },
+  { repository, portfolioItems: samplePortfolioItems, sessionAdapter, now: () => generatedAt },
+);
+assert.equal(readOnlySessionIngestResponse.status, 403);
+
+const inactiveSessionIngestResponse = handleSalesAutomationRequest(
+  {
+    method: 'POST',
+    path: '/api/ingest/upwork-email',
+    headers: { authorization: 'Bearer inactive-token' },
+    body: {
+      receivedAt: generatedAt,
+      emailBody: `Job: Inactive session should not ingest\nhttps://www.upwork.com/jobs/inactive-session-denied\nAI automation work. Budget $5,000. Posted 15 minutes ago`,
+    },
+  },
+  { repository, portfolioItems: samplePortfolioItems, sessionAdapter, now: () => generatedAt },
+);
+assert.equal(inactiveSessionIngestResponse.status, 403);
 
 const readOnlyIngestResponse = handleSalesAutomationRequest(
   {
@@ -184,4 +285,4 @@ assert.equal(badRequest.status, 400);
 const notFound = handleSalesAutomationRequest({ method: 'GET', path: '/api/missing' }, context);
 assert.equal(notFound.status, 404);
 
-console.log('Web dashboard renderer and route binding tests passed.');
+console.log('Web dashboard renderer, route binding, and session resolution tests passed.');
