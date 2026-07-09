@@ -1,0 +1,28 @@
+{
+  "name": "@sales-automation/cli",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "bin": {
+    "sales-eval": "dist/index.js"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "evaluate:sample": "tsx src/index.ts sample",
+    "evaluate:json": "tsx src/index.ts json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "lint": "tsc -p tsconfig.json --noEmit",
+    "test": "tsx src/index.test.ts"
+  },
+  "dependencies": {
+    "@sales-automation/evaluator": "workspace:*",
+    "@sales-automation/fixtures": "workspace:*",
+    "@sales-automation/shared": "workspace:*"
+  },
+  "devDependencies": {
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.2"
+  }
+}

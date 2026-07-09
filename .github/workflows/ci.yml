@@ -1,0 +1,57 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+      - sprint-1-foundation
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+        with:
+          show-progress: false
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 9.15.0
+
+      - name: Show runtime versions
+        run: |
+          node --version
+          pnpm --version
+
+      - name: Install dependencies
+        run: pnpm install --no-frozen-lockfile --silent
+
+      - name: Typecheck
+        run: pnpm typecheck
+
+      - name: Test
+        id: test
+        continue-on-error: true
+        run: pnpm test > test.log 2>&1
+
+      - name: Print test log tail
+        if: always()
+        run: tail -n 120 test.log || true
+
+      - name: Upload test log
+        if: always()
+        uses: actions/upload-artifact@v5
+        with:
+          name: test-log
+          path: test.log
+
+      - name: Fail if tests failed
+        if: steps.test.outcome != 'success'
+        run: exit 1
+
+      - name: Build
+        run: pnpm build

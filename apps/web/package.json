@@ -1,0 +1,30 @@
+{
+  "name": "@sales-automation/web",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "dev": "tsx src/dev.ts",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "lint": "tsc -p tsconfig.json --noEmit",
+    "test": "tsx src/index.test.ts"
+  },
+  "dependencies": {
+    "@sales-automation/access-control": "workspace:*",
+    "@sales-automation/api": "workspace:*",
+    "@sales-automation/auth": "workspace:*",
+    "@sales-automation/dashboard": "workspace:*",
+    "@sales-automation/ingestion": "workspace:*",
+    "@sales-automation/shared": "workspace:*",
+    "@sales-automation/storage": "workspace:*"
+  },
+  "devDependencies": {
+    "@sales-automation/evaluator": "workspace:*",
+    "@sales-automation/fixtures": "workspace:*",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.2"
+  }
+}
