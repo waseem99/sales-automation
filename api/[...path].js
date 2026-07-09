@@ -1,5 +1,4 @@
 const PREVIEW_PATH = '/api/preview';
-const API_BASE = '/api';
 
 const sampleLeads = [
   {
@@ -61,15 +60,19 @@ module.exports = async function handler(req, res) {
       const body = await readBody(req);
       const lead = createLead(body);
       leads = [lead, ...leads.filter((item) => item.id !== lead.id)];
-      return sendJson(res, 200, { ok: true, lead });
+      if (wantsJson(req)) return sendJson(res, 200, { ok: true, lead });
+      return redirect(res, `${PREVIEW_PATH}?leadId=${encodeURIComponent(lead.id)}&notice=sample-added`);
     }
 
     if (req.method === 'POST' && path.endsWith('/dev/reset-local-data')) {
       leads = sampleLeads.map(cloneLead);
-      return sendJson(res, 200, {
-        ok: true,
-        message: 'Preview demo data reset. No external account, Gmail, LinkedIn, Upwork, or CRM data was touched.',
-      });
+      if (wantsJson(req)) {
+        return sendJson(res, 200, {
+          ok: true,
+          message: 'Preview demo data reset. No external account, Gmail, LinkedIn, Upwork, or CRM data was touched.',
+        });
+      }
+      return redirect(res, `${PREVIEW_PATH}?notice=reset`);
     }
 
     const leadUpdateMatch = path.match(/\/leads\/([^/]+)\/(status|owner|notes)$/);
@@ -77,11 +80,15 @@ module.exports = async function handler(req, res) {
       const [, id, field] = leadUpdateMatch;
       const body = await readBody(req);
       const lead = leads.find((item) => item.id === id);
-      if (!lead) return sendJson(res, 404, { ok: false, message: 'Lead not found' });
+      if (!lead) {
+        if (wantsJson(req)) return sendJson(res, 404, { ok: false, message: 'Lead not found' });
+        return redirect(res, `${PREVIEW_PATH}?notice=lead-not-found`);
+      }
       if (field === 'status') lead.pipelineStatus = String(body.pipelineStatus || lead.pipelineStatus);
       if (field === 'owner') lead.owner = String(body.owner || lead.owner || 'Unassigned');
       if (field === 'notes') lead.notes = String(body.notes || '');
-      return sendJson(res, 200, { ok: true, lead });
+      if (wantsJson(req)) return sendJson(res, 200, { ok: true, lead });
+      return redirect(res, `${PREVIEW_PATH}?leadId=${encodeURIComponent(id)}&notice=${encodeURIComponent(field + '-saved')}`);
     }
 
     return sendHtml(res, renderDashboard(req));
@@ -98,6 +105,7 @@ function renderDashboard(req) {
   const url = new URL(req.url || PREVIEW_PATH, 'https://preview.codistan.local');
   const query = (url.searchParams.get('query') || '').toLowerCase();
   const status = url.searchParams.get('status') || '';
+  const notice = url.searchParams.get('notice') || '';
   const selectedId = url.searchParams.get('leadId') || leads[0]?.id;
   const filtered = leads.filter((lead) => {
     const matchesQuery = !query || `${lead.title} ${lead.company} ${lead.source}`.toLowerCase().includes(query);
@@ -122,17 +130,16 @@ function renderDashboard(req) {
     section { padding: 18px; }
     h1, h2, h3 { margin-top: 0; }
     .toolbar { display: grid; gap: 12px; margin-bottom: 16px; }
-    .toolbar form { display: grid; grid-template-columns: 1fr 150px auto; gap: 10px; }
+    .toolbar form, .inline-form { display: grid; gap: 10px; }
+    .filter-form { display: grid; grid-template-columns: 1fr 150px auto; gap: 10px; }
     input, select, textarea { border: 1px solid #d1d5db; border-radius: 10px; padding: 10px 12px; font: inherit; }
     textarea { min-height: 92px; width: 100%; box-sizing: border-box; }
+    .draft-box { min-height: 180px; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; white-space: pre-wrap; }
     button, .button { border: 0; border-radius: 999px; padding: 10px 14px; font-weight: 700; cursor: pointer; background: #2563eb; color: white; text-decoration: none; display: inline-flex; align-items: center; justify-content: center; gap: 8px; }
     button.secondary, .button.secondary { background: #e0f2fe; color: #075985; }
     button.danger { background: #fee2e2; color: #991b1b; }
-    button:disabled { cursor: wait; opacity: .7; }
     .safe { background: #ecfdf5; border: 1px solid #a7f3d0; color: #047857; padding: 12px; border-radius: 14px; }
-    .notice { display: none; border-radius: 12px; padding: 10px 12px; margin: 10px 0; font-size: 14px; }
-    .notice.error { display: block; background: #fee2e2; color: #991b1b; border: 1px solid #fecaca; }
-    .notice.success { display: block; background: #ecfdf5; color: #047857; border: 1px solid #a7f3d0; }
+    .notice { border-radius: 12px; padding: 10px 12px; margin: 10px 0; font-size: 14px; background: #ecfdf5; color: #047857; border: 1px solid #a7f3d0; }
     .card { padding: 14px; margin-bottom: 12px; }
     .card.active { border-color: #2563eb; box-shadow: 0 0 0 3px rgba(37, 99, 235, .12); }
     .meta { color: #64748b; font-size: 13px; line-height: 1.5; }
@@ -141,7 +148,7 @@ function renderDashboard(req) {
     .panel { border: 1px solid #e5e7eb; border-radius: 14px; padding: 14px; margin: 12px 0; background: #fbfdff; }
     pre { white-space: pre-wrap; background: #0f172a; color: #e2e8f0; border-radius: 14px; padding: 14px; overflow: auto; }
     .redflag { background: #fff7ed; color: #9a3412; border: 1px solid #fed7aa; padding: 8px 10px; border-radius: 999px; display: inline-block; margin: 4px 4px 4px 0; font-size: 13px; }
-    @media (max-width: 900px) { main { grid-template-columns: 1fr; } .toolbar form { grid-template-columns: 1fr; } }
+    @media (max-width: 900px) { main { grid-template-columns: 1fr; } .filter-form { grid-template-columns: 1fr; } }
   </style>
 </head>
 <body>
@@ -152,13 +159,21 @@ function renderDashboard(req) {
 <main>
   <section>
     <div class="safe"><strong>Safe preview mode:</strong> demo-only memory data. External accounts are not touched.</div>
-    <div id="preview-notice" class="notice"></div>
+    ${notice ? `<div class="notice">${escapeHtml(prettyNotice(notice))}</div>` : ''}
     <div class="toolbar">
       <h2>Evaluate sample lead</h2>
-      <button type="button" class="secondary" onclick="evaluateSample('upwork', this)">Add Upwork sample</button>
-      <button type="button" class="secondary" onclick="evaluateSample('linkedin', this)">Add LinkedIn sample</button>
-      <button type="button" class="danger" onclick="resetData(this)">Reset preview data</button>
-      <form method="GET" action="${PREVIEW_PATH}">
+      <form method="POST" action="/api/evaluate">
+        <input type="hidden" name="kind" value="upwork" />
+        <button type="submit" class="secondary">Add Upwork sample</button>
+      </form>
+      <form method="POST" action="/api/evaluate">
+        <input type="hidden" name="kind" value="linkedin" />
+        <button type="submit" class="secondary">Add LinkedIn sample</button>
+      </form>
+      <form method="POST" action="/api/dev/reset-local-data">
+        <button type="submit" class="danger">Reset preview data</button>
+      </form>
+      <form method="GET" action="${PREVIEW_PATH}" class="filter-form">
         <input name="query" placeholder="Search title, company, source" value="${escapeHtml(url.searchParams.get('query') || '')}" />
         <select name="status">
           ${statusOption('', 'All statuses', status)}
@@ -177,93 +192,6 @@ function renderDashboard(req) {
     ${selected ? renderLeadDetail(selected) : '<h2>No lead selected</h2>'}
   </section>
 </main>
-<script>
-  const PREVIEW_PATH = '${PREVIEW_PATH}';
-  const API_BASE = '${API_BASE}';
-
-  async function evaluateSample(kind, button) {
-    try {
-      setBusy(button, true);
-      const data = await postJson(API_BASE + '/evaluate', { kind });
-      window.location.assign(PREVIEW_PATH + '?leadId=' + encodeURIComponent(data.lead.id));
-    } catch (error) {
-      showNotice(error.message || 'Could not add sample lead.', 'error');
-      setBusy(button, false);
-    }
-  }
-
-  async function resetData(button) {
-    if (!confirm('Reset demo preview data? No external system will be touched.')) return;
-    try {
-      setBusy(button, true);
-      await postJson(API_BASE + '/dev/reset-local-data');
-      window.location.assign(PREVIEW_PATH);
-    } catch (error) {
-      showNotice(error.message || 'Could not reset preview data.', 'error');
-      setBusy(button, false);
-    }
-  }
-
-  async function updateLead(id, field, button) {
-    const element = document.querySelector('[data-field="' + field + '"]');
-    const body = {};
-    body[field === 'status' ? 'pipelineStatus' : field] = element.value;
-    try {
-      setBusy(button, true);
-      await postJson(API_BASE + '/leads/' + encodeURIComponent(id) + '/' + field, body);
-      showNotice(field + ' saved. Preview data is in-memory only.', 'success');
-      setTimeout(() => window.location.assign(window.location.pathname + window.location.search), 350);
-    } catch (error) {
-      showNotice(error.message || 'Could not save ' + field + '.', 'error');
-      setBusy(button, false);
-    }
-  }
-
-  async function copyDraft() {
-    const draft = document.getElementById('draft').innerText;
-    try {
-      if (navigator.clipboard && navigator.clipboard.writeText) {
-        await navigator.clipboard.writeText(draft);
-      } else {
-        const textarea = document.createElement('textarea');
-        textarea.value = draft;
-        document.body.appendChild(textarea);
-        textarea.select();
-        document.execCommand('copy');
-        textarea.remove();
-      }
-      document.getElementById('copy-result').innerText = 'Draft copied for manual review. Nothing was sent automatically.';
-    } catch (error) {
-      document.getElementById('copy-result').innerText = 'Could not copy automatically. Please select and copy the draft manually.';
-    }
-  }
-
-  async function postJson(path, body) {
-    const response = await fetch(path, {
-      method: 'POST',
-      headers: { 'content-type': 'application/json', 'x-codistan-session': 'dev-founder-token' },
-      body: body === undefined ? undefined : JSON.stringify(body)
-    });
-    let data = {};
-    try { data = await response.json(); } catch {}
-    if (!response.ok || data.ok === false) {
-      throw new Error(data.message || 'Request failed with status ' + response.status);
-    }
-    return data;
-  }
-
-  function setBusy(button, isBusy) {
-    if (!button) return;
-    button.disabled = isBusy;
-  }
-
-  function showNotice(message, type) {
-    const notice = document.getElementById('preview-notice');
-    if (!notice) return;
-    notice.className = 'notice ' + (type || 'success');
-    notice.innerText = message;
-  }
-</script>
 </body>
 </html>`;
 }
@@ -271,6 +199,7 @@ function renderDashboard(req) {
 function renderLeadCard(lead, selectedId, url) {
   const params = new URLSearchParams(url.searchParams);
   params.set('leadId', lead.id);
+  params.delete('notice');
   return `<a class="card ${lead.id === selectedId ? 'active' : ''}" href="${PREVIEW_PATH}?${params.toString()}" style="display:block;color:inherit;text-decoration:none">
     <div class="meta">${escapeHtml(lead.source)} • ${escapeHtml(lead.pipelineStatus)} • ${escapeHtml(lead.budgetSignal)}</div>
     <h3>${escapeHtml(lead.title)}</h3>
@@ -290,22 +219,28 @@ function renderLeadDetail(lead) {
   </div>
   <div class="panel">
     <h3>Review controls</h3>
-    <label>Status</label><br>
-    <select data-field="status">
-      ${statusOption('new', 'New', lead.pipelineStatus)}
-      ${statusOption('researching', 'Researching', lead.pipelineStatus)}
-      ${statusOption('contact_ready', 'Contact ready', lead.pipelineStatus)}
-      ${statusOption('archived', 'Archived', lead.pipelineStatus)}
-    </select>
-    <button type="button" onclick="updateLead('${lead.id}', 'status', this)">Save status</button>
-    <br><br>
-    <label>Owner</label><br>
-    <input data-field="owner" value="${escapeHtml(lead.owner || '')}" />
-    <button type="button" onclick="updateLead('${lead.id}', 'owner', this)">Save owner</button>
-    <br><br>
-    <label>Notes</label><br>
-    <textarea data-field="notes">${escapeHtml(lead.notes || '')}</textarea>
-    <button type="button" onclick="updateLead('${lead.id}', 'notes', this)">Save notes</button>
+    <form method="POST" action="/api/leads/${encodeURIComponent(lead.id)}/status" class="inline-form">
+      <label>Status</label>
+      <select name="pipelineStatus">
+        ${statusOption('new', 'New', lead.pipelineStatus)}
+        ${statusOption('researching', 'Researching', lead.pipelineStatus)}
+        ${statusOption('contact_ready', 'Contact ready', lead.pipelineStatus)}
+        ${statusOption('archived', 'Archived', lead.pipelineStatus)}
+      </select>
+      <button type="submit">Save status</button>
+    </form>
+    <br>
+    <form method="POST" action="/api/leads/${encodeURIComponent(lead.id)}/owner" class="inline-form">
+      <label>Owner</label>
+      <input name="owner" value="${escapeHtml(lead.owner || '')}" />
+      <button type="submit">Save owner</button>
+    </form>
+    <br>
+    <form method="POST" action="/api/leads/${encodeURIComponent(lead.id)}/notes" class="inline-form">
+      <label>Notes</label>
+      <textarea name="notes">${escapeHtml(lead.notes || '')}</textarea>
+      <button type="submit">Save notes</button>
+    </form>
   </div>
   <div class="panel">
     <h3>Source Evidence</h3>
@@ -319,9 +254,8 @@ function renderLeadDetail(lead) {
   </div>
   <div class="panel">
     <h3>Human-approved draft</h3>
-    <pre id="draft">${escapeHtml(lead.draft)}</pre>
-    <button type="button" onclick="copyDraft()">Copy draft for manual review</button>
-    <p id="copy-result" class="meta"></p>
+    <p class="meta">Select and copy this draft manually. Nothing is sent automatically.</p>
+    <textarea class="draft-box" readonly>${escapeHtml(lead.draft)}</textarea>
   </div>`;
 }
 
@@ -343,6 +277,18 @@ function statusOption(value, label, selected) {
   return `<option value="${escapeAttr(value)}" ${value === selected ? 'selected' : ''}>${escapeHtml(label)}</option>`;
 }
 
+function prettyNotice(notice) {
+  const messages = {
+    'sample-added': 'Sample lead added and selected.',
+    reset: 'Preview demo data reset. No external account was touched.',
+    'status-saved': 'Status saved in preview memory.',
+    'owner-saved': 'Owner saved in preview memory.',
+    'notes-saved': 'Notes saved in preview memory.',
+    'lead-not-found': 'Lead not found. Showing available preview data.',
+  };
+  return messages[notice] || notice;
+}
+
 function getPath(req) {
   return new URL(req.url || PREVIEW_PATH, 'https://preview.codistan.local').pathname;
 }
@@ -354,6 +300,16 @@ async function readBody(req) {
   const raw = Buffer.concat(chunks).toString('utf8').trim();
   if (!raw) return {};
   try { return JSON.parse(raw); } catch { return Object.fromEntries(new URLSearchParams(raw)); }
+}
+
+function wantsJson(req) {
+  return String(req.headers?.accept || '').includes('application/json') || String(req.headers?.['content-type'] || '').includes('application/json');
+}
+
+function redirect(res, location) {
+  res.statusCode = 303;
+  res.setHeader('location', location);
+  res.end(`Redirecting to ${location}`);
 }
 
 function sendJson(res, status, body) {
