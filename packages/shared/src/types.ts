@@ -60,6 +60,8 @@ export type PipelineStatus =
   | 'rejected'
   | 'archived';
 
+export type LeadOutcomeStatus = 'won' | 'lost' | 'rejected' | 'nurture' | 'no_response' | 'not_fit' | 'duplicate';
+
 export type CodistanProfile =
   | 'us_ai_fullstack_profile'
   | 'waseem_ai_founder_profile'
@@ -123,6 +125,11 @@ export interface Lead {
   recommendedNextAction?: string;
   draftMessage?: string;
   owner?: string;
+  nextFollowUpAt?: string;
+  followUpNote?: string;
+  outcomeStatus?: LeadOutcomeStatus;
+  outcomeReason?: string;
+  outcomeRecordedAt?: string;
   pipelineStatus: PipelineStatus;
   createdAt: string;
   updatedAt: string;

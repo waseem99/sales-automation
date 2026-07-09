@@ -1,7 +1,7 @@
 import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
 import { dirname } from 'node:path';
 import type { LeadEvaluation } from '@sales-automation/evaluator';
-import type { Lead, PipelineStatus } from '@sales-automation/shared';
+import type { Lead, LeadOutcomeStatus, PipelineStatus } from '@sales-automation/shared';
 
 export type AuditAction =
   | 'lead_upserted'
@@ -9,6 +9,8 @@ export type AuditAction =
   | 'status_changed'
   | 'owner_assigned'
   | 'note_added'
+  | 'follow_up_scheduled'
+  | 'outcome_recorded'
   | 'alert_marked_sent';
 
 export interface AuditEntry {
@@ -29,12 +31,25 @@ export interface StoredLeadRecord {
   auditLog: AuditEntry[];
 }
 
+export interface ScheduleFollowUpInput {
+  nextFollowUpAt: string;
+  followUpNote?: string;
+}
+
+export interface RecordOutcomeInput {
+  outcomeStatus: LeadOutcomeStatus;
+  outcomeReason: string;
+  outcomeRecordedAt?: string;
+}
+
 export interface LeadRepository {
   upsertLead(lead: Lead, actor?: string): StoredLeadRecord;
   saveEvaluation(evaluation: LeadEvaluation, actor?: string): StoredLeadRecord;
   updateStatus(leadId: string, status: PipelineStatus, actor?: string): StoredLeadRecord;
   assignOwner(leadId: string, owner: string, actor?: string): StoredLeadRecord;
   addNote(leadId: string, note: string, actor?: string): StoredLeadRecord;
+  scheduleFollowUp(leadId: string, input: ScheduleFollowUpInput, actor?: string): StoredLeadRecord;
+  recordOutcome(leadId: string, input: RecordOutcomeInput, actor?: string): StoredLeadRecord;
   markAlertSent(leadId: string, dedupeKey: string, actor?: string): StoredLeadRecord;
   getLead(leadId: string): StoredLeadRecord | undefined;
   listLeads(): StoredLeadRecord[];
@@ -122,6 +137,40 @@ export class InMemoryLeadRepository implements LeadRepository {
     const record = this.requireRecord(leadId);
     record.notes.push(note);
     this.addAudit(record, 'note_added', actor, 'Note added.', { note });
+    this.afterMutation();
+    return record;
+  }
+
+  scheduleFollowUp(leadId: string, input: ScheduleFollowUpInput, actor = 'system'): StoredLeadRecord {
+    const record = this.requireRecord(leadId);
+    record.lead = {
+      ...record.lead,
+      nextFollowUpAt: input.nextFollowUpAt,
+      followUpNote: input.followUpNote,
+      updatedAt: new Date().toISOString(),
+    };
+    this.addAudit(record, 'follow_up_scheduled', actor, `Follow-up scheduled for ${input.nextFollowUpAt}.`, {
+      nextFollowUpAt: input.nextFollowUpAt,
+      followUpNote: input.followUpNote,
+    });
+    this.afterMutation();
+    return record;
+  }
+
+  recordOutcome(leadId: string, input: RecordOutcomeInput, actor = 'system'): StoredLeadRecord {
+    const record = this.requireRecord(leadId);
+    record.lead = {
+      ...record.lead,
+      outcomeStatus: input.outcomeStatus,
+      outcomeReason: input.outcomeReason,
+      outcomeRecordedAt: input.outcomeRecordedAt ?? new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    };
+    this.addAudit(record, 'outcome_recorded', actor, `Outcome recorded as ${input.outcomeStatus}.`, {
+      outcomeStatus: input.outcomeStatus,
+      outcomeReason: input.outcomeReason,
+      outcomeRecordedAt: input.outcomeRecordedAt,
+    });
     this.afterMutation();
     return record;
   }

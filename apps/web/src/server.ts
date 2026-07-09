@@ -12,6 +12,7 @@ import {
 } from '@sales-automation/ingestion';
 import type {
   Lead,
+  LeadOutcomeStatus,
   LeadSource,
   LeadType,
   PipelineStatus,
@@ -192,7 +193,7 @@ export function handleSalesAutomationRequest(
       });
     }
 
-    const statusActionMatch = pathname.match(/^\/api\/opportunities\/([^/]+)\/(status|owner|notes|alert-sent)$/);
+    const statusActionMatch = pathname.match(/^\/api\/opportunities\/([^/]+)\/(status|owner|notes|follow-up|outcome|alert-sent)$/);
     if (method === 'POST' && statusActionMatch) {
       const leadId = decodeURIComponent(statusActionMatch[1]);
       const action = statusActionMatch[2];
@@ -212,6 +213,27 @@ export function handleSalesAutomationRequest(
       if (action === 'notes') {
         assertPermission(role, 'add_notes');
         return jsonResponse(api.addLeadNote({ leadId, note: requireString(body.note, 'note'), actor }));
+      }
+
+      if (action === 'follow-up') {
+        assertPermission(role, 'add_notes');
+        return jsonResponse(api.scheduleLeadFollowUp({
+          leadId,
+          nextFollowUpAt: requireString(body.nextFollowUpAt, 'nextFollowUpAt'),
+          followUpNote: optionalString(body.followUpNote),
+          actor,
+        }));
+      }
+
+      if (action === 'outcome') {
+        assertPermission(role, 'update_pipeline_status');
+        return jsonResponse(api.recordLeadOutcome({
+          leadId,
+          outcomeStatus: requireString(body.outcomeStatus, 'outcomeStatus') as LeadOutcomeStatus,
+          outcomeReason: requireString(body.outcomeReason, 'outcomeReason'),
+          outcomeRecordedAt: optionalString(body.outcomeRecordedAt) ?? now,
+          actor,
+        }));
       }
 
       if (action === 'alert-sent') {
@@ -283,6 +305,7 @@ function buildListOptions(url: URL, now: string) {
       capturedTo: optionalQuery(url, 'capturedTo'),
       alertEligible: optionalBoolean(url, 'alertEligible'),
       overdueOnly: optionalBoolean(url, 'overdueOnly'),
+      dueFollowUpOnly: optionalBoolean(url, 'dueFollowUpOnly'),
     },
   };
 }

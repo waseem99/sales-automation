@@ -1,5 +1,6 @@
 import type {
   CodistanProfile,
+  LeadOutcomeStatus,
   LeadSource,
   LeadType,
   PipelineStatus,
@@ -16,6 +17,7 @@ export type DashboardSavedViewKey =
   | 'warm_leads'
   | 'cold_prospects'
   | 'contact_ready'
+  | 'due_follow_ups'
   | 'hot_upwork_now'
   | 'hot_linkedin_warm_posts'
   | 'ai_automation_leads'
@@ -53,6 +55,7 @@ export interface DashboardFilters {
   hasRedFlags?: boolean;
   alertEligible?: boolean;
   overdueOnly?: boolean;
+  dueFollowUpOnly?: boolean;
 }
 
 export interface DashboardListOptions {
@@ -83,11 +86,15 @@ export interface OpportunityListItem {
   redFlagCount: number;
   alertEligible: boolean;
   overdue: boolean;
+  followUpOverdue: boolean;
   owner?: string;
   freshnessMinutes?: number;
   capturedAt: string;
   updatedAt: string;
   sourceUrl?: string;
+  nextFollowUpAt?: string;
+  outcomeStatus?: LeadOutcomeStatus;
+  outcomeReason?: string;
   recommendedNextAction?: string;
 }
 
@@ -97,6 +104,8 @@ export interface LeadDetailView extends OpportunityListItem {
   timelineSignal?: string;
   rawPayload?: unknown;
   scoreBreakdown?: ScoreBreakdown;
+  followUpNote?: string;
+  outcomeRecordedAt?: string;
   redFlags: string[];
   profileReasons: string[];
   profileRisks: string[];
@@ -129,6 +138,8 @@ export interface DashboardSummary {
   urgent: number;
   alertEligible: number;
   overdue: number;
+  dueFollowUps: number;
+  outcomesRecorded: number;
   needsHumanReview: number;
   bySource: Partial<Record<LeadSource, number>>;
   byServiceCategory: Partial<Record<ServiceCategory, number>>;
@@ -141,6 +152,7 @@ export const savedViewLabels: Record<DashboardSavedViewKey, string> = {
   warm_leads: 'Warm Leads',
   cold_prospects: 'Cold Prospects',
   contact_ready: 'Contact Ready',
+  due_follow_ups: 'Due Follow-ups',
   hot_upwork_now: 'Hot Upwork Now',
   hot_linkedin_warm_posts: 'Hot LinkedIn Warm Posts',
   ai_automation_leads: 'AI Automation Leads',
@@ -176,6 +188,8 @@ export function buildLeadDetail(record: StoredLeadRecord, now = new Date().toISO
     timelineSignal: record.lead.timelineSignal,
     rawPayload: record.lead.rawPayload,
     scoreBreakdown: evaluation?.score.breakdown,
+    followUpNote: record.lead.followUpNote,
+    outcomeRecordedAt: record.lead.outcomeRecordedAt,
     redFlags: evaluation?.score.redFlags.map((flag) => `${flag.severity}: ${flag.reason}`) ?? [],
     profileReasons: evaluation?.profileRecommendation.reasons ?? [],
     profileRisks: evaluation?.profileRecommendation.risks ?? [],
@@ -212,6 +226,8 @@ export function buildDashboardSummary(records: StoredLeadRecord[], now = new Dat
     urgent: items.filter((item) => item.urgency === 'urgent').length,
     alertEligible: items.filter((item) => item.alertEligible).length,
     overdue: items.filter((item) => item.overdue).length,
+    dueFollowUps: items.filter((item) => item.followUpOverdue).length,
+    outcomesRecorded: items.filter((item) => item.outcomeStatus).length,
     needsHumanReview: items.filter((item) => item.pipelineStatus === 'needs_human_review' || item.recommendedProfile === 'needs_human_review').length,
     bySource: countBy(items, (item) => item.source),
     byServiceCategory: countBy(items, (item) => item.serviceCategory),
@@ -266,6 +282,15 @@ export function isOverdue(record: StoredLeadRecord, now = new Date().toISOString
   return nowMs - capturedAtMs > slaMinutes * 60_000;
 }
 
+export function isFollowUpOverdue(record: StoredLeadRecord, now = new Date().toISOString()): boolean {
+  if (!record.lead.nextFollowUpAt) return false;
+  if (['won', 'lost', 'rejected', 'archived'].includes(record.lead.pipelineStatus)) return false;
+  const followUpAtMs = Date.parse(record.lead.nextFollowUpAt);
+  const nowMs = Date.parse(now);
+  if (Number.isNaN(followUpAtMs) || Number.isNaN(nowMs)) return false;
+  return followUpAtMs <= nowMs;
+}
+
 function toOpportunityListItem(record: StoredLeadRecord, now: string): OpportunityListItem {
   const evaluation = record.latestEvaluation;
   return {
@@ -288,11 +313,15 @@ function toOpportunityListItem(record: StoredLeadRecord, now: string): Opportuni
     redFlagCount: evaluation?.score.redFlags.length ?? 0,
     alertEligible: evaluation?.alertPlan.shouldAlert ?? false,
     overdue: isOverdue(record, now),
+    followUpOverdue: isFollowUpOverdue(record, now),
     owner: record.lead.owner,
     freshnessMinutes: record.lead.freshnessMinutes,
     capturedAt: record.lead.capturedAt,
     updatedAt: record.lead.updatedAt,
     sourceUrl: record.lead.sourceUrl,
+    nextFollowUpAt: record.lead.nextFollowUpAt,
+    outcomeStatus: record.lead.outcomeStatus,
+    outcomeReason: record.lead.outcomeReason,
     recommendedNextAction: evaluation?.recommendedNextAction ?? record.lead.recommendedNextAction,
   };
 }
@@ -313,6 +342,9 @@ function mergeSavedViewFilters(savedView?: DashboardSavedViewKey, filters: Dashb
     },
     contact_ready: {
       pipelineStatuses: ['approved_to_contact', 'draft_ready'],
+    },
+    due_follow_ups: {
+      dueFollowUpOnly: true,
     },
     hot_upwork_now: {
       sources: ['upwork'],
@@ -371,6 +403,7 @@ function matchesFilters(item: OpportunityListItem, record: StoredLeadRecord, fil
   if (typeof filters.hasRedFlags === 'boolean' && (item.redFlagCount > 0) !== filters.hasRedFlags) return false;
   if (typeof filters.alertEligible === 'boolean' && item.alertEligible !== filters.alertEligible) return false;
   if (filters.overdueOnly && !item.overdue) return false;
+  if (filters.dueFollowUpOnly && !item.followUpOverdue) return false;
   if (filters.query && !matchesQuery(record, filters.query)) return false;
   return true;
 }
@@ -388,6 +421,10 @@ function matchesQuery(record: StoredLeadRecord, query: string): boolean {
     record.lead.budgetSignal,
     record.lead.leadType,
     record.lead.prospectStage,
+    record.lead.nextFollowUpAt,
+    record.lead.followUpNote,
+    record.lead.outcomeStatus,
+    record.lead.outcomeReason,
     record.latestEvaluation?.recommendedNextAction,
   ]
     .filter(Boolean)
@@ -433,6 +470,7 @@ function getPriorityScore(item: OpportunityListItem): number {
   if (item.urgency === 'urgent') score += 40;
   if (item.alertEligible) score += 30;
   if (item.overdue) score += 20;
+  if (item.followUpOverdue) score += 18;
   if (item.pipelineStatus === 'needs_research') score += 12;
   if (item.pipelineStatus === 'needs_human_review') score += 10;
   return score;
