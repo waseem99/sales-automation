@@ -3,7 +3,26 @@ import { StaticSessionAdapter } from '@sales-automation/auth';
 import { evaluateLead } from '@sales-automation/evaluator';
 import { sampleLeads, samplePortfolioItems } from '@sales-automation/fixtures';
 import { LocalJsonLeadRepository } from '@sales-automation/storage';
-import { handleSalesAutomationRequest } from '../apps/web/dist/server.js';
+
+type SalesAutomationRequest = {
+  method: string;
+  path: string;
+  body?: unknown;
+  headers?: Record<string, string | string[] | undefined>;
+};
+
+type SalesAutomationContext = {
+  repository: LocalJsonLeadRepository;
+  portfolioItems: typeof samplePortfolioItems;
+  sessionAdapter: StaticSessionAdapter;
+  now: () => string;
+};
+
+type SalesAutomationResponse = {
+  status: number;
+  headers: Record<string, string>;
+  body: string;
+};
 
 type VercelRequestLike = {
   method?: string;
@@ -31,10 +50,14 @@ const devSessionAdapter = new StaticSessionAdapter({
     isActive: true,
   },
 });
+let handleRequestPromise: Promise<{
+  handleSalesAutomationRequest: (request: SalesAutomationRequest, context: SalesAutomationContext) => SalesAutomationResponse;
+}> | undefined;
 
 seedPreviewData();
 
 export default async function handler(request: VercelRequestLike, response: VercelResponseLike): Promise<void> {
+  const { handleSalesAutomationRequest } = await loadWebServer();
   const result = handleSalesAutomationRequest(
     {
       method: request.method ?? 'GET',
@@ -55,6 +78,11 @@ export default async function handler(request: VercelRequestLike, response: Verc
     response.setHeader(key, value);
   }
   response.end(result.body);
+}
+
+function loadWebServer() {
+  handleRequestPromise ??= import('../apps/web/dist/server.js');
+  return handleRequestPromise;
 }
 
 function seedPreviewData(): void {
