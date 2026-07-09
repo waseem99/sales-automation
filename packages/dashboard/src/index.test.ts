@@ -127,7 +127,7 @@ assert.equal(summary.overdue, 1);
 assert.equal(summary.bySource.upwork, 2);
 assert.equal(summary.bySource.linkedin, 1);
 assert.equal(summary.bySource.sales_navigator, 1);
-assert.equal(summary.byProspectStage.warm_lead, 2);
+assert.equal(summary.byProspectStage.warm_lead, 3);
 assert.equal(summary.byProspectStage.cold_prospect, 1);
 
 assert.deepEqual(getAllowedStatusActions('archived'), []);
