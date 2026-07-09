@@ -12,6 +12,7 @@ const aiLead = parseLinkedInSignal({
 });
 
 assert.equal(aiLead.leadType, 'linkedin_warm_post');
+assert.equal(aiLead.prospectStage, 'warm_lead');
 assert.equal(aiLead.rawPayload.signalType, 'looking_for_automation_help');
 assert.equal(aiLead.serviceCategory, 'ai_automation');
 assert.equal(aiLead.freshnessMinutes, 45);
@@ -36,13 +37,20 @@ const arLead = parseLinkedInSignal({
 assert.equal(arLead.rawPayload.signalType, 'looking_for_ar_3d_team');
 assert.equal(arLead.serviceCategory, 'ar_3d_unity_unreal');
 
-const salesNavigatorText = `Sales Navigator saved search alert\nNew lead alert: Jane Ahmed — Head of Customer Experience at Example Air\nCompany: Example Air\nRole: Head of Customer Experience\nPosted 35 minutes ago\nPain: refund backlog and customer support overload. Looking for AI automation help this week.\nhttps://www.linkedin.com/in/jane-ahmed`;
+const salesNavigatorText = `Sales Navigator saved search alert
+New lead alert: Jane Ahmed — Head of Customer Experience at Example Air
+Company: Example Air
+Role: Head of Customer Experience
+Posted 35 minutes ago
+Pain: refund backlog and customer support overload. Looking for AI automation help this week.
+https://www.linkedin.com/in/jane-ahmed`;
 
 const salesNavAnalysis = analyzeLinkedInSignal({
   text: salesNavigatorText,
   capturedAt,
 });
 assert.equal(salesNavAnalysis.extraction.alertSourceType, 'sales_navigator_alert');
+assert.equal(salesNavAnalysis.extraction.isColdProspect, false);
 assert.equal(salesNavAnalysis.extraction.sourceUrl, 'https://www.linkedin.com/in/jane-ahmed');
 assert.equal(salesNavAnalysis.extraction.contactName, 'Jane Ahmed');
 assert.equal(salesNavAnalysis.extraction.companyName, 'Example Air');
@@ -57,12 +65,42 @@ const salesNavLead = parseLinkedInSignal({
 });
 assert.equal(salesNavLead.source, 'sales_navigator');
 assert.equal(salesNavLead.leadType, 'linkedin_sales_nav_alert');
+assert.equal(salesNavLead.prospectStage, 'warm_lead');
 assert.equal(salesNavLead.contactName, 'Jane Ahmed');
 assert.equal(salesNavLead.companyName, 'Example Air');
 assert.equal(salesNavLead.contactRole, 'Head of Customer Experience');
 assert.equal(salesNavLead.sourceUrl, 'https://www.linkedin.com/in/jane-ahmed');
 assert.equal(salesNavLead.pipelineStatus, 'new');
 assert.ok(salesNavLead.rawPayload.reasons.includes('Sales Navigator alert marker detected.'));
+
+const coldResearchText = `Manual research note
+Target account: Example Growth SaaS
+Target prospect: Example COO — COO at Example Growth SaaS
+Company: Example Growth SaaS
+Role: COO
+Need: funded B2B SaaS hiring support operations and discussing AI automation internally.
+No direct buying post yet. Needs manual research and verification before outreach.
+https://www.linkedin.com/in/example-coo`;
+
+const coldAnalysis = analyzeLinkedInSignal({
+  text: coldResearchText,
+  capturedAt,
+});
+assert.equal(coldAnalysis.extraction.alertSourceType, 'manual_research');
+assert.equal(coldAnalysis.extraction.isColdProspect, true);
+assert.equal(coldAnalysis.signalType, 'target_account_research');
+assert.ok(coldAnalysis.confidence >= 0.5);
+
+const coldLead = parseLinkedInSignal({
+  text: coldResearchText,
+  capturedAt,
+});
+assert.equal(coldLead.source, 'linkedin');
+assert.equal(coldLead.leadType, 'linkedin_cold_prospect');
+assert.equal(coldLead.prospectStage, 'cold_prospect');
+assert.equal(coldLead.pipelineStatus, 'needs_research');
+assert.equal(coldLead.timelineSignal, 'Cold prospect; needs manual research before outreach');
+assert.ok(coldLead.rawPayload.reasons.includes('Classified as cold prospect for manual research before outreach.'));
 
 const unsupported = shouldSkipLinkedInSignal({
   text: 'LinkedIn newsletter digest. Unsubscribe here. No buying signal in this email.',

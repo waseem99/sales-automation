@@ -10,9 +10,10 @@ export type LinkedInSignalType =
   | 'hiring_engineering_team'
   | 'funding_or_growth_signal'
   | 'solution_relevant_pain'
+  | 'target_account_research'
   | 'other';
 
-export type LinkedInAlertSourceType = 'sales_navigator_alert' | 'linkedin_notification' | 'manual_post' | 'unknown';
+export type LinkedInAlertSourceType = 'sales_navigator_alert' | 'linkedin_notification' | 'manual_post' | 'manual_research' | 'unknown';
 
 export interface ParseLinkedInSignalInput {
   text: string;
@@ -33,6 +34,7 @@ export interface LinkedInSignalExtraction {
   companyName?: string;
   freshnessMinutes?: number;
   timelineSignal?: string;
+  isColdProspect: boolean;
 }
 
 export interface LinkedInSignalAnalysis {
@@ -61,12 +63,15 @@ export interface ParsedLinkedInLead extends Lead {
 
 export function parseLinkedInSignal(input: ParseLinkedInSignalInput): ParsedLinkedInLead {
   const analysis = analyzeLinkedInSignal(input);
+  const isSalesNavigator = analysis.extraction.alertSourceType === 'sales_navigator_alert';
+  const isColdProspect = analysis.extraction.isColdProspect;
 
   return {
     id: createLeadId(input, analysis),
-    source: analysis.extraction.alertSourceType === 'sales_navigator_alert' ? 'sales_navigator' : 'linkedin',
+    source: isSalesNavigator ? 'sales_navigator' : 'linkedin',
     sourceUrl: input.sourceUrl ?? analysis.extraction.sourceUrl,
-    leadType: analysis.extraction.alertSourceType === 'sales_navigator_alert' ? 'linkedin_sales_nav_alert' : 'linkedin_warm_post',
+    leadType: isColdProspect ? (isSalesNavigator ? 'sales_navigator_cold_prospect' : 'linkedin_cold_prospect') : isSalesNavigator ? 'linkedin_sales_nav_alert' : 'linkedin_warm_post',
+    prospectStage: isColdProspect ? 'cold_prospect' : 'warm_lead',
     title: inferTitle(input.text, analysis.signalType, analysis.extraction),
     description: input.text.trim(),
     companyName: input.companyName ?? analysis.extraction.companyName,
@@ -90,7 +95,7 @@ export function parseLinkedInSignal(input: ParseLinkedInSignalInput): ParsedLink
       skipReasons: analysis.skipReasons,
       reasons: analysis.reasons,
     },
-    pipelineStatus: analysis.skipReasons.length > 0 ? 'needs_human_review' : 'new',
+    pipelineStatus: analysis.skipReasons.length > 0 ? 'needs_human_review' : isColdProspect ? 'needs_research' : 'new',
     createdAt: input.capturedAt,
     updatedAt: input.capturedAt,
   };
@@ -98,10 +103,10 @@ export function parseLinkedInSignal(input: ParseLinkedInSignalInput): ParsedLink
 
 export function analyzeLinkedInSignal(input: ParseLinkedInSignalInput): LinkedInSignalAnalysis {
   const text = input.text.trim();
-  const lower = text.toLowerCase();
   const alertSourceType = inferAlertSourceType(text);
   const signalType = inferSignalType(text);
   const serviceCategory = inferServiceCategory(text, signalType);
+  const isColdProspect = inferColdProspect(text, alertSourceType, signalType);
   const extraction: LinkedInSignalExtraction = {
     alertSourceType,
     sourceUrl: input.sourceUrl ?? extractLinkedInUrl(text) ?? extractFirstUrl(text),
@@ -109,7 +114,8 @@ export function analyzeLinkedInSignal(input: ParseLinkedInSignalInput): LinkedIn
     contactRole: input.contactRole ?? extractContactRole(text),
     companyName: input.companyName ?? extractCompanyName(text),
     freshnessMinutes: inferFreshnessMinutes(text),
-    timelineSignal: inferTimelineSignal(text),
+    timelineSignal: inferTimelineSignal(text, isColdProspect),
+    isColdProspect,
   };
   const reasons = buildReasons({ signalType, extraction, text });
   const confidence = calculateConfidence({ signalType, extraction, text });
@@ -141,6 +147,7 @@ export function shouldSkipLinkedInSignal(input: ParseLinkedInSignalInput, minCon
 function inferSignalType(text: string): LinkedInSignalType {
   const value = text.toLowerCase();
 
+  if (containsAny(value, ['target account', 'target prospect', 'cold prospect', 'manual research', 'needs research', 'research note'])) return 'target_account_research';
   if (containsAny(value, ['automation expert', 'workflow automation', 'ai automation', 'zapier', 'make.com', 'n8n'])) return 'looking_for_automation_help';
   if (containsAny(value, ['looking for ai', 'ai partner', 'ai developer', 'llm', 'rag', 'genai', 'generative ai'])) return 'looking_for_ai_partner';
   if (containsAny(value, ['website developer', 'web developer', 'website team', 'webflow', 'wordpress', 'website rebuild'])) return 'looking_for_website_team';
@@ -156,10 +163,18 @@ function inferSignalType(text: string): LinkedInSignalType {
 
 function inferAlertSourceType(text: string): LinkedInAlertSourceType {
   const value = text.toLowerCase();
+  if (containsAny(value, ['manual research', 'target account', 'target prospect', 'cold prospect', 'research note'])) return 'manual_research';
   if (containsAny(value, ['sales navigator', 'saved search alert', 'lead alert', 'account alert'])) return 'sales_navigator_alert';
   if (containsAny(value, ['linkedin notification', 'linkedin.com/feed', 'linkedin.com/in/', 'linkedin.com/company/'])) return 'linkedin_notification';
   if (containsAny(value, ['posted', 'looking for', 'need', 'recommend'])) return 'manual_post';
   return 'unknown';
+}
+
+function inferColdProspect(text: string, alertSourceType: LinkedInAlertSourceType, signalType: LinkedInSignalType): boolean {
+  const value = text.toLowerCase();
+  if (signalType === 'target_account_research') return true;
+  if (alertSourceType === 'manual_research') return true;
+  return containsAny(value, ['no direct buying post', 'needs manual research', 'cold outreach candidate', 'verify before outreach']);
 }
 
 function inferServiceCategory(text: string, signalType: LinkedInSignalType): ServiceCategory {
@@ -187,8 +202,9 @@ function inferTitle(text: string, signalType: LinkedInSignalType, extraction: Li
   return signalType.replace(/_/g, ' ');
 }
 
-function inferTimelineSignal(text: string): string | undefined {
+function inferTimelineSignal(text: string, isColdProspect = false): string | undefined {
   const lower = text.toLowerCase();
+  if (isColdProspect) return 'Cold prospect; needs manual research before outreach';
   if (containsAny(lower, ['asap', 'urgent', 'immediately', 'this week'])) return 'Urgent warm LinkedIn signal';
   if (containsAny(lower, ['recommend', 'looking for', 'need help', 'need a', 'looking to hire'])) return 'Active warm LinkedIn demand signal';
   if (containsAny(lower, ['sales navigator', 'saved search alert', 'lead alert'])) return 'Sales Navigator alert signal';
@@ -248,6 +264,8 @@ function extractFirstUrl(text: string): string | undefined {
 function buildReasons(input: { signalType: LinkedInSignalType; extraction: LinkedInSignalExtraction; text: string }): string[] {
   const reasons: string[] = [];
   if (input.extraction.alertSourceType === 'sales_navigator_alert') reasons.push('Sales Navigator alert marker detected.');
+  if (input.extraction.alertSourceType === 'manual_research') reasons.push('Manual LinkedIn/Sales Navigator research marker detected.');
+  if (input.extraction.isColdProspect) reasons.push('Classified as cold prospect for manual research before outreach.');
   if (input.extraction.sourceUrl) reasons.push('Source URL extracted or supplied.');
   if (input.extraction.contactName) reasons.push('Contact name extracted or supplied.');
   if (input.extraction.companyName) reasons.push('Company name extracted or supplied.');
@@ -259,12 +277,14 @@ function buildReasons(input: { signalType: LinkedInSignalType; extraction: Linke
 function calculateConfidence(input: { signalType: LinkedInSignalType; extraction: LinkedInSignalExtraction; text: string }): number {
   let score = 0;
   if (input.extraction.alertSourceType === 'sales_navigator_alert') score += 0.25;
+  if (input.extraction.alertSourceType === 'manual_research') score += 0.25;
   if (input.extraction.alertSourceType === 'linkedin_notification') score += 0.2;
   if (input.extraction.alertSourceType === 'manual_post') score += 0.1;
   if (input.signalType !== 'other') score += 0.3;
   if (input.extraction.sourceUrl) score += 0.15;
   if (input.extraction.contactName || input.extraction.companyName) score += 0.1;
   if (input.extraction.timelineSignal) score += 0.05;
+  if (input.extraction.isColdProspect) score += 0.1;
   if (containsAny(input.text.toLowerCase(), ['unsubscribe', 'newsletter', 'digest only'])) score -= 0.25;
   return Math.max(0, Math.min(1, Math.round(score * 100) / 100));
 }

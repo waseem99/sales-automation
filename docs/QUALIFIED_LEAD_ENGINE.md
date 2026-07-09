@@ -63,6 +63,65 @@ Approved input paths:
 
 Cold prospects should normally start as `needs_research` before they become `approved_to_contact`.
 
+## Practical input formats
+
+### Upwork job/email text
+
+```text
+Job: Need AI automation support
+https://www.upwork.com/jobs/example
+We need an AI automation expert for n8n, OpenAI, RAG, and workflow automation.
+Budget $5,000. Posted 20 minutes ago.
+```
+
+Expected behavior:
+
+- source: `upwork`
+- lead type: `upwork_job`
+- stage: `warm_lead`
+- strong matches can become `hot` or `qualified`
+- urgent fresh opportunities should be reviewed quickly
+
+### LinkedIn/Sales Navigator warm signal
+
+```text
+Sales Navigator saved search alert
+New lead alert: Jane Founder — COO at Example SaaS
+Company: Example SaaS
+Role: COO
+Posted 35 minutes ago
+Looking for AI automation partner to reduce support backlog.
+https://www.linkedin.com/in/jane-founder
+```
+
+Expected behavior:
+
+- source: `sales_navigator` or `linkedin`
+- lead type: `linkedin_sales_nav_alert` or `linkedin_warm_post`
+- stage: `warm_lead`
+- pipeline starts as `new`
+
+### LinkedIn/Sales Navigator cold prospect research note
+
+```text
+Manual research note
+Target account: Example Growth SaaS
+Target prospect: Example COO — COO at Example Growth SaaS
+Company: Example Growth SaaS
+Role: COO
+Need: funded B2B SaaS hiring support operations and discussing AI automation internally.
+No direct buying post yet. Needs manual research and verification before outreach.
+https://www.linkedin.com/in/example-coo
+```
+
+Expected behavior:
+
+- source: `linkedin` or `sales_navigator`
+- lead type: `linkedin_cold_prospect` or `sales_navigator_cold_prospect`
+- stage: `cold_prospect`
+- pipeline starts as `needs_research`
+- no auto-DM or external outreach happens
+
 ## Qualification dimensions
 
 Each lead/prospect is evaluated across:
@@ -104,7 +163,7 @@ The system must not:
 
 ## Practical next step
 
-The next product step is real source input readiness:
+The next product step is to make source input repeatable for the BD team:
 
 1. Upwork email/manual input path.
 2. LinkedIn/Sales Navigator manual signal input path.
