@@ -15,6 +15,7 @@
   "dependencies": {
     "@sales-automation/access-control": "workspace:*",
     "@sales-automation/api": "workspace:*",
+    "@sales-automation/auth": "workspace:*",
     "@sales-automation/dashboard": "workspace:*",
     "@sales-automation/ingestion": "workspace:*",
     "@sales-automation/shared": "workspace:*",
