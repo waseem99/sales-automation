@@ -46,13 +46,14 @@ This sprint should prove that Codistan can evaluate an opportunity quickly and c
 16. Partner and solution-led prospect scoring foundation. ✅
 17. Enrichment policy, cost-control, and human-verification foundation. ✅
 18. Safe alert delivery adapter foundation. ✅
+19. Read-only Gmail/email source adapter foundation. ✅
 
 ### P2 — Later
 
 1. Full interactive dashboard UI components/forms.
 2. Production database-backed repository.
 3. Real authentication/session integration.
-4. Gmail integration.
+4. Real Gmail API runtime wiring.
 5. Sales Navigator alert parser hardening.
 6. Real enrichment provider adapters/imports.
 7. Admin scoring-weight adjustment UI/API.
@@ -199,6 +200,20 @@ Safe ingestion orchestration layer:
 - Returns captured/skipped counts and alert eligibility.
 - Does not scrape or send anything externally.
 
+### `@sales-automation/email-sources`
+
+Read-only Gmail/email source foundation:
+
+- Defines safe email source adapter interface for Gmail, IMAP, manual email import, and mock sources.
+- Enforces read-only adapter contract.
+- Defines Gmail-style query model with query terms, label, recency, and max result controls.
+- Classifies Upwork job-alert emails.
+- Classifies LinkedIn and Sales Navigator lead-signal emails.
+- Hands supported messages into the existing ingestion pipeline.
+- Preserves existing dedupe, scoring, repository save, and alert eligibility behavior.
+- Skips unsupported emails with no side effects.
+- Does not send, archive, delete, label, or modify emails.
+
 ### `@sales-automation/workers`
 
 Cadence-aware worker runner:
@@ -331,8 +346,8 @@ Lightweight rendered dashboard and HTTP adapter:
 ## Sprint 1 Remaining Implementation Order
 
 1. Add real authentication/session integration.
-2. Add Gmail ingestion adapter later.
-3. Add Sales Navigator / LinkedIn alert adapter hardening.
+2. Add real Gmail API runtime wiring.
+3. Add Sales Navigator / LinkedIn alert parser hardening.
 4. Add enrichment UI/API and real provider adapters/imports.
 5. Add real external alert provider configuration.
 6. Add production database-backed repository.
@@ -356,6 +371,7 @@ By the end of Sprint 1, a user should be able to input a lead/job and get:
 - Human-approved draft output.
 - Alert eligibility and alert plan.
 - Safe alert delivery decision with dedupe and dry-run default.
+- Safe Gmail/email source classification and read-only ingestion handoff.
 - Safe ingestion with dedupe and immediate evaluation.
 - Partner and solution-led prospect scoring and lead normalization.
 - Enrichment policy/cost-control decision and human-verification evidence model.
@@ -375,6 +391,8 @@ By the end of Sprint 1, a user should be able to input a lead/job and get:
 - No auto-bidding.
 - No auto-DM.
 - No fake-account workflow.
+- Email source adapters must remain read-only unless explicitly reviewed and changed later.
+- No email sending, archiving, deleting, labeling, or modifying from ingestion adapters.
 - No paid enrichment unless explicitly enabled and within score/status/budget policy.
 - No outreach-ready contact data without human verification.
 - No external alert delivery unless a real provider adapter is explicitly configured.
