@@ -5,6 +5,7 @@ import type { Lead, LeadScore } from '@sales-automation/shared';
 
 export type AlertChannel = 'email' | 'dashboard' | 'slack' | 'whatsapp' | 'log';
 export type AlertPriority = 'urgent' | 'normal' | 'low';
+export type AlertDeliveryStatus = 'sent' | 'skipped' | 'failed' | 'dry_run';
 
 export interface AlertPlan {
   id: string;
@@ -38,6 +39,36 @@ export interface BuildAlertPlanInput {
   drafts: GeneratedDraft[];
   recommendedNextAction: string;
   configuredChannels?: AlertChannel[];
+}
+
+export interface AlertDeliveryRecord {
+  channel: AlertChannel;
+  status: AlertDeliveryStatus;
+  dedupeKey: string;
+  message: string;
+  deliveredAt: string;
+  providerMessageId?: string;
+  error?: string;
+}
+
+export interface AlertDeliveryAdapter {
+  channel: AlertChannel;
+  send(plan: AlertPlan): AlertDeliveryRecord;
+}
+
+export interface DeliverAlertInput {
+  plan: AlertPlan;
+  adapters?: Partial<Record<AlertChannel, AlertDeliveryAdapter>>;
+  previouslySentKeys?: ReadonlySet<string>;
+  dryRun?: boolean;
+  deliveredAt?: string;
+}
+
+export interface DeliverAlertResult {
+  attempted: boolean;
+  dedupeKey: string;
+  records: AlertDeliveryRecord[];
+  skippedReason?: string;
 }
 
 export function buildAlertPlan(input: BuildAlertPlanInput): AlertPlan {
@@ -82,6 +113,112 @@ export function buildAlertPlan(input: BuildAlertPlanInput): AlertPlan {
 
 export function isDuplicateAlert(dedupeKey: string, previouslySentKeys: ReadonlySet<string>): boolean {
   return previouslySentKeys.has(dedupeKey);
+}
+
+export function deliverAlert(input: DeliverAlertInput): DeliverAlertResult {
+  const deliveredAt = input.deliveredAt ?? new Date().toISOString();
+
+  if (!input.plan.shouldAlert) {
+    return {
+      attempted: false,
+      dedupeKey: input.plan.dedupeKey,
+      records: [],
+      skippedReason: 'Alert plan is not eligible for delivery.',
+    };
+  }
+
+  if (input.previouslySentKeys && isDuplicateAlert(input.plan.dedupeKey, input.previouslySentKeys)) {
+    return {
+      attempted: false,
+      dedupeKey: input.plan.dedupeKey,
+      records: [],
+      skippedReason: 'Alert was skipped because the dedupe key was already sent.',
+    };
+  }
+
+  const records = input.plan.channels.map((channel) => {
+    const adapter = input.adapters?.[channel] ?? createDryRunAlertAdapter(channel, deliveredAt);
+    if (input.dryRun !== false) {
+      return createDryRunDeliveryRecord(channel, input.plan, deliveredAt);
+    }
+
+    try {
+      return adapter.send(input.plan);
+    } catch (error) {
+      return {
+        channel,
+        status: 'failed',
+        dedupeKey: input.plan.dedupeKey,
+        message: 'Alert delivery failed.',
+        deliveredAt,
+        error: (error as Error).message,
+      } satisfies AlertDeliveryRecord;
+    }
+  });
+
+  return {
+    attempted: records.length > 0,
+    dedupeKey: input.plan.dedupeKey,
+    records,
+  };
+}
+
+export function createDryRunAlertAdapter(channel: AlertChannel, deliveredAt = new Date().toISOString()): AlertDeliveryAdapter {
+  return {
+    channel,
+    send: (plan) => createDryRunDeliveryRecord(channel, plan, deliveredAt),
+  };
+}
+
+export function createLogAlertAdapter(deliveredAt = new Date().toISOString()): AlertDeliveryAdapter {
+  return {
+    channel: 'log',
+    send: (plan) => ({
+      channel: 'log',
+      status: 'sent',
+      dedupeKey: plan.dedupeKey,
+      message: `[${plan.priority}] ${plan.title}\n${plan.body}`,
+      deliveredAt,
+      providerMessageId: `log:${plan.dedupeKey}`,
+    }),
+  };
+}
+
+export function createDashboardAlertAdapter(deliveredAt = new Date().toISOString()): AlertDeliveryAdapter {
+  return {
+    channel: 'dashboard',
+    send: (plan) => ({
+      channel: 'dashboard',
+      status: 'sent',
+      dedupeKey: plan.dedupeKey,
+      message: plan.title,
+      deliveredAt,
+      providerMessageId: `dashboard:${plan.dedupeKey}`,
+    }),
+  };
+}
+
+export function createExternalChannelPlaceholderAdapter(channel: Exclude<AlertChannel, 'log' | 'dashboard'>): AlertDeliveryAdapter {
+  return {
+    channel,
+    send: (plan) => ({
+      channel,
+      status: 'skipped',
+      dedupeKey: plan.dedupeKey,
+      message: `${channel} delivery adapter is not configured. No external alert was sent.`,
+      deliveredAt: new Date().toISOString(),
+    }),
+  };
+}
+
+function createDryRunDeliveryRecord(channel: AlertChannel, plan: AlertPlan, deliveredAt: string): AlertDeliveryRecord {
+  return {
+    channel,
+    status: 'dry_run',
+    dedupeKey: plan.dedupeKey,
+    message: `Dry run only. No ${channel} alert was sent.`,
+    deliveredAt,
+  };
 }
 
 function shouldTriggerAlert(input: BuildAlertPlanInput): boolean {
