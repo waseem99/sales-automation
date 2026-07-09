@@ -1,5 +1,6 @@
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
 import { assertPermission, type UserRole } from '@sales-automation/access-control';
+import { resolveSession, type SessionAdapter } from '@sales-automation/auth';
 import { createSalesAutomationDashboardApi } from '@sales-automation/api';
 import type { DashboardSavedViewKey } from '@sales-automation/dashboard';
 import {
@@ -26,6 +27,7 @@ export interface SalesAutomationHttpContext {
   portfolioItems: PortfolioItem[];
   actor?: string;
   role?: UserRole;
+  sessionAdapter?: SessionAdapter;
   now?: () => string;
 }
 
@@ -33,6 +35,7 @@ export interface SalesAutomationHttpRequest {
   method: string;
   path: string;
   body?: unknown;
+  headers?: Record<string, string | string[] | undefined>;
 }
 
 export interface SalesAutomationHttpResponse {
@@ -52,12 +55,22 @@ export function handleSalesAutomationRequest(
   const pathname = trimTrailingSlash(url.pathname) || '/';
   const api = createSalesAutomationDashboardApi(context.repository);
   const now = context.now?.() ?? new Date().toISOString();
-  const actor = context.actor ?? 'web-api';
-  const role = context.role ?? 'admin';
+  const session = resolveRequestSession(request, context);
+  const actor = session.actor;
+  const role = session.role;
 
   try {
     if (method === 'GET' && pathname === '/health') {
       return jsonResponse({ ok: true, service: 'sales-automation-web', now });
+    }
+
+    if (method === 'GET' && pathname === '/api/session') {
+      return jsonResponse({
+        authenticated: session.authenticated,
+        role: session.role,
+        actor: session.actor,
+        reason: session.reason,
+      });
     }
 
     if (method === 'GET' && pathname === '/') {
@@ -185,12 +198,34 @@ export function createSalesAutomationHttpServer(context: SalesAutomationHttpCont
         method: request.method ?? 'GET',
         path: request.url ?? '/',
         body,
+        headers: normalizeNodeHeaders(request.headers),
       },
       context,
     );
     response.writeHead(result.status, result.headers);
     response.end(result.body);
   });
+}
+
+function resolveRequestSession(request: SalesAutomationHttpRequest, context: SalesAutomationHttpContext) {
+  if (context.sessionAdapter) {
+    return resolveSession(
+      { headers: request.headers },
+      {
+        adapter: context.sessionAdapter,
+        fallbackRole: context.role ?? 'read_only',
+        fallbackActor: context.actor ?? 'anonymous',
+      },
+    );
+  }
+
+  return resolveSession(
+    { headers: request.headers },
+    {
+      fallbackRole: context.role ?? 'read_only',
+      fallbackActor: context.actor ?? 'anonymous',
+    },
+  );
 }
 
 function buildListOptions(url: URL, now: string) {
@@ -301,6 +336,14 @@ function optionalBoolean(url: URL, key: string): boolean | undefined {
   if (value === 'true') return true;
   if (value === 'false') return false;
   return undefined;
+}
+
+function normalizeNodeHeaders(headers: IncomingMessage['headers']): Record<string, string | string[] | undefined> {
+  const normalized: Record<string, string | string[] | undefined> = {};
+  for (const [key, value] of Object.entries(headers)) {
+    normalized[key] = Array.isArray(value) ? value : value?.toString();
+  }
+  return normalized;
 }
 
 async function readJsonBody(request: IncomingMessage): Promise<unknown> {
