@@ -17,6 +17,15 @@ export interface RenderDashboardPageInput {
   activePipelineStatus?: PipelineStatus;
 }
 
+interface ActionQueueSection {
+  key: string;
+  title: string;
+  description: string;
+  savedView?: DashboardSavedViewKey;
+  status?: PipelineStatus;
+  items: OpportunityListItem[];
+}
+
 const pipelineStatusOptions: PipelineStatus[] = [
   'new',
   'scored',
@@ -55,6 +64,7 @@ export function renderDashboardPage(input: RenderDashboardPageInput): string {
       ${renderSummary(input.summary)}
       ${renderManualLeadForm()}
       ${renderSavedViewBar(input.activeSavedView, input.activeQuery, input.activePipelineStatus)}
+      ${renderActionQueue(input.opportunities, input.activeSavedView, input.activeQuery, input.activePipelineStatus)}
       ${renderFilterBar(input.activeSavedView, input.activeQuery, input.activePipelineStatus)}
       <section class="grid">
         ${renderOpportunityList(input.opportunities, input.selectedLead?.id, input.activeSavedView, input.activeQuery, input.activePipelineStatus)}
@@ -165,6 +175,145 @@ function renderSavedViewBar(
       ${viewEntries.map(([key, label]) => `<a class="chip ${activeSavedView === key ? 'active' : ''}" href="${escapeHtml(createListHref({ savedView: key, query: activeQuery, status: activePipelineStatus }))}">${escapeHtml(label)}</a>`).join('')}
     </div>
   </section>`;
+}
+
+function renderActionQueue(
+  opportunities: OpportunityListItem[],
+  activeSavedView?: DashboardSavedViewKey,
+  activeQuery?: string,
+  activePipelineStatus?: PipelineStatus,
+): string {
+  const sections = buildActionQueueSections(opportunities);
+  const totalItems = sections.reduce((sum, section) => sum + section.items.length, 0);
+
+  return `<section class="panel action-queue" aria-label="BD action queue">
+    <div class="panel-header compact">
+      <div>
+        <h2>BD Action Queue</h2>
+        <p class="muted">Daily shortlist: what BD should review, research, or contact first.</p>
+      </div>
+      <span>${totalItems} queued</span>
+    </div>
+    <div class="queue-grid">
+      ${sections.map((section) => renderActionQueueSection(section, activeSavedView, activeQuery, activePipelineStatus)).join('')}
+    </div>
+  </section>`;
+}
+
+function buildActionQueueSections(opportunities: OpportunityListItem[]): ActionQueueSection[] {
+  const actionable = opportunities.filter((item) => !['won', 'lost', 'rejected', 'archived'].includes(item.pipelineStatus));
+  const topLeads = actionable
+    .filter((item) => item.qualificationStatus === 'hot' || item.urgency === 'urgent' || item.alertEligible)
+    .slice(0, 5);
+  const needsResearch = actionable.filter((item) => item.pipelineStatus === 'needs_research').slice(0, 5);
+  const readyToContact = actionable.filter((item) => item.pipelineStatus === 'approved_to_contact' || item.pipelineStatus === 'draft_ready').slice(0, 5);
+  const overdueHot = opportunities.filter((item) => item.overdue).slice(0, 5);
+  const lowQuality = opportunities.filter((item) => item.qualificationStatus === 'rejected' || item.redFlagCount > 0 || item.pipelineStatus === 'rejected').slice(0, 5);
+
+  return [
+    {
+      key: 'today_top_leads',
+      title: "Today's Top Leads",
+      description: 'Highest-priority warm leads to review first.',
+      savedView: 'hot_leads',
+      items: topLeads,
+    },
+    {
+      key: 'needs_research',
+      title: 'Needs Research',
+      description: 'Cold prospects or unclear leads that need verification.',
+      savedView: 'needs_research',
+      status: 'needs_research',
+      items: needsResearch,
+    },
+    {
+      key: 'ready_to_contact',
+      title: 'Ready to Contact',
+      description: 'Human-approved leads with draft/proof ready.',
+      savedView: 'contact_ready',
+      items: readyToContact,
+    },
+    {
+      key: 'overdue_hot_leads',
+      title: 'Overdue Hot Leads',
+      description: 'Hot leads past the review SLA.',
+      savedView: 'overdue_hot_leads',
+      items: overdueHot,
+    },
+    {
+      key: 'low_quality',
+      title: 'Rejected / Low Quality',
+      description: 'Avoid or archive unless manually overridden.',
+      items: lowQuality,
+    },
+  ];
+}
+
+function renderActionQueueSection(
+  section: ActionQueueSection,
+  activeSavedView?: DashboardSavedViewKey,
+  activeQuery?: string,
+  activePipelineStatus?: PipelineStatus,
+): string {
+  const href = createListHref({
+    savedView: section.savedView ?? activeSavedView,
+    query: activeQuery,
+    status: section.status ?? activePipelineStatus,
+  });
+
+  return `<article class="queue-section">
+    <div class="queue-section-header">
+      <div>
+        <h3>${escapeHtml(section.title)}</h3>
+        <p class="muted small">${escapeHtml(section.description)}</p>
+      </div>
+      <a class="text-link" href="${escapeHtml(href)}">View</a>
+    </div>
+    ${section.items.length > 0 ? section.items.map((item) => renderActionQueueItem(item, section, activeSavedView, activeQuery, activePipelineStatus)).join('') : '<p class="muted small">Nothing here right now.</p>'}
+  </article>`;
+}
+
+function renderActionQueueItem(
+  item: OpportunityListItem,
+  section: ActionQueueSection,
+  activeSavedView?: DashboardSavedViewKey,
+  activeQuery?: string,
+  activePipelineStatus?: PipelineStatus,
+): string {
+  return `<a class="queue-item" href="${escapeHtml(createLeadHref(item.id, section.savedView ?? activeSavedView, activeQuery, section.status ?? activePipelineStatus))}">
+    <strong>${escapeHtml(item.title)}</strong>
+    <span>Score: ${escapeHtml(String(item.score ?? '—'))} · ${escapeHtml(item.pipelineStatus)} · ${escapeHtml(item.prospectStage)}</span>
+    <span><b>Why qualified:</b> ${escapeHtml(getQualificationReason(item))}</span>
+    <span><b>Why now:</b> ${escapeHtml(getTimingReason(item))}</span>
+    <span><b>Service angle:</b> ${escapeHtml(formatStatusLabel(item.serviceCategory))}</span>
+    <span><b>Proof:</b> ${item.matchedPortfolioCount} matched portfolio item${item.matchedPortfolioCount === 1 ? '' : 's'}</span>
+    <span><b>Risk:</b> ${escapeHtml(getRiskReason(item))}</span>
+    <span><b>Next:</b> ${escapeHtml(shorten(item.recommendedNextAction ?? 'Review details and decide next BD step.', 120))}</span>
+  </a>`;
+}
+
+function getQualificationReason(item: OpportunityListItem): string {
+  if (item.qualificationStatus === 'hot') return 'Hot score with strong fit or timing signal.';
+  if (item.qualificationStatus === 'qualified') return 'Qualified fit, but not urgent yet.';
+  if (item.pipelineStatus === 'needs_research') return 'Potential fit, but requires manual verification.';
+  if (item.qualificationStatus === 'rejected') return 'Rejected due score, fit, budget, or red flags.';
+  return 'Needs review before prioritization.';
+}
+
+function getTimingReason(item: OpportunityListItem): string {
+  if (item.overdue) return 'Past SLA; review immediately.';
+  if (item.urgency === 'urgent') return 'Fresh or urgent signal detected.';
+  if (item.alertEligible) return 'Alert-worthy lead for BD review.';
+  if (item.pipelineStatus === 'approved_to_contact' || item.pipelineStatus === 'draft_ready') return 'Human-approved next action is available.';
+  if (item.pipelineStatus === 'needs_research') return 'Needs verification before outreach.';
+  return 'No urgent timing signal yet.';
+}
+
+function getRiskReason(item: OpportunityListItem): string {
+  if (item.redFlagCount > 0) return `${item.redFlagCount} red flag${item.redFlagCount === 1 ? '' : 's'} detected.`;
+  if (item.pipelineStatus === 'needs_human_review') return 'Human review required before action.';
+  if (item.prospectStage === 'cold_prospect') return 'Cold prospect; do not contact before verification.';
+  return 'No immediate red flag shown.';
 }
 
 function renderFilterBar(
@@ -341,8 +490,8 @@ function baseStyles(): string {
     .metric strong { font-size: 28px; display: block; margin-top: 4px; }
     .grid { display: grid; grid-template-columns: minmax(0, 1.2fr) minmax(360px, .8fr); gap: 20px; align-items: start; }
     .panel { border-radius: 22px; padding: 20px; box-shadow: 0 10px 30px rgba(17, 24, 39, .04); }
-    .intake, .saved-views, .filters { margin-bottom: 20px; }
-    .panel-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; margin-bottom: 14px; }
+    .intake, .saved-views, .filters, .action-queue { margin-bottom: 20px; }
+    .panel-header, .queue-section-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; margin-bottom: 14px; }
     .lead-form { display: grid; gap: 12px; }
     label { display: grid; gap: 6px; color: #374151; font-weight: 700; }
     select, textarea, input { width: 100%; border: 1px solid #d1d5db; border-radius: 14px; padding: 12px; font: inherit; background: white; color: #111827; }
@@ -357,12 +506,18 @@ function baseStyles(): string {
     .result { margin: 14px 0 0; padding: 14px; border-radius: 14px; background: #0f172a; color: #e5e7eb; white-space: pre-wrap; overflow: auto; }
     .list { display: grid; gap: 12px; }
     .lead-card { display: grid; grid-template-columns: 1fr auto; gap: 12px; padding: 14px; border: 1px solid #e5e7eb; border-radius: 16px; color: inherit; text-decoration: none; }
-    .lead-card:hover, .lead-card.selected { border-color: #6366f1; box-shadow: 0 12px 28px rgba(79, 70, 229, .12); }
+    .lead-card:hover, .lead-card.selected, .queue-item:hover { border-color: #6366f1; box-shadow: 0 12px 28px rgba(79, 70, 229, .12); }
     .lead-card h3 { margin-bottom: 6px; font-size: 16px; }
     .lead-card p { margin-bottom: 5px; color: #374151; }
     .score { font-size: 26px; font-weight: 800; }
     .badges { display: flex; flex-wrap: wrap; gap: 6px; grid-column: 1 / -1; }
     .badges span { background: #eef2ff; color: #3730a3; border-radius: 999px; padding: 5px 9px; font-size: 12px; font-weight: 700; }
+    .queue-grid { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 12px; }
+    .queue-section { border: 1px solid #e5e7eb; border-radius: 16px; padding: 14px; background: #fbfcff; }
+    .queue-section h3 { font-size: 15px; margin-bottom: 5px; }
+    .queue-item { display: grid; gap: 6px; color: inherit; text-decoration: none; border: 1px solid #e5e7eb; background: white; border-radius: 14px; padding: 12px; margin-top: 10px; }
+    .queue-item strong { font-size: 14px; }
+    .queue-item span { color: #374151; font-size: 12px; line-height: 1.35; }
     .muted { color: #6b7280; }
     .small { font-size: 13px; }
     .detail { position: sticky; top: 20px; }
@@ -374,7 +529,8 @@ function baseStyles(): string {
     .note-form { grid-template-columns: 1fr; }
     dt { color: #6b7280; font-size: 12px; }
     dd { margin: 4px 0 0; font-weight: 800; overflow-wrap: anywhere; }
-    @media (max-width: 900px) { .metrics, .grid, .inline-form, .filter-form { grid-template-columns: 1fr; } .detail { position: static; } }
+    @media (max-width: 1100px) { .queue-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+    @media (max-width: 900px) { .metrics, .grid, .inline-form, .filter-form, .queue-grid { grid-template-columns: 1fr; } .detail { position: static; } }
   `;
 }
 
@@ -560,6 +716,10 @@ function createListHref(input: {
 
 function formatStatusLabel(value: string): string {
   return value.replace(/_/g, ' ');
+}
+
+function shorten(value: string, maxLength: number): string {
+  return value.length > maxLength ? `${value.slice(0, maxLength - 1)}…` : value;
 }
 
 function formatRawPayload(value: unknown): string {
