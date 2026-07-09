@@ -1,3 +1,6 @@
+const PREVIEW_PATH = '/api/preview';
+const API_BASE = '/api';
+
 const sampleLeads = [
   {
     id: 'preview-upwork-ai-rag',
@@ -92,7 +95,7 @@ module.exports = async function handler(req, res) {
 };
 
 function renderDashboard(req) {
-  const url = new URL(req.url || '/', 'https://preview.codistan.local');
+  const url = new URL(req.url || PREVIEW_PATH, 'https://preview.codistan.local');
   const query = (url.searchParams.get('query') || '').toLowerCase();
   const status = url.searchParams.get('status') || '';
   const selectedId = url.searchParams.get('leadId') || leads[0]?.id;
@@ -125,7 +128,11 @@ function renderDashboard(req) {
     button, .button { border: 0; border-radius: 999px; padding: 10px 14px; font-weight: 700; cursor: pointer; background: #2563eb; color: white; text-decoration: none; display: inline-flex; align-items: center; justify-content: center; gap: 8px; }
     button.secondary, .button.secondary { background: #e0f2fe; color: #075985; }
     button.danger { background: #fee2e2; color: #991b1b; }
+    button:disabled { cursor: wait; opacity: .7; }
     .safe { background: #ecfdf5; border: 1px solid #a7f3d0; color: #047857; padding: 12px; border-radius: 14px; }
+    .notice { display: none; border-radius: 12px; padding: 10px 12px; margin: 10px 0; font-size: 14px; }
+    .notice.error { display: block; background: #fee2e2; color: #991b1b; border: 1px solid #fecaca; }
+    .notice.success { display: block; background: #ecfdf5; color: #047857; border: 1px solid #a7f3d0; }
     .card { padding: 14px; margin-bottom: 12px; }
     .card.active { border-color: #2563eb; box-shadow: 0 0 0 3px rgba(37, 99, 235, .12); }
     .meta { color: #64748b; font-size: 13px; line-height: 1.5; }
@@ -145,12 +152,13 @@ function renderDashboard(req) {
 <main>
   <section>
     <div class="safe"><strong>Safe preview mode:</strong> demo-only memory data. External accounts are not touched.</div>
+    <div id="preview-notice" class="notice"></div>
     <div class="toolbar">
       <h2>Evaluate sample lead</h2>
-      <button class="secondary" onclick="evaluateSample('upwork')">Add Upwork sample</button>
-      <button class="secondary" onclick="evaluateSample('linkedin')">Add LinkedIn sample</button>
-      <button class="danger" onclick="resetData()">Reset preview data</button>
-      <form method="GET" action="/">
+      <button type="button" class="secondary" onclick="evaluateSample('upwork', this)">Add Upwork sample</button>
+      <button type="button" class="secondary" onclick="evaluateSample('linkedin', this)">Add LinkedIn sample</button>
+      <button type="button" class="danger" onclick="resetData(this)">Reset preview data</button>
+      <form method="GET" action="${PREVIEW_PATH}">
         <input name="query" placeholder="Search title, company, source" value="${escapeHtml(url.searchParams.get('query') || '')}" />
         <select name="status">
           ${statusOption('', 'All statuses', status)}
@@ -170,35 +178,90 @@ function renderDashboard(req) {
   </section>
 </main>
 <script>
-  async function evaluateSample(kind) {
-    const response = await fetch('/api/evaluate', {
-      method: 'POST',
-      headers: { 'content-type': 'application/json', 'x-codistan-session': 'dev-founder-token' },
-      body: JSON.stringify({ kind })
-    });
-    const data = await response.json();
-    window.location = '/?leadId=' + encodeURIComponent(data.lead.id);
+  const PREVIEW_PATH = '${PREVIEW_PATH}';
+  const API_BASE = '${API_BASE}';
+
+  async function evaluateSample(kind, button) {
+    try {
+      setBusy(button, true);
+      const data = await postJson(API_BASE + '/evaluate', { kind });
+      window.location.assign(PREVIEW_PATH + '?leadId=' + encodeURIComponent(data.lead.id));
+    } catch (error) {
+      showNotice(error.message || 'Could not add sample lead.', 'error');
+      setBusy(button, false);
+    }
   }
-  async function resetData() {
+
+  async function resetData(button) {
     if (!confirm('Reset demo preview data? No external system will be touched.')) return;
-    await fetch('/api/dev/reset-local-data', { method: 'POST', headers: { 'x-codistan-session': 'dev-founder-token' } });
-    window.location = '/';
+    try {
+      setBusy(button, true);
+      await postJson(API_BASE + '/dev/reset-local-data');
+      window.location.assign(PREVIEW_PATH);
+    } catch (error) {
+      showNotice(error.message || 'Could not reset preview data.', 'error');
+      setBusy(button, false);
+    }
   }
-  async function updateLead(id, field) {
+
+  async function updateLead(id, field, button) {
     const element = document.querySelector('[data-field="' + field + '"]');
     const body = {};
     body[field === 'status' ? 'pipelineStatus' : field] = element.value;
-    await fetch('/api/leads/' + encodeURIComponent(id) + '/' + field, {
-      method: 'POST',
-      headers: { 'content-type': 'application/json', 'x-codistan-session': 'dev-founder-token' },
-      body: JSON.stringify(body)
-    });
-    window.location.reload();
+    try {
+      setBusy(button, true);
+      await postJson(API_BASE + '/leads/' + encodeURIComponent(id) + '/' + field, body);
+      showNotice(field + ' saved. Preview data is in-memory only.', 'success');
+      setTimeout(() => window.location.assign(window.location.pathname + window.location.search), 350);
+    } catch (error) {
+      showNotice(error.message || 'Could not save ' + field + '.', 'error');
+      setBusy(button, false);
+    }
   }
+
   async function copyDraft() {
     const draft = document.getElementById('draft').innerText;
-    await navigator.clipboard.writeText(draft);
-    document.getElementById('copy-result').innerText = 'Draft copied for manual review. Nothing was sent automatically.';
+    try {
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        await navigator.clipboard.writeText(draft);
+      } else {
+        const textarea = document.createElement('textarea');
+        textarea.value = draft;
+        document.body.appendChild(textarea);
+        textarea.select();
+        document.execCommand('copy');
+        textarea.remove();
+      }
+      document.getElementById('copy-result').innerText = 'Draft copied for manual review. Nothing was sent automatically.';
+    } catch (error) {
+      document.getElementById('copy-result').innerText = 'Could not copy automatically. Please select and copy the draft manually.';
+    }
+  }
+
+  async function postJson(path, body) {
+    const response = await fetch(path, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', 'x-codistan-session': 'dev-founder-token' },
+      body: body === undefined ? undefined : JSON.stringify(body)
+    });
+    let data = {};
+    try { data = await response.json(); } catch {}
+    if (!response.ok || data.ok === false) {
+      throw new Error(data.message || 'Request failed with status ' + response.status);
+    }
+    return data;
+  }
+
+  function setBusy(button, isBusy) {
+    if (!button) return;
+    button.disabled = isBusy;
+  }
+
+  function showNotice(message, type) {
+    const notice = document.getElementById('preview-notice');
+    if (!notice) return;
+    notice.className = 'notice ' + (type || 'success');
+    notice.innerText = message;
   }
 </script>
 </body>
@@ -208,7 +271,7 @@ function renderDashboard(req) {
 function renderLeadCard(lead, selectedId, url) {
   const params = new URLSearchParams(url.searchParams);
   params.set('leadId', lead.id);
-  return `<a class="card ${lead.id === selectedId ? 'active' : ''}" href="/?${params.toString()}" style="display:block;color:inherit;text-decoration:none">
+  return `<a class="card ${lead.id === selectedId ? 'active' : ''}" href="${PREVIEW_PATH}?${params.toString()}" style="display:block;color:inherit;text-decoration:none">
     <div class="meta">${escapeHtml(lead.source)} • ${escapeHtml(lead.pipelineStatus)} • ${escapeHtml(lead.budgetSignal)}</div>
     <h3>${escapeHtml(lead.title)}</h3>
     <div class="meta">${escapeHtml(lead.company)}</div>
@@ -234,15 +297,15 @@ function renderLeadDetail(lead) {
       ${statusOption('contact_ready', 'Contact ready', lead.pipelineStatus)}
       ${statusOption('archived', 'Archived', lead.pipelineStatus)}
     </select>
-    <button onclick="updateLead('${lead.id}', 'status')">Save status</button>
+    <button type="button" onclick="updateLead('${lead.id}', 'status', this)">Save status</button>
     <br><br>
     <label>Owner</label><br>
     <input data-field="owner" value="${escapeHtml(lead.owner || '')}" />
-    <button onclick="updateLead('${lead.id}', 'owner')">Save owner</button>
+    <button type="button" onclick="updateLead('${lead.id}', 'owner', this)">Save owner</button>
     <br><br>
     <label>Notes</label><br>
     <textarea data-field="notes">${escapeHtml(lead.notes || '')}</textarea>
-    <button onclick="updateLead('${lead.id}', 'notes')">Save notes</button>
+    <button type="button" onclick="updateLead('${lead.id}', 'notes', this)">Save notes</button>
   </div>
   <div class="panel">
     <h3>Source Evidence</h3>
@@ -257,7 +320,7 @@ function renderLeadDetail(lead) {
   <div class="panel">
     <h3>Human-approved draft</h3>
     <pre id="draft">${escapeHtml(lead.draft)}</pre>
-    <button onclick="copyDraft()">Copy draft for manual review</button>
+    <button type="button" onclick="copyDraft()">Copy draft for manual review</button>
     <p id="copy-result" class="meta"></p>
   </div>`;
 }
@@ -281,7 +344,7 @@ function statusOption(value, label, selected) {
 }
 
 function getPath(req) {
-  return new URL(req.url || '/', 'https://preview.codistan.local').pathname;
+  return new URL(req.url || PREVIEW_PATH, 'https://preview.codistan.local').pathname;
 }
 
 async function readBody(req) {
