@@ -459,7 +459,7 @@ function countBy<T extends string>(
   items: OpportunityListItem[],
   getKey: (item: OpportunityListItem) => T | undefined,
 ): Partial<Record<T, number>> {
-  return items.reduce<Partial<Record<T, number>>((accumulator, item) => {
+  return items.reduce<Partial<Record<T, number>>>((accumulator, item) => {
     const key = getKey(item);
     if (!key) return accumulator;
     accumulator[key] = (accumulator[key] ?? 0) + 1;
