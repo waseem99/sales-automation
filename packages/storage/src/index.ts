@@ -40,6 +40,7 @@ export interface LeadRepository {
   listLeads(): StoredLeadRecord[];
   listHotLeads(): StoredLeadRecord[];
   listAuditLog(leadId: string): AuditEntry[];
+  clearAll(actor?: string): number;
 }
 
 export interface LocalJsonLeadRepositoryOptions {
@@ -149,6 +150,13 @@ export class InMemoryLeadRepository implements LeadRepository {
 
   listAuditLog(leadId: string): AuditEntry[] {
     return this.records.get(leadId)?.auditLog ?? [];
+  }
+
+  clearAll(_actor = 'system'): number {
+    const cleared = this.records.size;
+    this.records.clear();
+    this.afterMutation();
+    return cleared;
   }
 
   protected afterMutation(): void {
