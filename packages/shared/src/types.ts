@@ -11,10 +11,20 @@ export type LeadType =
   | 'upwork_job'
   | 'linkedin_warm_post'
   | 'linkedin_sales_nav_alert'
+  | 'linkedin_cold_prospect'
+  | 'sales_navigator_cold_prospect'
   | 'partner_prospect'
   | 'solution_led_prospect'
   | 'manual_lead'
   | 'future_source';
+
+export type ProspectStage =
+  | 'warm_lead'
+  | 'cold_prospect'
+  | 'partner_prospect'
+  | 'solution_prospect'
+  | 'manual_lead'
+  | 'unknown';
 
 export type ServiceCategory =
   | 'ai_automation'
@@ -36,6 +46,7 @@ export type UrgencyStatus = 'urgent' | 'normal' | 'low';
 export type PipelineStatus =
   | 'new'
   | 'scored'
+  | 'needs_research'
   | 'hot_alert_sent'
   | 'needs_human_review'
   | 'approved_to_contact'
@@ -90,6 +101,7 @@ export interface Lead {
   source: LeadSource;
   sourceUrl?: string;
   leadType: LeadType;
+  prospectStage?: ProspectStage;
   title: string;
   description: string;
   companyName?: string;

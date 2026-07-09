@@ -3,6 +3,7 @@ import type {
   LeadSource,
   LeadType,
   PipelineStatus,
+  ProspectStage,
   QualificationStatus,
   ScoreBreakdown,
   ServiceCategory,
@@ -11,12 +12,17 @@ import type {
 import type { AuditEntry, StoredLeadRecord } from '@sales-automation/storage';
 
 export type DashboardSavedViewKey =
+  | 'hot_leads'
+  | 'warm_leads'
+  | 'cold_prospects'
+  | 'contact_ready'
   | 'hot_upwork_now'
   | 'hot_linkedin_warm_posts'
   | 'ai_automation_leads'
   | 'ar_3d_leads'
   | 'partner_prospects'
   | 'solution_led_prospects'
+  | 'needs_research'
   | 'needs_human_review'
   | 'overdue_hot_leads';
 
@@ -36,6 +42,7 @@ export interface DashboardFilters {
   pipelineStatuses?: PipelineStatus[];
   qualificationStatuses?: QualificationStatus[];
   urgencyStatuses?: UrgencyStatus[];
+  prospectStages?: ProspectStage[];
   recommendedProfiles?: CodistanProfile[];
   owners?: string[];
   scoreMin?: number;
@@ -61,6 +68,7 @@ export interface OpportunityListItem {
   title: string;
   source: LeadSource;
   leadType: LeadType;
+  prospectStage: ProspectStage;
   serviceCategory: ServiceCategory;
   companyName?: string;
   contactName?: string;
@@ -124,16 +132,22 @@ export interface DashboardSummary {
   needsHumanReview: number;
   bySource: Partial<Record<LeadSource, number>>;
   byServiceCategory: Partial<Record<ServiceCategory, number>>;
+  byProspectStage: Partial<Record<ProspectStage, number>>;
   byRecommendedProfile: Partial<Record<CodistanProfile, number>>;
 }
 
 export const savedViewLabels: Record<DashboardSavedViewKey, string> = {
+  hot_leads: 'Hot Leads',
+  warm_leads: 'Warm Leads',
+  cold_prospects: 'Cold Prospects',
+  contact_ready: 'Contact Ready',
   hot_upwork_now: 'Hot Upwork Now',
   hot_linkedin_warm_posts: 'Hot LinkedIn Warm Posts',
   ai_automation_leads: 'AI Automation Leads',
   ar_3d_leads: 'AR/3D Leads',
   partner_prospects: 'Partner Prospects',
   solution_led_prospects: 'Solution-Led Prospects',
+  needs_research: 'Needs Research',
   needs_human_review: 'Needs Human Review',
   overdue_hot_leads: 'Overdue Hot Leads',
 };
@@ -201,6 +215,7 @@ export function buildDashboardSummary(records: StoredLeadRecord[], now = new Dat
     needsHumanReview: items.filter((item) => item.pipelineStatus === 'needs_human_review' || item.recommendedProfile === 'needs_human_review').length,
     bySource: countBy(items, (item) => item.source),
     byServiceCategory: countBy(items, (item) => item.serviceCategory),
+    byProspectStage: countBy(items, (item) => item.prospectStage),
     byRecommendedProfile: countBy(items, (item) => item.recommendedProfile),
   };
 }
@@ -209,6 +224,8 @@ export function getAllowedStatusActions(currentStatus: PipelineStatus): Pipeline
   switch (currentStatus) {
     case 'new':
     case 'scored':
+      return ['needs_research', 'needs_human_review', 'approved_to_contact', 'rejected', 'archived'];
+    case 'needs_research':
       return ['needs_human_review', 'approved_to_contact', 'rejected', 'archived'];
     case 'needs_human_review':
       return ['approved_to_contact', 'rejected', 'archived'];
@@ -216,7 +233,7 @@ export function getAllowedStatusActions(currentStatus: PipelineStatus): Pipeline
     case 'draft_ready':
       return ['sent_manually', 'rejected', 'archived'];
     case 'hot_alert_sent':
-      return ['needs_human_review', 'approved_to_contact', 'rejected', 'archived'];
+      return ['needs_research', 'needs_human_review', 'approved_to_contact', 'rejected', 'archived'];
     case 'sent_manually':
       return ['replied', 'meeting_booked', 'proposal_sent', 'lost', 'archived'];
     case 'replied':
@@ -256,6 +273,7 @@ function toOpportunityListItem(record: StoredLeadRecord, now: string): Opportuni
     title: record.lead.title,
     source: record.lead.source,
     leadType: record.lead.leadType,
+    prospectStage: record.lead.prospectStage ?? inferProspectStage(record.lead.leadType),
     serviceCategory: record.lead.serviceCategory,
     companyName: record.lead.companyName,
     contactName: record.lead.contactName,
@@ -283,6 +301,19 @@ function mergeSavedViewFilters(savedView?: DashboardSavedViewKey, filters: Dashb
   if (!savedView) return filters;
 
   const savedViewFilters: Record<DashboardSavedViewKey, DashboardFilters> = {
+    hot_leads: {
+      qualificationStatuses: ['hot'],
+    },
+    warm_leads: {
+      leadTypes: ['upwork_job', 'linkedin_warm_post', 'linkedin_sales_nav_alert'],
+      qualificationStatuses: ['hot', 'qualified'],
+    },
+    cold_prospects: {
+      leadTypes: ['linkedin_cold_prospect', 'sales_navigator_cold_prospect', 'partner_prospect', 'solution_led_prospect'],
+    },
+    contact_ready: {
+      pipelineStatuses: ['approved_to_contact', 'draft_ready'],
+    },
     hot_upwork_now: {
       sources: ['upwork'],
       qualificationStatuses: ['hot'],
@@ -304,6 +335,9 @@ function mergeSavedViewFilters(savedView?: DashboardSavedViewKey, filters: Dashb
     },
     solution_led_prospects: {
       leadTypes: ['solution_led_prospect'],
+    },
+    needs_research: {
+      pipelineStatuses: ['needs_research'],
     },
     needs_human_review: {
       pipelineStatuses: ['needs_human_review'],
@@ -327,6 +361,7 @@ function matchesFilters(item: OpportunityListItem, record: StoredLeadRecord, fil
   if (filters.pipelineStatuses && !filters.pipelineStatuses.includes(item.pipelineStatus)) return false;
   if (filters.qualificationStatuses && (!item.qualificationStatus || !filters.qualificationStatuses.includes(item.qualificationStatus))) return false;
   if (filters.urgencyStatuses && (!item.urgency || !filters.urgencyStatuses.includes(item.urgency))) return false;
+  if (filters.prospectStages && !filters.prospectStages.includes(item.prospectStage)) return false;
   if (filters.recommendedProfiles && (!item.recommendedProfile || !filters.recommendedProfiles.includes(item.recommendedProfile))) return false;
   if (filters.owners && (!item.owner || !filters.owners.includes(item.owner))) return false;
   if (typeof filters.scoreMin === 'number' && (typeof item.score !== 'number' || item.score < filters.scoreMin)) return false;
@@ -351,6 +386,8 @@ function matchesQuery(record: StoredLeadRecord, query: string): boolean {
     record.lead.contactRole,
     record.lead.country,
     record.lead.budgetSignal,
+    record.lead.leadType,
+    record.lead.prospectStage,
     record.latestEvaluation?.recommendedNextAction,
   ]
     .filter(Boolean)
@@ -396,15 +433,26 @@ function getPriorityScore(item: OpportunityListItem): number {
   if (item.urgency === 'urgent') score += 40;
   if (item.alertEligible) score += 30;
   if (item.overdue) score += 20;
+  if (item.pipelineStatus === 'needs_research') score += 12;
   if (item.pipelineStatus === 'needs_human_review') score += 10;
   return score;
 }
 
 function getSlaMinutes(record: StoredLeadRecord): number {
   if (record.lead.source === 'upwork') return 30;
+  if (record.lead.leadType === 'linkedin_cold_prospect' || record.lead.leadType === 'sales_navigator_cold_prospect') return 24 * 60;
   if (record.lead.source === 'linkedin' || record.lead.source === 'sales_navigator') return 60;
   if (record.lead.leadType === 'partner_prospect') return 3 * 24 * 60;
   return 24 * 60;
+}
+
+function inferProspectStage(leadType: LeadType): ProspectStage {
+  if (leadType === 'upwork_job' || leadType === 'linkedin_warm_post' || leadType === 'linkedin_sales_nav_alert') return 'warm_lead';
+  if (leadType === 'linkedin_cold_prospect' || leadType === 'sales_navigator_cold_prospect') return 'cold_prospect';
+  if (leadType === 'partner_prospect') return 'partner_prospect';
+  if (leadType === 'solution_led_prospect') return 'solution_prospect';
+  if (leadType === 'manual_lead') return 'manual_lead';
+  return 'unknown';
 }
 
 function countBy<T extends string>(

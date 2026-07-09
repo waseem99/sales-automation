@@ -2,7 +2,7 @@
 
 Internal opportunity intelligence platform for Codistan.
 
-The objective is to identify, qualify, score, and route high-value opportunities from Upwork, LinkedIn/Sales Navigator, and future lead sources. The system should prioritize early action for warm opportunities, recommend the right Codistan profile/portfolio, and prepare human-approved outreach or proposal drafts.
+The objective is to identify, qualify, score, and route high-value opportunities and prospects from Upwork, LinkedIn/Sales Navigator, and future lead sources. The system should prioritize early action for warm opportunities, structure research for cold prospects, recommend the right Codistan profile/portfolio, and prepare human-approved outreach or proposal drafts.
 
 ## Current visible MVP
 
@@ -46,6 +46,20 @@ rm -f .data/leads.json
 ```
 
 The reset action only clears the local JSON demo store. It does not touch Gmail, LinkedIn, Upwork, CRM data, or any external system.
+
+## Qualified lead engine
+
+The MVP goal is to find, qualify, score, and route useful Codistan leads/prospects from:
+
+- Upwork warm job opportunities.
+- LinkedIn warm intent signals.
+- LinkedIn/Sales Navigator cold prospects that need manual research.
+
+Read the operating model here:
+
+```text
+docs/QUALIFIED_LEAD_ENGINE.md
+```
 
 ## Production deployment path
 
@@ -145,6 +159,7 @@ Do not build an unsafe scraping or auto-spam tool. Build a compliant sales intel
 - Shared lead/profile/portfolio types.
 - Upwork email/text parser.
 - LinkedIn/Sales Navigator signal parser.
+- Warm lead and cold prospect taxonomy.
 - Lead scoring.
 - Profile routing.
 - Portfolio matching.
@@ -181,12 +196,13 @@ Do not build an unsafe scraping or auto-spam tool. Build a compliant sales intel
 - [`docs/SPRINT_1.md`](docs/SPRINT_1.md) — current sprint implementation summary.
 - [`docs/DEMO_READINESS.md`](docs/DEMO_READINESS.md) — demo verification checklist and screenshot plan.
 - [`docs/PRODUCTION_DEPLOYMENT.md`](docs/PRODUCTION_DEPLOYMENT.md) — containerized real-app deployment architecture.
+- [`docs/QUALIFIED_LEAD_ENGINE.md`](docs/QUALIFIED_LEAD_ENGINE.md) — Upwork/LinkedIn lead and prospect qualification model.
 
 ## Initial MVP focus
 
 1. Upwork opportunity ingestion and scoring.
 2. LinkedIn/Sales Navigator warm signal capture and scoring.
-3. Codistan portfolio/profile matching.
-4. Human-approved proposal/outreach draft generation.
-5. Real-time alerting for high-score opportunities.
-6. Dashboard and status tracking.
+3. LinkedIn/Sales Navigator cold prospect research queue.
+4. Codistan portfolio/profile matching.
+5. Human-approved proposal/outreach draft generation.
+6. Dashboard and BD status tracking.

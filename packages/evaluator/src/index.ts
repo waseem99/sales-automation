@@ -42,7 +42,7 @@ export function evaluateLead(input: EvaluateLeadInput): LeadEvaluation {
   });
 
   const profileRecommendation = recommendProfile(input.lead, score);
-  const recommendedNextAction = getRecommendedNextAction(score, profileRecommendation, portfolioMatches);
+  const recommendedNextAction = getRecommendedNextAction(input.lead, score, profileRecommendation, portfolioMatches);
   const drafts = generateDrafts({
     lead: input.lead,
     score,
@@ -106,6 +106,14 @@ export function detectRedFlags(lead: Lead): RedFlag[] {
     });
   }
 
+  if (text.includes('scrape linkedin') || text.includes('linkedin scraper') || text.includes('auto dm') || text.includes('automated dm')) {
+    redFlags.push({
+      code: 'unsafe_outreach_or_scraping_request',
+      severity: 'critical',
+      reason: 'Lead appears to request unsafe scraping or automated LinkedIn outreach.',
+    });
+  }
+
   if (text.includes('adult') || text.includes('gambling') || text.includes('crypto scam')) {
     redFlags.push({
       code: 'restricted_or_sensitive_industry',
@@ -118,11 +126,12 @@ export function detectRedFlags(lead: Lead): RedFlag[] {
 }
 
 function hasStrongBuyerSignal(lead: Lead): boolean {
-  const text = `${lead.title} ${lead.description} ${lead.contactRole ?? ''}`.toLowerCase();
+  const text = `${lead.title} ${lead.description} ${lead.contactRole ?? ''} ${lead.industry ?? ''} ${lead.rawPayload ? JSON.stringify(lead.rawPayload) : ''}`.toLowerCase();
   return [
     'founder',
     'ceo',
     'cto',
+    'coo',
     'director',
     'head of',
     'vp',
@@ -130,12 +139,17 @@ function hasStrongBuyerSignal(lead: Lead): boolean {
     'verified',
     'enterprise',
     'funded',
+    'recently funded',
+    'hiring',
+    'job opening',
+    'sales navigator',
+    'intent signal',
     'agency',
   ].some((keyword) => text.includes(keyword));
 }
 
 function hasStrongBudgetSignal(lead: Lead): boolean {
-  const text = `${lead.description} ${lead.budgetSignal ?? ''}`.toLowerCase();
+  const text = `${lead.description} ${lead.budgetSignal ?? ''} ${lead.timelineSignal ?? ''}`.toLowerCase();
   return [
     '$5k',
     '$10k',
@@ -147,6 +161,10 @@ function hasStrongBudgetSignal(lead: Lead): boolean {
     'enterprise',
     'recurring',
     'retainer',
+    'funded',
+    'budget approved',
+    'paid pilot',
+    'implementation partner',
   ].some((keyword) => text.includes(keyword));
 }
 
@@ -157,10 +175,11 @@ function hasHighCompetitionSignal(lead: Lead): boolean {
 
 function hasComplianceRisk(lead: Lead): boolean {
   const text = `${lead.title} ${lead.description} ${lead.country ?? ''} ${lead.region ?? ''}`.toLowerCase();
-  return text.includes('us only') || text.includes('u.s. only') || text.includes('account sharing') || text.includes('scrape linkedin');
+  return text.includes('us only') || text.includes('u.s. only') || text.includes('account sharing') || text.includes('scrape linkedin') || text.includes('auto dm');
 }
 
 function getRecommendedNextAction(
+  lead: Lead,
   score: LeadScore,
   profileRecommendation: ProfileRecommendation,
   portfolioMatches: PortfolioMatch[],
@@ -171,6 +190,10 @@ function getRecommendedNextAction(
 
   if (profileRecommendation.primaryProfile === 'needs_human_review') {
     return 'Send to human review before outreach/bidding because profile or compliance risk is unclear.';
+  }
+
+  if (lead.leadType === 'linkedin_cold_prospect' || lead.leadType === 'sales_navigator_cold_prospect') {
+    return `Research account/contact manually, verify business email/LinkedIn context, then prepare human-approved outreach using ${portfolioMatches[0]?.portfolioItem.projectName ?? 'the strongest matched proof'}. Do not auto-DM.`;
   }
 
   if (score.urgency === 'urgent') {

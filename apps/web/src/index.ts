@@ -20,6 +20,7 @@ export interface RenderDashboardPageInput {
 const pipelineStatusOptions: PipelineStatus[] = [
   'new',
   'scored',
+  'needs_research',
   'needs_human_review',
   'approved_to_contact',
   'draft_ready',
@@ -202,6 +203,7 @@ function renderOpportunityCard(
   activePipelineStatus?: PipelineStatus,
 ): string {
   const badges = [
+    item.prospectStage,
     item.qualificationStatus,
     item.urgency,
     item.alertEligible ? 'alert' : undefined,
@@ -227,6 +229,7 @@ function renderLeadDetail(lead: LeadDetailView): string {
     <p>${escapeHtml(lead.description)}</p>
     <dl class="facts">
       <div><dt>Score</dt><dd>${lead.score ?? '—'}</dd></div>
+      <div><dt>Stage</dt><dd>${escapeHtml(lead.prospectStage)}</dd></div>
       <div><dt>Profile</dt><dd>${escapeHtml(lead.recommendedProfile ?? '—')}</dd></div>
       <div><dt>Portfolio Matches</dt><dd>${lead.portfolioMatches.length}</dd></div>
       <div><dt>Drafts</dt><dd>${lead.drafts.length}</dd></div>
@@ -258,6 +261,7 @@ function renderSourceEvidence(lead: LeadDetailView): string {
     <dl class="facts compact-facts">
       <div><dt>Source</dt><dd>${escapeHtml(lead.source)}</dd></div>
       <div><dt>Lead Type</dt><dd>${escapeHtml(lead.leadType)}</dd></div>
+      <div><dt>Stage</dt><dd>${escapeHtml(lead.prospectStage)}</dd></div>
       <div><dt>Captured</dt><dd>${escapeHtml(lead.capturedAt)}</dd></div>
       <div><dt>Budget</dt><dd>${escapeHtml(lead.budgetSignal ?? '—')}</dd></div>
       <div><dt>Timeline</dt><dd>${escapeHtml(lead.timelineSignal ?? '—')}</dd></div>
