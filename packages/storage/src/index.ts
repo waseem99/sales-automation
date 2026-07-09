@@ -149,7 +149,10 @@ export class InMemoryLeadRepository implements LeadRepository {
       followUpNote: input.followUpNote,
       updatedAt: new Date().toISOString(),
     };
-    this.addAudit(record, 'follow_up_scheduled', actor, `Follow-up scheduled for ${input.nextFollowUpAt}.`, input);
+    this.addAudit(record, 'follow_up_scheduled', actor, `Follow-up scheduled for ${input.nextFollowUpAt}.`, {
+      nextFollowUpAt: input.nextFollowUpAt,
+      followUpNote: input.followUpNote,
+    });
     this.afterMutation();
     return record;
   }
@@ -163,7 +166,11 @@ export class InMemoryLeadRepository implements LeadRepository {
       outcomeRecordedAt: input.outcomeRecordedAt ?? new Date().toISOString(),
       updatedAt: new Date().toISOString(),
     };
-    this.addAudit(record, 'outcome_recorded', actor, `Outcome recorded as ${input.outcomeStatus}.`, input);
+    this.addAudit(record, 'outcome_recorded', actor, `Outcome recorded as ${input.outcomeStatus}.`, {
+      outcomeStatus: input.outcomeStatus,
+      outcomeReason: input.outcomeReason,
+      outcomeRecordedAt: input.outcomeRecordedAt,
+    });
     this.afterMutation();
     return record;
   }
