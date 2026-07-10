@@ -9,7 +9,8 @@
     "build": "tsc -p tsconfig.json",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "lint": "tsc -p tsconfig.json --noEmit",
-    "test": "tsx src/index.test.ts"
+    "test": "tsx src/index.test.ts && tsx src/gmail.test.ts",
+    "ingest:gmail": "node dist/run-gmail.js"
   },
   "dependencies": {
     "@sales-automation/ingestion": "workspace:*",
