@@ -213,10 +213,14 @@ function getRecommendedNextAction(
   const profileInstruction = routedProfile
     ? `${routedProfile.label} (${routedProfile.url})`
     : profileRecommendation.primaryProfile;
+  const rateRange = routedProfile?.targetHourlyRateRangeUsd;
+  const rateInstruction = rateRange
+    ? ` Target hourly rate: $${rateRange.min}–$${rateRange.max}/hour; do not revert to the obsolete lower profile rate.`
+    : '';
 
   if (profileRecommendation.primaryProfile === 'needs_human_review') {
     if (routedProfile) {
-      return `Human review required before bidding. Candidate profile: ${profileInstruction}. ${routedProfile.selectionReason} Verify profile ownership, eligibility, current public positioning, and the job restrictions first.`;
+      return `Human review required before bidding. Candidate profile: ${profileInstruction}. ${routedProfile.selectionReason} Verify profile ownership, eligibility, current public positioning, and the job restrictions first.${rateInstruction}`;
     }
     return 'Send to human review before outreach/bidding because profile, scope, or compliance risk is unclear.';
   }
@@ -226,11 +230,11 @@ function getRecommendedNextAction(
   }
 
   if (score.urgency === 'urgent') {
-    return `Review immediately and bid manually through ${profileInstruction}. Include ${portfolioMatches[0]?.portfolioItem.projectName ?? 'the strongest available proof'} if approved.`;
+    return `Review immediately and bid manually through ${profileInstruction}.${rateInstruction} Include ${portfolioMatches[0]?.portfolioItem.projectName ?? 'the strongest available proof'} if approved.`;
   }
 
   if (score.status === 'qualified') {
-    return `Add to the qualified queue, use ${profileInstruction}, and prepare a tailored draft with matched proof.`;
+    return `Add to the qualified queue, use ${profileInstruction}.${rateInstruction} Prepare a tailored draft with matched proof.`;
   }
 
   return 'Add to nurture/watch queue. Do not prioritize unless a stronger buying signal appears.';

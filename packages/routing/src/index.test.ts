@@ -41,6 +41,23 @@ function score(total: number): LeadScore {
 assert.equal(upworkProfiles.length, 4);
 assert.ok(upworkProfiles.every((profile) => profile.url.startsWith('https://www.upwork.com/freelancers/')));
 
+const waseemProfile = upworkProfiles.find((profile) => profile.key === 'waseem_ai_ml');
+assert.ok(waseemProfile);
+assert.equal(waseemProfile.publicJobSuccessScore, 100);
+assert.equal(waseemProfile.publicRateUsd, 35);
+assert.deepEqual(waseemProfile.targetHourlyRateRangeUsd, { min: 35, max: 50 });
+
+const roshanaProfile = upworkProfiles.find((profile) => profile.key === 'roshana_3d_animation');
+assert.ok(roshanaProfile);
+assert.equal(roshanaProfile.publicJobSuccessScore, 91);
+assert.equal(roshanaProfile.minimumLeadScore, 76);
+
+const nadirProfile = upworkProfiles.find((profile) => profile.key === 'nadir_unity_ar');
+assert.ok(nadirProfile);
+assert.equal(nadirProfile.publicJobSuccessScore, 100);
+assert.equal(nadirProfile.status, 'active');
+assert.equal(nadirProfile.minimumLeadScore, 76);
+
 const rag = recommendProfile(lead({
   id: 'rag',
   title: 'Build a secure RAG knowledge assistant',
@@ -49,6 +66,7 @@ const rag = recommendProfile(lead({
 }), score(88));
 assert.equal(rag.primaryProfile, 'waseem_ai_founder_profile');
 assert.equal(rag.upworkProfile?.key, 'waseem_ai_ml');
+assert.deepEqual(rag.upworkProfile?.targetHourlyRateRangeUsd, { min: 35, max: 50 });
 assert.equal(rag.confidence, 'high');
 
 const founderAi = recommendProfile(lead({
@@ -97,6 +115,7 @@ const ar = recommendProfile(lead({
 }), score(90));
 assert.equal(ar.primaryProfile, 'ar_3d_animation_profile');
 assert.equal(ar.upworkProfile?.key, 'nadir_unity_ar');
+assert.equal(ar.upworkProfile?.status, 'active');
 
 const weakAr = recommendProfile(lead({
   id: 'weak-ar',
@@ -106,7 +125,7 @@ const weakAr = recommendProfile(lead({
 }), score(75));
 assert.equal(weakAr.primaryProfile, 'needs_human_review');
 assert.equal(weakAr.upworkProfile?.key, 'nadir_unity_ar');
-assert.ok(weakAr.risks.some((risk) => risk.includes('82')));
+assert.ok(weakAr.risks.some((risk) => risk.includes('76')));
 
 const multiplayer = recommendProfile(lead({
   id: 'multiplayer',
