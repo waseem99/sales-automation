@@ -98,11 +98,11 @@ export function detectRedFlags(lead: Lead): RedFlag[] {
     });
   }
 
-  if (text.includes('us only') || text.includes('u.s. only') || text.includes('united states only')) {
+  if (hasProfileEligibilityLanguage(text)) {
     redFlags.push({
       code: 'profile_compliance_review_required',
       severity: 'medium',
-      reason: 'US-only language requires human review before selecting or using a profile.',
+      reason: 'Location, citizenship, clearance, onsite, or employment language requires human verification before selecting a profile.',
     });
   }
 
@@ -175,7 +175,28 @@ function hasHighCompetitionSignal(lead: Lead): boolean {
 
 function hasComplianceRisk(lead: Lead): boolean {
   const text = `${lead.title} ${lead.description} ${lead.country ?? ''} ${lead.region ?? ''}`.toLowerCase();
-  return text.includes('us only') || text.includes('u.s. only') || text.includes('account sharing') || text.includes('scrape linkedin') || text.includes('auto dm');
+  return hasProfileEligibilityLanguage(text)
+    || text.includes('account sharing')
+    || text.includes('scrape linkedin')
+    || text.includes('auto dm');
+}
+
+function hasProfileEligibilityLanguage(text: string): boolean {
+  return [
+    'us only',
+    'u.s. only',
+    'united states only',
+    'us-based only',
+    'us based only',
+    'must be in the us',
+    'us citizen',
+    'u.s. citizen',
+    'security clearance',
+    'onsite only',
+    'on-site only',
+    'w2 only',
+    'w-2 only',
+  ].some((phrase) => text.includes(phrase));
 }
 
 function getRecommendedNextAction(
@@ -188,8 +209,16 @@ function getRecommendedNextAction(
     return 'Reject or archive. Do not spend BD time unless a founder manually overrides.';
   }
 
+  const routedProfile = profileRecommendation.upworkProfile;
+  const profileInstruction = routedProfile
+    ? `${routedProfile.label} (${routedProfile.url})`
+    : profileRecommendation.primaryProfile;
+
   if (profileRecommendation.primaryProfile === 'needs_human_review') {
-    return 'Send to human review before outreach/bidding because profile or compliance risk is unclear.';
+    if (routedProfile) {
+      return `Human review required before bidding. Candidate profile: ${profileInstruction}. ${routedProfile.selectionReason} Verify profile ownership, eligibility, current public positioning, and the job restrictions first.`;
+    }
+    return 'Send to human review before outreach/bidding because profile, scope, or compliance risk is unclear.';
   }
 
   if (lead.leadType === 'linkedin_cold_prospect' || lead.leadType === 'sales_navigator_cold_prospect') {
@@ -197,12 +226,12 @@ function getRecommendedNextAction(
   }
 
   if (score.urgency === 'urgent') {
-    return `Review immediately, use ${profileRecommendation.primaryProfile}, and include ${portfolioMatches[0]?.portfolioItem.projectName ?? 'the strongest available proof'} if approved.`;
+    return `Review immediately and bid manually through ${profileInstruction}. Include ${portfolioMatches[0]?.portfolioItem.projectName ?? 'the strongest available proof'} if approved.`;
   }
 
   if (score.status === 'qualified') {
-    return `Add to qualified queue, use ${profileRecommendation.primaryProfile}, and prepare a tailored draft with matched proof.`;
+    return `Add to the qualified queue, use ${profileInstruction}, and prepare a tailored draft with matched proof.`;
   }
 
-  return 'Add to nurture/watch queue. Do not prioritize unless new buying signal appears.';
+  return 'Add to nurture/watch queue. Do not prioritize unless a stronger buying signal appears.';
 }
