@@ -8,6 +8,11 @@ export type UpworkProfileKey =
 
 export type UpworkProfileStatus = 'active' | 'selective' | 'verification_required';
 
+export interface HourlyRateRangeUsd {
+  min: number;
+  max: number;
+}
+
 export interface UpworkProfileRoute {
   key: UpworkProfileKey;
   label: string;
@@ -16,6 +21,7 @@ export interface UpworkProfileRoute {
   location?: string;
   publicJobSuccessScore?: number;
   publicRateUsd?: number;
+  targetHourlyRateRangeUsd?: HourlyRateRangeUsd;
   currentPositioning: string;
   serviceCategories: ServiceCategory[];
   preferredKeywords: string[];
@@ -33,6 +39,7 @@ export interface SelectedUpworkProfile {
   requiresHumanVerification: boolean;
   selectionReason: string;
   minimumLeadScore: number;
+  targetHourlyRateRangeUsd?: HourlyRateRangeUsd;
   routingNotes: string[];
 }
 
@@ -44,7 +51,8 @@ export const upworkProfiles: UpworkProfileRoute[] = [
     status: 'active',
     location: 'Islamabad, Pakistan',
     publicJobSuccessScore: 100,
-    publicRateUsd: 15,
+    publicRateUsd: 35,
+    targetHourlyRateRangeUsd: { min: 35, max: 50 },
     currentPositioning: 'AI/ML, LLMs, Generative AI, Custom GPTs, RAG, voice AI, computer vision, and production AI systems.',
     serviceCategories: ['ai_automation', 'rag_document_intelligence', 'ai_saas_mvp', 'nextjs_python_app', 'voice_ai_agent', 'enterprise_systems'],
     preferredKeywords: ['rag', 'llm', 'generative ai', 'custom gpt', 'chatbot', 'machine learning', 'deep learning', 'computer vision', 'fine tuning', 'voice ai', 'langchain', 'llamaindex', 'document intelligence', 'knowledge base', 'ai automation', 'ai strategy', 'technical partner', 'fractional cto', 'solution architecture', 'technical discovery'],
@@ -52,6 +60,8 @@ export const upworkProfiles: UpworkProfileRoute[] = [
     minimumLeadScore: 70,
     routingNotes: [
       'Default first choice for genuine AI/ML/RAG/LLM opportunities.',
+      'Use a $35/hour floor and bid within $35–$50/hour based on complexity, urgency, and advisory responsibility.',
+      'Use $35–$38/hour for clear execution-heavy or longer-term work, $40–$45/hour for strong RAG/LLM implementation, and $45–$50/hour for architecture, enterprise, discovery, or urgent work.',
       'Use exact AI proof rather than a generic development-team pitch.',
       'Avoid basic websites or loosely related jobs that merely mention AI.',
     ],
@@ -79,15 +89,16 @@ export const upworkProfiles: UpworkProfileRoute[] = [
     url: 'https://www.upwork.com/freelancers/~01323536ddaffbbd34',
     status: 'selective',
     location: 'Surrey, Canada',
-    publicJobSuccessScore: 88,
+    publicJobSuccessScore: 91,
     publicRateUsd: 25,
     currentPositioning: '2D/3D modeling and animation, character design, architectural/product visualization, VFX, CGI, and supporting AR/VR work.',
     serviceCategories: ['ar_3d_unity_unreal'],
     preferredKeywords: ['3d modeling', '3d modelling', '3d animation', '2d animation', 'character design', 'architectural visualization', 'architectural rendering', 'interior rendering', 'product visualization', 'photorealistic render', 'vfx', 'cgi', 'maya', 'blender', '3ds max', 'lumion', 'after effects'],
     avoidKeywords: ['multiplayer game', 'multiplayer web game', 'full stack game', 'web game developer'],
-    minimumLeadScore: 78,
+    minimumLeadScore: 76,
     routingNotes: [
       'Best for modeling, rendering, character work, product visualization, animation, VFX, and architectural visualization.',
+      'The 91% JSS supports broader exact-match bidding, while production-risk and unclear revision scopes still require selectivity.',
       'Avoid coding-heavy multiplayer or browser-game work without manual approval.',
       'Define references, quality level, revisions, and approval checkpoints before bidding.',
     ],
@@ -96,17 +107,17 @@ export const upworkProfiles: UpworkProfileRoute[] = [
     key: 'nadir_unity_ar',
     label: 'Nadir — Unity / Unreal / AR / VR / WebAR',
     url: 'https://www.upwork.com/freelancers/~0116e2d98cb771724e',
-    status: 'selective',
+    status: 'active',
     location: 'Lahore, Pakistan',
-    publicJobSuccessScore: 80,
+    publicJobSuccessScore: 100,
     publicRateUsd: 20,
     currentPositioning: 'Unity/Unreal, AR/VR, WebAR, mobile immersive applications, filters, and interactive 3D experiences.',
     serviceCategories: ['ar_3d_unity_unreal'],
     preferredKeywords: ['unity', 'unreal engine', 'augmented reality', 'virtual reality', 'webar', 'web ar', 'arkit', 'arcore', 'meta quest', 'oculus', 'vision pro', 'effect house', 'tiktok filter', 'gps ar', 'interactive 3d'],
     avoidKeywords: ['long term animator', 'kids series', 'multiplayer game', 'multiplayer web game', 'multiplayer arena game', 'generic game development'],
-    minimumLeadScore: 82,
+    minimumLeadScore: 76,
     routingNotes: [
-      'Use only for strong exact-match Unity/Unreal/AR/VR/WebAR opportunities.',
+      'Actively pursue strong exact-match Unity/Unreal/AR/VR/WebAR opportunities; the profile currently carries a 100% JSS.',
       'Avoid generic animation retainers and broad multiplayer-game builds.',
       'Require clear scope, realistic budget, and an exact portfolio match.',
     ],
@@ -128,6 +139,9 @@ export function selectUpworkProfile(profile: UpworkProfileRoute, selectionReason
     requiresHumanVerification: profile.status === 'verification_required',
     selectionReason,
     minimumLeadScore: profile.minimumLeadScore,
+    targetHourlyRateRangeUsd: profile.targetHourlyRateRangeUsd
+      ? { ...profile.targetHourlyRateRangeUsd }
+      : undefined,
     routingNotes: [...profile.routingNotes],
   };
 }
