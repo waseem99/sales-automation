@@ -9,10 +9,12 @@
     "build": "tsc -p tsconfig.json",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "lint": "tsc -p tsconfig.json --noEmit",
-    "test": "tsx src/index.test.ts && tsx src/gmail.test.ts",
-    "ingest:gmail": "node dist/run-gmail.js"
+    "test": "tsx src/index.test.ts && tsx src/gmail.test.ts && tsx src/run-gmail-worker.test.ts",
+    "ingest:gmail": "node dist/run-gmail.js",
+    "worker:gmail": "node dist/run-gmail-worker.js"
   },
   "dependencies": {
+    "@sales-automation/alerts": "workspace:*",
     "@sales-automation/ingestion": "workspace:*",
     "@sales-automation/shared": "workspace:*",
     "@sales-automation/storage": "workspace:*"
