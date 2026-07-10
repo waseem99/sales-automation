@@ -18,6 +18,7 @@ export interface AlertPlan {
   payload: {
     leadId: string;
     source: Lead['source'];
+    sourceUrl?: string;
     leadType: Lead['leadType'];
     score: number;
     urgency: LeadScore['urgency'];
@@ -56,9 +57,22 @@ export interface AlertDeliveryAdapter {
   send(plan: AlertPlan): AlertDeliveryRecord;
 }
 
+export interface AsyncAlertDeliveryAdapter {
+  channel: AlertChannel;
+  send(plan: AlertPlan): AlertDeliveryRecord | Promise<AlertDeliveryRecord>;
+}
+
 export interface DeliverAlertInput {
   plan: AlertPlan;
   adapters?: Partial<Record<AlertChannel, AlertDeliveryAdapter>>;
+  previouslySentKeys?: ReadonlySet<string>;
+  dryRun?: boolean;
+  deliveredAt?: string;
+}
+
+export interface DeliverAlertAsyncInput {
+  plan: AlertPlan;
+  adapters?: Partial<Record<AlertChannel, AsyncAlertDeliveryAdapter>>;
   previouslySentKeys?: ReadonlySet<string>;
   dryRun?: boolean;
   deliveredAt?: string;
@@ -69,6 +83,43 @@ export interface DeliverAlertResult {
   dedupeKey: string;
   records: AlertDeliveryRecord[];
   skippedReason?: string;
+}
+
+export interface SlackWebhookFetchResponse {
+  ok: boolean;
+  status: number;
+  text(): Promise<string>;
+  headers?: {
+    get(name: string): string | null;
+  };
+}
+
+export type SlackWebhookFetch = (
+  input: string,
+  init: {
+    method: 'POST';
+    headers: Record<string, string>;
+    body: string;
+  },
+) => Promise<SlackWebhookFetchResponse>;
+
+export interface SlackWebhookAlertAdapterOptions {
+  webhookUrl: string;
+  dashboardBaseUrl?: string;
+  fetchImpl?: SlackWebhookFetch;
+  maxAttempts?: number;
+  retryDelayMs?: number;
+  sleep?: (milliseconds: number) => Promise<void>;
+  now?: () => string;
+}
+
+export interface SlackWebhookPayload {
+  text: string;
+  blocks: Array<
+    | { type: 'header'; text: { type: 'plain_text'; text: string } }
+    | { type: 'section'; text: { type: 'mrkdwn'; text: string } }
+    | { type: 'actions'; elements: Array<{ type: 'button'; text: { type: 'plain_text'; text: string }; url: string }> }
+  >;
 }
 
 export function buildAlertPlan(input: BuildAlertPlanInput): AlertPlan {
@@ -97,6 +148,7 @@ export function buildAlertPlan(input: BuildAlertPlanInput): AlertPlan {
     payload: {
       leadId: input.lead.id,
       source: input.lead.source,
+      sourceUrl: input.lead.sourceUrl,
       leadType: input.lead.leadType,
       score: input.score.total,
       urgency: input.score.urgency,
@@ -117,24 +169,8 @@ export function isDuplicateAlert(dedupeKey: string, previouslySentKeys: Readonly
 
 export function deliverAlert(input: DeliverAlertInput): DeliverAlertResult {
   const deliveredAt = input.deliveredAt ?? new Date().toISOString();
-
-  if (!input.plan.shouldAlert) {
-    return {
-      attempted: false,
-      dedupeKey: input.plan.dedupeKey,
-      records: [],
-      skippedReason: 'Alert plan is not eligible for delivery.',
-    };
-  }
-
-  if (input.previouslySentKeys && isDuplicateAlert(input.plan.dedupeKey, input.previouslySentKeys)) {
-    return {
-      attempted: false,
-      dedupeKey: input.plan.dedupeKey,
-      records: [],
-      skippedReason: 'Alert was skipped because the dedupe key was already sent.',
-    };
-  }
+  const skipped = getSkippedDelivery(input.plan, input.previouslySentKeys);
+  if (skipped) return skipped;
 
   const records = input.plan.channels.map((channel) => {
     const adapter = input.adapters?.[channel] ?? createDryRunAlertAdapter(channel, deliveredAt);
@@ -145,16 +181,34 @@ export function deliverAlert(input: DeliverAlertInput): DeliverAlertResult {
     try {
       return adapter.send(input.plan);
     } catch (error) {
-      return {
-        channel,
-        status: 'failed',
-        dedupeKey: input.plan.dedupeKey,
-        message: 'Alert delivery failed.',
-        deliveredAt,
-        error: (error as Error).message,
-      } satisfies AlertDeliveryRecord;
+      return createFailedDeliveryRecord(channel, input.plan, deliveredAt, error);
     }
   });
+
+  return {
+    attempted: records.length > 0,
+    dedupeKey: input.plan.dedupeKey,
+    records,
+  };
+}
+
+export async function deliverAlertAsync(input: DeliverAlertAsyncInput): Promise<DeliverAlertResult> {
+  const deliveredAt = input.deliveredAt ?? new Date().toISOString();
+  const skipped = getSkippedDelivery(input.plan, input.previouslySentKeys);
+  if (skipped) return skipped;
+
+  const records = await Promise.all(input.plan.channels.map(async (channel) => {
+    const adapter = input.adapters?.[channel] ?? createDryRunAlertAdapter(channel, deliveredAt);
+    if (input.dryRun !== false) {
+      return createDryRunDeliveryRecord(channel, input.plan, deliveredAt);
+    }
+
+    try {
+      return await adapter.send(input.plan);
+    } catch (error) {
+      return createFailedDeliveryRecord(channel, input.plan, deliveredAt, error);
+    }
+  }));
 
   return {
     attempted: records.length > 0,
@@ -211,6 +265,127 @@ export function createExternalChannelPlaceholderAdapter(channel: Exclude<AlertCh
   };
 }
 
+export function createSlackWebhookAlertAdapter(options: SlackWebhookAlertAdapterOptions): AsyncAlertDeliveryAdapter {
+  const webhookUrl = validateSlackWebhookUrl(options.webhookUrl);
+  const fetchImpl = options.fetchImpl ?? (globalThis.fetch as unknown as SlackWebhookFetch | undefined);
+  if (!fetchImpl) {
+    throw new Error('Global fetch is unavailable. Supply fetchImpl to createSlackWebhookAlertAdapter.');
+  }
+
+  const maxAttempts = normalizePositiveInteger(options.maxAttempts, 3, 'maxAttempts');
+  const retryDelayMs = normalizeNonNegativeInteger(options.retryDelayMs, 1_000, 'retryDelayMs');
+  const sleep = options.sleep ?? ((milliseconds) => new Promise((resolve) => setTimeout(resolve, milliseconds)));
+  const now = options.now ?? (() => new Date().toISOString());
+
+  return {
+    channel: 'slack',
+    async send(plan) {
+      const payload = formatSlackWebhookPayload(plan, options.dashboardBaseUrl);
+      let lastError = 'Slack webhook delivery failed.';
+
+      for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+        const response = await fetchImpl(webhookUrl, {
+          method: 'POST',
+          headers: { 'content-type': 'application/json; charset=utf-8' },
+          body: JSON.stringify(payload),
+        });
+        const responseText = await response.text();
+
+        if (response.ok) {
+          return {
+            channel: 'slack',
+            status: 'sent',
+            dedupeKey: plan.dedupeKey,
+            message: 'Slack alert sent.',
+            deliveredAt: now(),
+            providerMessageId: `slack:${plan.dedupeKey}`,
+          };
+        }
+
+        lastError = `Slack webhook returned HTTP ${response.status}${responseText ? `: ${responseText.slice(0, 300)}` : ''}`;
+        const retryable = response.status === 429 || response.status >= 500;
+        if (!retryable || attempt === maxAttempts) break;
+
+        const retryAfterSeconds = Number.parseInt(response.headers?.get('retry-after') ?? '', 10);
+        const delay = Number.isFinite(retryAfterSeconds) && retryAfterSeconds > 0
+          ? retryAfterSeconds * 1_000
+          : retryDelayMs * attempt;
+        await sleep(delay);
+      }
+
+      throw new Error(lastError);
+    },
+  };
+}
+
+export function formatSlackWebhookPayload(plan: AlertPlan, dashboardBaseUrl?: string): SlackWebhookPayload {
+  const sourceUrl = safeHttpUrl(plan.payload.sourceUrl);
+  const dashboardUrl = dashboardBaseUrl
+    ? safeHttpUrl(`${dashboardBaseUrl.replace(/\/$/, '')}/?leadId=${encodeURIComponent(plan.payload.leadId)}`)
+    : undefined;
+  const headline = `${priorityIcon(plan.priority)} ${truncate(plan.title, 140)}`;
+  const details = [
+    `*Score:* ${plan.payload.score}/100 · ${escapeSlack(plan.payload.status)} · ${escapeSlack(plan.payload.urgency)}`,
+    `*Source:* ${escapeSlack(plan.payload.source)} / ${escapeSlack(plan.payload.leadType)}`,
+    `*Profile:* ${escapeSlack(plan.payload.recommendedProfile)}`,
+    `*Proof matches:* ${plan.payload.portfolioItemIds.length}`,
+    `*Red flags:* ${plan.payload.redFlags.length > 0 ? plan.payload.redFlags.map(escapeSlack).join(', ') : 'None'}`,
+    `*Next:* ${escapeSlack(truncate(plan.payload.nextAction, 700))}`,
+  ].join('\n');
+
+  const blocks: SlackWebhookPayload['blocks'] = [
+    { type: 'header', text: { type: 'plain_text', text: headline } },
+    { type: 'section', text: { type: 'mrkdwn', text: details } },
+  ];
+  const actionElements: Array<{ type: 'button'; text: { type: 'plain_text'; text: string }; url: string }> = [];
+  if (sourceUrl) actionElements.push({ type: 'button', text: { type: 'plain_text', text: 'Open source' }, url: sourceUrl });
+  if (dashboardUrl) actionElements.push({ type: 'button', text: { type: 'plain_text', text: 'Open Lead Desk' }, url: dashboardUrl });
+  if (actionElements.length > 0) blocks.push({ type: 'actions', elements: actionElements });
+
+  return {
+    text: `${plan.title} — score ${plan.payload.score}/100. ${plan.payload.nextAction}`,
+    blocks,
+  };
+}
+
+function getSkippedDelivery(plan: AlertPlan, previouslySentKeys?: ReadonlySet<string>): DeliverAlertResult | undefined {
+  if (!plan.shouldAlert) {
+    return {
+      attempted: false,
+      dedupeKey: plan.dedupeKey,
+      records: [],
+      skippedReason: 'Alert plan is not eligible for delivery.',
+    };
+  }
+
+  if (previouslySentKeys && isDuplicateAlert(plan.dedupeKey, previouslySentKeys)) {
+    return {
+      attempted: false,
+      dedupeKey: plan.dedupeKey,
+      records: [],
+      skippedReason: 'Alert was skipped because the dedupe key was already sent.',
+    };
+  }
+
+  return undefined;
+}
+
+function createFailedDeliveryRecord(
+  channel: AlertChannel,
+  plan: AlertPlan,
+  deliveredAt: string,
+  error: unknown,
+): AlertDeliveryRecord {
+  return {
+    channel,
+    status: 'failed',
+    dedupeKey: plan.dedupeKey,
+    message: 'Alert delivery failed.',
+    deliveredAt,
+    error: error instanceof Error ? error.message : String(error),
+  };
+}
+
 function createDryRunDeliveryRecord(channel: AlertChannel, plan: AlertPlan, deliveredAt: string): AlertDeliveryRecord {
   return {
     channel,
@@ -257,4 +432,55 @@ function getAlertReason(input: BuildAlertPlanInput): string {
   }
 
   return 'Lead meets configured alert criteria.';
+}
+
+function validateSlackWebhookUrl(value: string): string {
+  const normalized = value.trim();
+  if (!normalized) throw new Error('Slack webhook URL is required.');
+  let parsed: URL;
+  try {
+    parsed = new URL(normalized);
+  } catch {
+    throw new Error('Slack webhook URL is invalid.');
+  }
+  if (parsed.protocol !== 'https:') {
+    throw new Error('Slack webhook URL must use HTTPS.');
+  }
+  return parsed.toString();
+}
+
+function safeHttpUrl(value?: string): string | undefined {
+  if (!value) return undefined;
+  try {
+    const parsed = new URL(value);
+    return parsed.protocol === 'https:' || parsed.protocol === 'http:' ? parsed.toString() : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+function normalizePositiveInteger(value: number | undefined, fallback: number, label: string): number {
+  if (value === undefined) return fallback;
+  if (!Number.isInteger(value) || value <= 0) throw new Error(`${label} must be a positive integer.`);
+  return value;
+}
+
+function normalizeNonNegativeInteger(value: number | undefined, fallback: number, label: string): number {
+  if (value === undefined) return fallback;
+  if (!Number.isInteger(value) || value < 0) throw new Error(`${label} must be a non-negative integer.`);
+  return value;
+}
+
+function priorityIcon(priority: AlertPriority): string {
+  if (priority === 'urgent') return '🚨';
+  if (priority === 'normal') return '🎯';
+  return 'ℹ️';
+}
+
+function escapeSlack(value: string): string {
+  return value.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
+
+function truncate(value: string, maxLength: number): string {
+  return value.length <= maxLength ? value : `${value.slice(0, Math.max(0, maxLength - 1))}…`;
 }
