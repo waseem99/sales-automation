@@ -12,6 +12,7 @@
     "deploy:check": "pnpm install --no-frozen-lockfile && pnpm build",
     "evaluate:sample": "pnpm build && pnpm --filter @sales-automation/cli evaluate:sample",
     "evaluate:json": "pnpm build && pnpm --filter @sales-automation/cli evaluate:json",
+    "authorize:gmail": "pnpm build && pnpm --filter @sales-automation/email-sources authorize:gmail",
     "ingest:gmail": "pnpm build && pnpm --filter @sales-automation/email-sources ingest:gmail",
     "worker:gmail": "pnpm build && pnpm --filter @sales-automation/email-sources worker:gmail",
     "lint": "pnpm build && pnpm -r --filter \"@sales-automation/*\" --sort lint",
