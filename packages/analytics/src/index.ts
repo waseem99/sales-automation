@@ -1,5 +1,6 @@
 import type {
   CodistanProfile,
+  LeadOutcomeStatus,
   LeadSource,
   PipelineStatus,
   ServiceCategory,
@@ -77,6 +78,27 @@ export interface AnalyticsReport {
   calibration: CalibrationReport;
 }
 
+type OutcomeReasonType = 'win' | 'loss' | 'rejection';
+type TrackedFunnelStage = 'approved_to_contact' | 'sent_manually' | 'replied' | 'meeting_booked' | 'proposal_sent';
+
+const knownPipelineStatuses = new Set<PipelineStatus>([
+  'new',
+  'scored',
+  'needs_research',
+  'hot_alert_sent',
+  'needs_human_review',
+  'approved_to_contact',
+  'draft_ready',
+  'sent_manually',
+  'replied',
+  'meeting_booked',
+  'proposal_sent',
+  'won',
+  'lost',
+  'rejected',
+  'archived',
+]);
+
 export function buildAnalyticsReport(
   records: StoredLeadRecord[],
   options: AnalyticsFilters = {},
@@ -107,14 +129,14 @@ export function buildFunnelMetrics(records: StoredLeadRecord[]): FunnelMetrics {
     scored: records.filter((record) => Boolean(record.latestEvaluation)).length,
     hot: records.filter((record) => record.latestEvaluation?.score.status === 'hot').length,
     qualified: records.filter((record) => record.latestEvaluation?.score.status === 'qualified').length,
-    humanApproved: records.filter((record) => hasReached(record.lead.pipelineStatus, 'approved_to_contact')).length,
-    outreachSent: records.filter((record) => hasReached(record.lead.pipelineStatus, 'sent_manually')).length,
-    replies: records.filter((record) => hasReached(record.lead.pipelineStatus, 'replied')).length,
-    meetings: records.filter((record) => hasReached(record.lead.pipelineStatus, 'meeting_booked')).length,
-    proposals: records.filter((record) => hasReached(record.lead.pipelineStatus, 'proposal_sent')).length,
-    won: records.filter((record) => record.lead.pipelineStatus === 'won').length,
-    lost: records.filter((record) => record.lead.pipelineStatus === 'lost').length,
-    rejected: records.filter((record) => record.lead.pipelineStatus === 'rejected').length,
+    humanApproved: records.filter((record) => hasReachedStage(record, 'approved_to_contact')).length,
+    outreachSent: records.filter((record) => hasReachedStage(record, 'sent_manually')).length,
+    replies: records.filter((record) => hasReachedStage(record, 'replied')).length,
+    meetings: records.filter((record) => hasReachedStage(record, 'meeting_booked')).length,
+    proposals: records.filter((record) => hasReachedStage(record, 'proposal_sent')).length,
+    won: records.filter(isWonRecord).length,
+    lost: records.filter(isLostRecord).length,
+    rejected: records.filter(isRejectedRecord).length,
     archived: records.filter((record) => record.lead.pipelineStatus === 'archived').length,
   };
 }
@@ -132,9 +154,9 @@ export function buildOutcomeMetrics(funnel: FunnelMetrics): OutcomeMetrics {
 
 export function buildCalibrationReport(records: StoredLeadRecord[]): CalibrationReport {
   const scoredRecords = records.filter((record) => typeof record.latestEvaluation?.score.total === 'number');
-  const wonRecords = scoredRecords.filter((record) => record.lead.pipelineStatus === 'won');
-  const lostRecords = scoredRecords.filter((record) => record.lead.pipelineStatus === 'lost');
-  const rejectedRecords = scoredRecords.filter((record) => record.lead.pipelineStatus === 'rejected');
+  const wonRecords = scoredRecords.filter(isWonRecord);
+  const lostRecords = scoredRecords.filter(isLostRecord);
+  const rejectedRecords = scoredRecords.filter(isRejectedRecord);
 
   return {
     averageScore: averageScore(scoredRecords),
@@ -143,19 +165,23 @@ export function buildCalibrationReport(records: StoredLeadRecord[]): Calibration
     averageRejectedScore: averageScore(rejectedRecords),
     falsePositiveLeadIds: scoredRecords
       .filter((record) => (record.latestEvaluation?.score.total ?? 0) >= 80)
-      .filter((record) => record.lead.pipelineStatus === 'lost' || record.lead.pipelineStatus === 'rejected')
+      .filter((record) => isLostRecord(record) || isRejectedRecord(record))
       .map((record) => record.lead.id),
     falseNegativeLeadIds: scoredRecords
       .filter((record) => (record.latestEvaluation?.score.total ?? 0) < 65)
-      .filter((record) => record.lead.pipelineStatus === 'won')
+      .filter(isWonRecord)
       .map((record) => record.lead.id),
     scoreBands: buildScoreBands(scoredRecords),
   };
 }
 
+/**
+ * Backward-compatible helper for older callers. New code should prefer
+ * LeadRepository.recordOutcome so persistence hooks are executed.
+ */
 export function recordOutcomeReason(
   record: StoredLeadRecord,
-  type: 'win' | 'loss' | 'rejection',
+  type: OutcomeReasonType,
   reason: string,
   actor = 'analytics',
 ): StoredLeadRecord {
@@ -164,15 +190,25 @@ export function recordOutcomeReason(
     throw new Error('Outcome reason is required.');
   }
 
+  const outcomeStatus = legacyOutcomeStatus(type);
+  const recordedAt = new Date().toISOString();
+  record.lead = {
+    ...record.lead,
+    outcomeStatus,
+    outcomeReason: normalizedReason,
+    outcomeRecordedAt: recordedAt,
+    updatedAt: recordedAt,
+  };
   record.auditLog.push({
     id: `${record.lead.id}-${record.auditLog.length + 1}`,
     leadId: record.lead.id,
-    action: 'note_added',
+    action: 'outcome_recorded',
     actor,
     message: `${type} reason recorded: ${normalizedReason}`,
-    createdAt: new Date().toISOString(),
+    createdAt: recordedAt,
     metadata: {
       outcomeReasonType: type,
+      outcomeStatus,
       reason: normalizedReason,
     },
   });
@@ -210,13 +246,22 @@ function groupFunnelMetrics(
   return result;
 }
 
-function collectReasonCounts(records: StoredLeadRecord[], type: 'win' | 'loss' | 'rejection'): Record<string, number> {
+function collectReasonCounts(records: StoredLeadRecord[], type: OutcomeReasonType): Record<string, number> {
   return records.reduce<Record<string, number>>((accumulator, record) => {
+    const structuredType = getOutcomeReasonType(record.lead.outcomeStatus);
+    const structuredReason = record.lead.outcomeReason?.trim();
+
+    if (structuredType) {
+      if (structuredType === type && structuredReason) {
+        incrementReason(accumulator, structuredReason);
+      }
+      return accumulator;
+    }
+
     for (const entry of record.auditLog) {
       if (entry.metadata?.outcomeReasonType !== type) continue;
-      const reason = typeof entry.metadata.reason === 'string' ? entry.metadata.reason : undefined;
-      if (!reason) continue;
-      accumulator[reason] = (accumulator[reason] ?? 0) + 1;
+      const reason = typeof entry.metadata.reason === 'string' ? entry.metadata.reason.trim() : '';
+      if (reason) incrementReason(accumulator, reason);
     }
     return accumulator;
   }, {});
@@ -235,9 +280,9 @@ function buildScoreBands(records: StoredLeadRecord[]): ScoreBandMetrics[] {
       const score = record.latestEvaluation?.score.total ?? -1;
       return score >= band.min && score <= band.max;
     });
-    const won = bandRecords.filter((record) => record.lead.pipelineStatus === 'won').length;
-    const lost = bandRecords.filter((record) => record.lead.pipelineStatus === 'lost').length;
-    const rejected = bandRecords.filter((record) => record.lead.pipelineStatus === 'rejected').length;
+    const won = bandRecords.filter(isWonRecord).length;
+    const lost = bandRecords.filter(isLostRecord).length;
+    const rejected = bandRecords.filter(isRejectedRecord).length;
     return {
       band: band.label,
       count: bandRecords.length,
@@ -249,29 +294,70 @@ function buildScoreBands(records: StoredLeadRecord[]): ScoreBandMetrics[] {
   });
 }
 
-function hasReached(currentStatus: PipelineStatus, targetStatus: PipelineStatus): boolean {
-  if (currentStatus === 'rejected' && targetStatus !== 'rejected') {
-    return false;
+function hasReachedStage(record: StoredLeadRecord, target: TrackedFunnelStage): boolean {
+  const history = getPipelineStatusHistory(record);
+  if (history.has(target)) return true;
+
+  const current = record.lead.pipelineStatus;
+  if (target === 'approved_to_contact') {
+    return ['draft_ready', 'sent_manually', 'replied', 'meeting_booked', 'proposal_sent', 'won', 'lost'].includes(current);
   }
-  return pipelineOrder.indexOf(currentStatus) >= pipelineOrder.indexOf(targetStatus);
+  if (target === 'sent_manually') {
+    return ['replied', 'meeting_booked', 'proposal_sent', 'won', 'lost'].includes(current);
+  }
+  if (target === 'replied') {
+    return current === 'meeting_booked';
+  }
+  return false;
 }
 
-const pipelineOrder: PipelineStatus[] = [
-  'new',
-  'scored',
-  'hot_alert_sent',
-  'needs_human_review',
-  'approved_to_contact',
-  'draft_ready',
-  'sent_manually',
-  'replied',
-  'meeting_booked',
-  'proposal_sent',
-  'won',
-  'lost',
-  'rejected',
-  'archived',
-];
+function getPipelineStatusHistory(record: StoredLeadRecord): Set<PipelineStatus> {
+  const statuses = new Set<PipelineStatus>([record.lead.pipelineStatus]);
+  for (const entry of record.auditLog) {
+    if (entry.action !== 'status_changed') continue;
+    const status = entry.metadata?.status;
+    if (isPipelineStatus(status)) statuses.add(status);
+  }
+  return statuses;
+}
+
+function isPipelineStatus(value: unknown): value is PipelineStatus {
+  return typeof value === 'string' && knownPipelineStatuses.has(value as PipelineStatus);
+}
+
+function isWonRecord(record: StoredLeadRecord): boolean {
+  return record.lead.outcomeStatus === 'won' || record.lead.pipelineStatus === 'won';
+}
+
+function isLostRecord(record: StoredLeadRecord): boolean {
+  return record.lead.outcomeStatus === 'lost'
+    || record.lead.outcomeStatus === 'no_response'
+    || record.lead.pipelineStatus === 'lost';
+}
+
+function isRejectedRecord(record: StoredLeadRecord): boolean {
+  return record.lead.outcomeStatus === 'rejected'
+    || record.lead.outcomeStatus === 'not_fit'
+    || record.lead.outcomeStatus === 'duplicate'
+    || record.lead.pipelineStatus === 'rejected';
+}
+
+function getOutcomeReasonType(status?: LeadOutcomeStatus): OutcomeReasonType | undefined {
+  if (status === 'won') return 'win';
+  if (status === 'lost' || status === 'no_response') return 'loss';
+  if (status === 'rejected' || status === 'not_fit' || status === 'duplicate') return 'rejection';
+  return undefined;
+}
+
+function legacyOutcomeStatus(type: OutcomeReasonType): LeadOutcomeStatus {
+  if (type === 'win') return 'won';
+  if (type === 'loss') return 'lost';
+  return 'rejected';
+}
+
+function incrementReason(counts: Record<string, number>, reason: string): void {
+  counts[reason] = (counts[reason] ?? 0) + 1;
+}
 
 function getRecommendedProfile(record: StoredLeadRecord): CodistanProfile | undefined {
   return record.latestEvaluation?.profileRecommendation.primaryProfile ?? record.lead.recommendedProfile;
