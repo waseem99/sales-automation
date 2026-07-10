@@ -13,7 +13,9 @@ const ragEvaluation = evaluateLead({
 
 assert.equal(ragEvaluation.score.status, 'hot');
 assert.equal(ragEvaluation.score.urgency, 'urgent');
-assert.equal(ragEvaluation.profileRecommendation.primaryProfile, 'us_ai_fullstack_profile');
+assert.equal(ragEvaluation.profileRecommendation.primaryProfile, 'waseem_ai_founder_profile');
+assert.equal(ragEvaluation.profileRecommendation.upworkProfile?.key, 'waseem_ai_ml');
+assert.match(ragEvaluation.recommendedNextAction, /~016e9a7bda2340dcd9/);
 assert.ok(ragEvaluation.portfolioMatches.length > 0);
 assert.equal(ragEvaluation.drafts.length, 1);
 assert.equal(ragEvaluation.drafts[0].metadata.requiresHumanApproval, true);

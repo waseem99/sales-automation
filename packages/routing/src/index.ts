@@ -5,6 +5,10 @@ import type {
   ProfileCapability,
   ServiceCategory,
 } from '@sales-automation/shared';
+import { selectSuppliedUpworkProfile } from './profile-selection.js';
+import type { SelectedUpworkProfile } from './upwork-profiles.js';
+
+export * from './upwork-profiles.js';
 
 export interface ProfileRecommendation {
   primaryProfile: CodistanProfile;
@@ -12,6 +16,7 @@ export interface ProfileRecommendation {
   confidence: 'high' | 'medium' | 'low';
   reasons: string[];
   risks: string[];
+  upworkProfile?: SelectedUpworkProfile;
 }
 
 export const profileCapabilities: ProfileCapability[] = [
@@ -21,19 +26,19 @@ export const profileCapabilities: ProfileCapability[] = [
     serviceCategories: ['ai_automation', 'rag_document_intelligence', 'ai_saas_mvp', 'fullstack_web_app', 'nextjs_python_app', 'voice_ai_agent'],
     proofTags: ['ai', 'rag', 'llm', 'automation', 'nextjs', 'python', 'saas', 'mvp', 'agent'],
     geographyNotes: 'Use only where profile usage and geography requirements are compliant.',
-    complianceNotes: 'Flag US-only ambiguity for human review before bidding.',
-    bestUseCases: ['High-value AI projects', 'US-preferred full-stack AI apps', 'SaaS MVPs', 'RAG/document intelligence'],
+    complianceNotes: 'Keep behind human verification until the live public profile and Upwork verification are confirmed.',
+    bestUseCases: ['Full-stack AI apps', 'SaaS MVPs', 'Next.js/Python applications', 'AI-enabled web products'],
   },
   {
     profile: 'waseem_ai_founder_profile',
     label: 'Waseem AI / Founder-led Profile',
-    serviceCategories: ['ai_automation', 'rag_document_intelligence', 'ai_saas_mvp', 'enterprise_systems', 'nextjs_python_app'],
-    proofTags: ['ai strategy', 'automation', 'rag', 'founder-led', 'consulting', 'enterprise'],
-    bestUseCases: ['Founder-led discovery', 'AI strategy conversations', 'Complex scoping', 'High-trust advisory-led sales'],
+    serviceCategories: ['ai_automation', 'rag_document_intelligence', 'ai_saas_mvp', 'enterprise_systems', 'nextjs_python_app', 'voice_ai_agent'],
+    proofTags: ['ai strategy', 'automation', 'rag', 'founder-led', 'consulting', 'enterprise', 'machine learning', 'computer vision'],
+    bestUseCases: ['AI/ML implementation', 'RAG/document intelligence', 'Founder-led discovery', 'AI strategy conversations', 'Complex scoping'],
   },
   {
     profile: 'ar_3d_animation_profile',
-    label: 'AR / 3D / Animation Profile',
+    label: 'AR / 3D / Animation Profiles',
     serviceCategories: ['ar_3d_unity_unreal'],
     proofTags: ['ar', '3d', 'unity', 'unreal', 'webar', 'animation', 'product visualization'],
     bestUseCases: ['AR apps', '3D product visualization', 'Unity/Unreal work', 'Motion/animation opportunities'],
@@ -85,9 +90,25 @@ export function recommendProfile(lead: Lead, score?: LeadScore): ProfileRecommen
     return withSecondaryProfiles('solution_campaign_identity', lead, reasons, risks);
   }
 
+  const suppliedProfile = selectSuppliedUpworkProfile(lead, score);
+  if (suppliedProfile) {
+    const primaryProfile = suppliedProfile.forceHumanReview
+      ? 'needs_human_review'
+      : suppliedProfile.primaryProfile;
+    return {
+      primaryProfile,
+      secondaryProfiles: getSecondaryProfiles(lead, primaryProfile),
+      confidence: suppliedProfile.confidence,
+      reasons: suppliedProfile.reasons,
+      risks: suppliedProfile.risks,
+      upworkProfile: suppliedProfile.upworkProfile,
+    };
+  }
+
   if (lead.serviceCategory === 'ar_3d_unity_unreal') {
-    reasons.push('Opportunity is clearly AR/3D/Unity/Unreal related.');
-    return withSecondaryProfiles('ar_3d_animation_profile', lead, reasons, risks);
+    reasons.push('Opportunity is AR/3D/Unity/Unreal related, but the supplied profile subtype is unclear.');
+    risks.push('Confirm whether the job is immersive development or visual production before spending Connects.');
+    return withSecondaryProfiles('needs_human_review', lead, reasons, risks);
   }
 
   if (lead.serviceCategory === 'cybersecurity_compliance') {
@@ -103,7 +124,7 @@ export function recommendProfile(lead: Lead, score?: LeadScore): ProfileRecommen
   if (isAiFullstack(lead.serviceCategory)) {
     reasons.push('Lead matches AI/full-stack delivery categories.');
     if (hasUsOnlyAmbiguity(lead)) {
-      risks.push('US-only or US-preferred wording may require human compliance review before using the US AI profile.');
+      risks.push('US-only or US-preferred wording requires human compliance review before selecting a profile.');
       return withSecondaryProfiles('needs_human_review', lead, reasons, risks);
     }
     return withSecondaryProfiles('us_ai_fullstack_profile', lead, reasons, risks);
