@@ -236,3 +236,5 @@ function extractFirstUrl(text: string): string | undefined {
   const match = text.match(/https?:\/\/[^\s)]+/i);
   return match?.[0]?.replace(/[.,;]+$/, '');
 }
+
+export * from './gmail.js';
