@@ -8,7 +8,8 @@ assert.ok(ragLead, 'RAG sample lead should exist');
 const ragEvaluation = evaluateLead({ lead: ragLead, portfolioItems: samplePortfolioItems });
 assert.equal(ragEvaluation.score.status, 'hot');
 assert.equal(ragEvaluation.score.urgency, 'urgent');
-assert.equal(ragEvaluation.profileRecommendation.primaryProfile, 'us_ai_fullstack_profile');
+assert.equal(ragEvaluation.profileRecommendation.primaryProfile, 'waseem_ai_founder_profile');
+assert.equal(ragEvaluation.profileRecommendation.upworkProfile?.key, 'waseem_ai_ml');
 assert.ok(ragEvaluation.portfolioMatches.length > 0);
 
 const lowBudgetLead = sampleLeads.find((lead) => lead.id === 'lead-upwork-lowbudget-001');
