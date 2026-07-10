@@ -51,6 +51,15 @@ assert.equal(rag.primaryProfile, 'waseem_ai_founder_profile');
 assert.equal(rag.upworkProfile?.key, 'waseem_ai_ml');
 assert.equal(rag.confidence, 'high');
 
+const founderAi = recommendProfile(lead({
+  id: 'founder-ai',
+  title: 'AI strategy and technical discovery partner',
+  description: 'Founder needs solution architecture, roadmap, and fractional CTO support before implementation.',
+  serviceCategory: 'ai_automation',
+}), score(85));
+assert.equal(founderAi.primaryProfile, 'waseem_ai_founder_profile');
+assert.equal(founderAi.upworkProfile?.key, 'waseem_ai_ml');
+
 const fullstack = recommendProfile(lead({
   id: 'fullstack',
   title: 'Full-stack Next.js SaaS MVP',
@@ -98,6 +107,15 @@ const weakAr = recommendProfile(lead({
 assert.equal(weakAr.primaryProfile, 'needs_human_review');
 assert.equal(weakAr.upworkProfile?.key, 'nadir_unity_ar');
 assert.ok(weakAr.risks.some((risk) => risk.includes('82')));
+
+const multiplayer = recommendProfile(lead({
+  id: 'multiplayer',
+  title: 'Unity multiplayer web game developer',
+  description: 'Build a broad multiplayer game with networking, backend, animation, and live operations.',
+  serviceCategory: 'ar_3d_unity_unreal',
+}), score(91));
+assert.equal(multiplayer.primaryProfile, 'needs_human_review');
+assert.equal(multiplayer.upworkProfile, undefined);
 
 const ambiguousAnimation = recommendProfile(lead({
   id: 'ambiguous-animation',
