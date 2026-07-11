@@ -28,13 +28,13 @@
     "@sales-automation/api": "workspace:*",
     "@sales-automation/auth": "workspace:*",
     "@sales-automation/dashboard": "workspace:*",
+    "@sales-automation/evaluator": "workspace:*",
     "@sales-automation/ingestion": "workspace:*",
     "@sales-automation/prospect-discovery": "workspace:*",
     "@sales-automation/shared": "workspace:*",
     "@sales-automation/storage": "workspace:*"
   },
   "devDependencies": {
-    "@sales-automation/evaluator": "workspace:*",
     "@sales-automation/fixtures": "workspace:*",
     "tsx": "^4.19.2",
     "typescript": "^5.7.2"
