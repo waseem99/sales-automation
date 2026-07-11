@@ -2,6 +2,22 @@ const SESSION_COOKIE = 'codistan_admin_session';
 const SESSION_LIFETIME_SECONDS = 12 * 60 * 60;
 const loginAttempts = new Map<string, { count: number; firstAttemptAt: number }>();
 
+const serviceCategories = [
+  'ai_automation',
+  'rag_document_intelligence',
+  'ai_saas_mvp',
+  'fullstack_web_app',
+  'nextjs_python_app',
+  'voice_ai_agent',
+  'ar_3d_unity_unreal',
+  'cybersecurity_compliance',
+  'website_portal',
+  'enterprise_systems',
+  'unknown',
+] as const;
+
+type ServiceCategory = typeof serviceCategories[number];
+
 export const maxDuration = 300;
 
 export default {
@@ -88,7 +104,8 @@ export default {
       }
 
       phase = 'load_application_modules';
-      const [fixturesModule, neonModule, prospectModule, handlerModule] = await Promise.all([
+      const [evaluatorModule, fixturesModule, neonModule, prospectModule, handlerModule] = await Promise.all([
+        import('@sales-automation/evaluator'),
         import('@sales-automation/fixtures'),
         import('@sales-automation/neon-state'),
         import('@sales-automation/prospect-discovery'),
@@ -98,13 +115,83 @@ export default {
       phase = 'connect_database';
       const databaseUrl = neonModule.requireDatabaseUrl(process.env.DATABASE_URL);
       const state = await neonModule.loadNeonAppState(databaseUrl);
+      const actor = process.env.DASHBOARD_ACTOR ?? 'bd-team@codistan.org';
+      let stateChanged = false;
+
+      phase = 'seed_verified_starter_prospects';
+      const starterImport = importStarterProspects({
+        repository: state.repository,
+        portfolioItems: fixturesModule.samplePortfolioItems,
+        starterLeads: fixturesModule.verifiedStarterProspects,
+        evaluateLead: evaluatorModule.evaluateLead,
+        actor,
+      });
+      stateChanged = starterImport.imported > 0;
+
+      const requestBody = await parseRequestBody(request);
+
+      if (request.method === 'POST' && pathname === '/api/prospects/import-starter') {
+        phase = 'import_verified_starter_prospects';
+        if (stateChanged) await neonModule.persistNeonAppState(databaseUrl, state);
+        return json({
+          ok: true,
+          imported: starterImport.imported,
+          existing: starterImport.existing,
+          total: state.repository.listLeads().length,
+        }, starterImport.imported > 0 ? 201 : 200);
+      }
+
+      const serviceMatch = pathname.match(/^\/api\/prospects\/([^/]+)\/service$/);
+      if (request.method === 'POST' && serviceMatch) {
+        phase = 'update_prospect_service';
+        const leadId = decodeURIComponent(serviceMatch[1] ?? '');
+        const existing = state.repository.getLead(leadId);
+        if (!existing) return json({ error: 'Prospect not found.' }, 404);
+        const payload = asObject(requestBody);
+        const serviceCategory = requireServiceCategory(payload.serviceCategory);
+        const serviceOffer = requireString(payload.serviceOffer, 'serviceOffer');
+        const materialsToShare = requireString(payload.materialsToShare, 'materialsToShare');
+        const updatedAt = new Date().toISOString();
+        state.repository.upsertLead({
+          ...existing.lead,
+          serviceCategory,
+          serviceOffer,
+          materialsToShare,
+          updatedAt,
+        }, actor);
+        state.repository.addNote(
+          leadId,
+          `service::${serviceCategory}::${serviceOffer}::${materialsToShare}`,
+          actor,
+        );
+        await neonModule.persistNeonAppState(databaseUrl, state);
+        return json({ ok: true, leadId, serviceCategory, serviceOffer, materialsToShare });
+      }
+
+      const followUpMatch = pathname.match(/^\/api\/prospects\/([^/]+)\/followup$/);
+      if (request.method === 'POST' && followUpMatch) {
+        phase = 'schedule_prospect_followup';
+        const leadId = decodeURIComponent(followUpMatch[1] ?? '');
+        if (!state.repository.getLead(leadId)) return json({ error: 'Prospect not found.' }, 404);
+        const payload = asObject(requestBody);
+        const nextFollowUpAt = requireString(payload.nextFollowUpAt, 'nextFollowUpAt');
+        const followUpDate = new Date(nextFollowUpAt);
+        if (Number.isNaN(followUpDate.getTime())) return json({ error: 'nextFollowUpAt must be a valid date and time.' }, 400);
+        const followUpNote = optionalString(payload.followUpNote);
+        state.repository.scheduleFollowUp(leadId, {
+          nextFollowUpAt: followUpDate.toISOString(),
+          followUpNote,
+        }, actor);
+        await neonModule.persistNeonAppState(databaseUrl, state);
+        return json({ ok: true, leadId, nextFollowUpAt: followUpDate.toISOString(), followUpNote });
+      }
 
       phase = 'handle_dashboard_request';
       const result = await handlerModule.handleProspectDashboardRequest({
         method: request.method,
         url: originalUrl,
         headers: requestHeaders(request),
-        body: await parseRequestBody(request),
+        body: requestBody,
         clientKey: request.headers.get('x-forwarded-for')
           ?? request.headers.get('x-real-ip')
           ?? 'vercel',
@@ -120,10 +207,10 @@ export default {
         adminPassword,
         sessionSecret,
         secureCookies: true,
-        actor: process.env.DASHBOARD_ACTOR ?? 'bd-team@codistan.org',
+        actor,
       });
 
-      if (request.method !== 'GET' && request.method !== 'HEAD' && result.status < 400) {
+      if (stateChanged || (request.method !== 'GET' && request.method !== 'HEAD' && result.status < 400)) {
         phase = 'persist_application_state';
         await neonModule.persistNeonAppState(databaseUrl, state);
       }
@@ -143,6 +230,36 @@ export default {
     }
   },
 };
+
+interface StarterImportInput {
+  repository: {
+    getLead(leadId: string): unknown;
+    saveEvaluation(evaluation: unknown, actor?: string): unknown;
+  };
+  portfolioItems: unknown[];
+  starterLeads: Array<{ id: string }>;
+  evaluateLead(input: { lead: unknown; portfolioItems: unknown[]; generatedAt: string }): unknown;
+  actor: string;
+}
+
+function importStarterProspects(input: StarterImportInput): { imported: number; existing: number } {
+  let imported = 0;
+  let existing = 0;
+  const generatedAt = new Date().toISOString();
+  for (const lead of input.starterLeads) {
+    if (input.repository.getLead(lead.id)) {
+      existing += 1;
+      continue;
+    }
+    input.repository.saveEvaluation(input.evaluateLead({
+      lead,
+      portfolioItems: input.portfolioItems,
+      generatedAt,
+    }), input.actor);
+    imported += 1;
+  }
+  return { imported, existing };
+}
 
 function buildDiscoveryOptions(repository: unknown, runStore: unknown, portfolioItems: unknown[]) {
   return {
@@ -287,6 +404,16 @@ function requireEnvironment(name: string): string {
 function requireString(value: unknown, field: string): string {
   if (typeof value !== 'string' || !value.trim()) throw new Error(`${field} is required.`);
   return value.trim();
+}
+
+function optionalString(value: unknown): string | undefined {
+  return typeof value === 'string' && value.trim() ? value.trim() : undefined;
+}
+
+function requireServiceCategory(value: unknown): ServiceCategory {
+  const category = requireString(value, 'serviceCategory') as ServiceCategory;
+  if (!serviceCategories.includes(category)) throw new Error('serviceCategory is invalid.');
+  return category;
 }
 
 function asObject(value: unknown): Record<string, unknown> {
