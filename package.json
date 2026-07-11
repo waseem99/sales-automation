@@ -9,7 +9,8 @@
     "build:vercel": "pnpm build",
     "dev": "pnpm --filter @sales-automation/web dev",
     "start:web": "pnpm --filter @sales-automation/web start",
-    "deploy:check": "pnpm install --no-frozen-lockfile && pnpm build",
+    "deploy:check": "pnpm install --no-frozen-lockfile && pnpm build && pnpm typecheck:vercel",
+    "typecheck:vercel": "tsc -p tsconfig.vercel.json --noEmit",
     "evaluate:sample": "pnpm build && pnpm --filter @sales-automation/cli evaluate:sample",
     "evaluate:json": "pnpm build && pnpm --filter @sales-automation/cli evaluate:json",
     "authorize:gmail": "pnpm build && pnpm --filter @sales-automation/email-sources authorize:gmail",
@@ -19,7 +20,7 @@
     "worker:prospects": "pnpm build && pnpm --filter @sales-automation/prospect-discovery worker",
     "lint": "pnpm build && pnpm -r --filter \"@sales-automation/*\" --sort lint",
     "test": "pnpm build && pnpm -r --filter \"@sales-automation/*\" --sort test",
-    "typecheck": "pnpm build && pnpm -r --filter \"@sales-automation/*\" --sort typecheck"
+    "typecheck": "pnpm build && pnpm -r --filter \"@sales-automation/*\" --sort typecheck && pnpm typecheck:vercel"
   },
   "engines": {
     "node": "24.x"
