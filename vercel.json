@@ -18,18 +18,73 @@
       "schedule": "0 4 * * *"
     }
   ],
-  "rewrites": [
-    {
-      "source": "/api/cron/prospect-discovery",
-      "destination": "/api/cron/prospect-discovery"
-    },
+  "redirects": [
     {
       "source": "/",
-      "destination": "/api/index?__path=/"
+      "destination": "/prospects",
+      "permanent": false
+    }
+  ],
+  "rewrites": [
+    {
+      "source": "/health",
+      "destination": "/api/index?__route=/health"
     },
     {
-      "source": "/:path*",
-      "destination": "/api/index?__path=/:path*"
+      "source": "/login",
+      "destination": "/api/index?__route=/login"
+    },
+    {
+      "source": "/prospects",
+      "destination": "/api/index?__route=/prospects"
+    },
+    {
+      "source": "/lead-desk",
+      "destination": "/api/index?__route=/lead-desk"
+    },
+    {
+      "source": "/api/login",
+      "destination": "/api/index?__route=/api/login"
+    },
+    {
+      "source": "/api/logout",
+      "destination": "/api/index?__route=/api/logout"
+    },
+    {
+      "source": "/api/prospects",
+      "destination": "/api/index?__route=/api/prospects"
+    },
+    {
+      "source": "/api/prospect-runs",
+      "destination": "/api/index?__route=/api/prospect-runs"
+    },
+    {
+      "source": "/api/prospects/:path*",
+      "destination": "/api/index?__route=/api/prospects/:path*"
+    },
+    {
+      "source": "/api/session",
+      "destination": "/api/index?__route=/api/session"
+    },
+    {
+      "source": "/api/summary",
+      "destination": "/api/index?__route=/api/summary"
+    },
+    {
+      "source": "/api/opportunities",
+      "destination": "/api/index?__route=/api/opportunities"
+    },
+    {
+      "source": "/api/opportunities/:path*",
+      "destination": "/api/index?__route=/api/opportunities/:path*"
+    },
+    {
+      "source": "/api/ingest/:path*",
+      "destination": "/api/index?__route=/api/ingest/:path*"
+    },
+    {
+      "source": "/api/dev/:path*",
+      "destination": "/api/index?__route=/api/dev/:path*"
     }
   ]
 }
