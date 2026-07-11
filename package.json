@@ -31,6 +31,7 @@
     "@sales-automation/fixtures": "workspace:*",
     "@sales-automation/neon-state": "workspace:*",
     "@sales-automation/prospect-discovery": "workspace:*",
+    "@sales-automation/shared": "workspace:*",
     "@sales-automation/web": "workspace:*"
   },
   "devDependencies": {
