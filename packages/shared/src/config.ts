@@ -51,6 +51,20 @@ export const leadTypeConfig: Record<LeadType, LeadTypeConfig> = {
     urgentFreshnessRule: { scoreAtLeast: 85, freshnessMinutesAtMost: 1440 },
     defaultCadenceMinutes: 1440,
   },
+  public_opportunity: {
+    thresholds: { hot: 75, qualified: 60, nurture: 45 },
+    urgentFreshnessRule: { scoreAtLeast: 70, freshnessMinutesAtMost: 1440 },
+    defaultCadenceMinutes: 1440,
+  },
+  hiring_signal: {
+    thresholds: { hot: 82, qualified: 62, nurture: 45 },
+    urgentFreshnessRule: { scoreAtLeast: 78, freshnessMinutesAtMost: 4320 },
+    defaultCadenceMinutes: 1440,
+  },
+  partnership_target: {
+    thresholds: { hot: 90, qualified: 64, nurture: 45 },
+    defaultCadenceMinutes: 1440,
+  },
   manual_lead: {
     thresholds: { hot: 75, qualified: 60, nurture: 45 },
     defaultCadenceMinutes: 0,
