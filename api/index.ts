@@ -1,65 +1,131 @@
-import { samplePortfolioItems } from '../packages/fixtures/src/index.js';
-import {
-  InMemoryProspectDiscoveryRunStore,
-} from '../packages/prospect-discovery/src/index.js';
-import {
-  InMemoryLeadRepository,
-} from '../packages/storage/src/index.js';
-import {
-  loadNeonAppState,
-  persistNeonAppState,
-  requireDatabaseUrl,
-  type NeonAppState,
-} from '../packages/neon-state/src/index.js';
-import {
-  handleProspectDashboardRequest,
-} from '../apps/web/src/prospect-handler.js';
-import {
-  getOriginalRequestUrl,
-  parseRequestBody,
-  requestHeaders,
-  requireEnvironment,
-  runVercelProspectDiscovery,
-} from '../vercel/runtime.js';
+const SESSION_COOKIE = 'codistan_admin_session';
+const SESSION_LIFETIME_SECONDS = 12 * 60 * 60;
+const loginAttempts = new Map<string, { count: number; firstAttemptAt: number }>();
 
 export const maxDuration = 300;
 
 export default {
   async fetch(request: Request): Promise<Response> {
+    let phase = 'request_received';
     try {
       const originalUrl = getOriginalRequestUrl(request);
       const pathname = new URL(originalUrl, 'https://local.invalid').pathname;
-      const authOnly = pathname === '/login'
-        || pathname === '/api/login'
-        || pathname === '/api/logout'
-        || pathname === '/health';
-      const databaseUrl = process.env.DATABASE_URL;
-      const state: NeonAppState = authOnly
-        ? {
-          repository: new InMemoryLeadRepository(),
-          runStore: new InMemoryProspectDiscoveryRunStore(),
-        }
-        : await loadNeonAppState(requireDatabaseUrl(databaseUrl));
 
-      const result = await handleProspectDashboardRequest({
+      if (request.method === 'GET' && pathname === '/health') {
+        return Response.json({
+          ok: true,
+          service: 'codistan-prospect-desk',
+          runtime: 'vercel-node',
+          nodeVersion: process.version,
+          databaseConfigured: Boolean(process.env.DATABASE_URL?.trim()),
+          adminPasswordConfigured: Boolean(process.env.ADMIN_PASSWORD?.trim()),
+          sessionSecretConfigured: Boolean(process.env.SESSION_SECRET?.trim()),
+          deploymentCommit: process.env.VERCEL_GIT_COMMIT_SHA ?? null,
+          region: process.env.VERCEL_REGION ?? null,
+          now: new Date().toISOString(),
+        });
+      }
+
+      phase = 'load_auth_configuration';
+      const adminPassword = requireEnvironment('ADMIN_PASSWORD');
+      const sessionSecret = requireEnvironment('SESSION_SECRET');
+      if (sessionSecret.length < 24) throw new Error('SESSION_SECRET must contain at least 24 characters.');
+
+      if (request.method === 'GET' && pathname === '/login') {
+        return html(renderLoginPage());
+      }
+
+      if (request.method === 'POST' && pathname === '/api/login') {
+        phase = 'authenticate_login';
+        const clientKey = request.headers.get('x-forwarded-for')
+          ?? request.headers.get('x-real-ip')
+          ?? 'vercel';
+        if (isRateLimited(clientKey)) {
+          return json({ error: 'Too many failed attempts. Try again later.' }, 429);
+        }
+        const payload = asObject(await parseRequestBody(request));
+        const password = requireString(payload.password, 'password');
+        if (!(await safeEqual(password, adminPassword))) {
+          registerFailedAttempt(clientKey);
+          return json({ error: 'Incorrect password.' }, 401);
+        }
+        loginAttempts.delete(clientKey);
+        const expiresAt = Math.floor(Date.now() / 1_000) + SESSION_LIFETIME_SECONDS;
+        const token = await createSessionToken(expiresAt, sessionSecret);
+        return new Response(JSON.stringify({ ok: true }), {
+          status: 200,
+          headers: {
+            ...securityHeaders(),
+            'content-type': 'application/json; charset=utf-8',
+            'set-cookie': buildSessionCookie(token),
+            'cache-control': 'no-store',
+          },
+        });
+      }
+
+      if (request.method === 'POST' && pathname === '/api/logout') {
+        return new Response(JSON.stringify({ ok: true }), {
+          status: 200,
+          headers: {
+            ...securityHeaders(),
+            'content-type': 'application/json; charset=utf-8',
+            'set-cookie': `${SESSION_COOKIE}=; Path=/; HttpOnly; SameSite=Strict; Max-Age=0; Secure`,
+            'cache-control': 'no-store',
+          },
+        });
+      }
+
+      phase = 'validate_session';
+      const authenticated = await isAuthenticated(request.headers.get('cookie'), sessionSecret);
+      if (!authenticated) {
+        if (request.method === 'GET' && !pathname.startsWith('/api/')) {
+          return new Response('', {
+            status: 302,
+            headers: { ...securityHeaders(), location: '/login', 'cache-control': 'no-store' },
+          });
+        }
+        return json({ error: 'Authentication required.' }, 401);
+      }
+
+      phase = 'load_application_modules';
+      const [fixturesModule, neonModule, prospectModule, handlerModule] = await Promise.all([
+        import('@sales-automation/fixtures'),
+        import('@sales-automation/neon-state'),
+        import('@sales-automation/prospect-discovery'),
+        import('@sales-automation/web/prospect-handler'),
+      ]);
+
+      phase = 'connect_database';
+      const databaseUrl = neonModule.requireDatabaseUrl(process.env.DATABASE_URL);
+      const state = await neonModule.loadNeonAppState(databaseUrl);
+
+      phase = 'handle_dashboard_request';
+      const result = await handlerModule.handleProspectDashboardRequest({
         method: request.method,
         url: originalUrl,
         headers: requestHeaders(request),
         body: await parseRequestBody(request),
-        clientKey: request.headers.get('x-forwarded-for') ?? request.headers.get('x-real-ip') ?? 'vercel',
+        clientKey: request.headers.get('x-forwarded-for')
+          ?? request.headers.get('x-real-ip')
+          ?? 'vercel',
       }, {
         repository: state.repository,
         runStore: state.runStore,
-        portfolioItems: samplePortfolioItems,
-        runDiscovery: authOnly ? undefined : () => runVercelProspectDiscovery(state.repository, state.runStore),
-        adminPassword: requireEnvironment('ADMIN_PASSWORD'),
-        sessionSecret: requireEnvironment('SESSION_SECRET'),
+        portfolioItems: fixturesModule.samplePortfolioItems,
+        runDiscovery: () => prospectModule.runProspectDiscovery(buildDiscoveryOptions(
+          state.repository,
+          state.runStore,
+          fixturesModule.samplePortfolioItems,
+        )),
+        adminPassword,
+        sessionSecret,
         secureCookies: true,
         actor: process.env.DASHBOARD_ACTOR ?? 'bd-team@codistan.org',
       });
 
-      if (!authOnly && request.method !== 'GET' && request.method !== 'HEAD' && result.status < 400) {
-        await persistNeonAppState(requireDatabaseUrl(databaseUrl), state);
+      if (request.method !== 'GET' && request.method !== 'HEAD' && result.status < 400) {
+        phase = 'persist_application_state';
+        await neonModule.persistNeonAppState(databaseUrl, state);
       }
 
       return new Response(result.body, {
@@ -67,7 +133,214 @@ export default {
         headers: result.headers,
       });
     } catch (error) {
-      return Response.json({ error: (error as Error).message }, { status: 500 });
+      const details = normalizeError(error);
+      console.error('VERCEL_DASHBOARD_RUNTIME_ERROR', {
+        phase,
+        message: details.message,
+        stack: details.stack,
+      });
+      return runtimeErrorResponse(request, phase, details.message);
     }
   },
 };
+
+function buildDiscoveryOptions(repository: unknown, runStore: unknown, portfolioItems: unknown[]) {
+  return {
+    repository,
+    runStore,
+    portfolioItems,
+    maxCandidates: positiveInteger(process.env.PROSPECT_MAX_CANDIDATES, 15),
+    maxSearchQueries: positiveInteger(process.env.PROSPECT_MAX_SEARCH_QUERIES, 10),
+    searchQueries: splitList(process.env.PROSPECT_SEARCH_QUERIES),
+    remoteOkEnabled: process.env.PROSPECT_REMOTEOK_ENABLED !== 'false',
+    bingRssEnabled: process.env.PROSPECT_BING_RSS_ENABLED !== 'false',
+    greenhouseBoards: splitList(process.env.PROSPECT_GREENHOUSE_BOARDS),
+    leverSites: splitList(process.env.PROSPECT_LEVER_SITES),
+    rssFeeds: splitList(process.env.PROSPECT_RSS_FEEDS),
+    digest: {
+      to: process.env.PROSPECT_DIGEST_TO,
+      from: process.env.PROSPECT_DIGEST_FROM ?? process.env.SMTP_FROM,
+      smtpHost: process.env.SMTP_HOST,
+      smtpPort: positiveInteger(process.env.SMTP_PORT, 587),
+      smtpSecure: process.env.SMTP_SECURE === 'true',
+      smtpUser: process.env.SMTP_USER,
+      smtpPassword: process.env.SMTP_PASSWORD,
+      subjectPrefix: process.env.PROSPECT_DIGEST_SUBJECT_PREFIX ?? 'Codistan Daily Prospects',
+    },
+  } as never;
+}
+
+function getOriginalRequestUrl(request: Request): string {
+  const incoming = new URL(request.url);
+  const rewrittenPath = incoming.searchParams.get('__path');
+  if (rewrittenPath !== null) {
+    incoming.pathname = rewrittenPath.startsWith('/') ? rewrittenPath : `/${rewrittenPath}`;
+    incoming.searchParams.delete('__path');
+  }
+  return `${incoming.pathname}${incoming.search}`;
+}
+
+async function parseRequestBody(request: Request): Promise<unknown> {
+  if (request.method === 'GET' || request.method === 'HEAD') return undefined;
+  const raw = await request.text();
+  if (!raw) return undefined;
+  if (raw.length > 1_000_000) throw new Error('Request body is too large.');
+  const contentType = request.headers.get('content-type')?.toLowerCase() ?? '';
+  if (contentType.includes('application/json')) return JSON.parse(raw);
+  if (contentType.includes('application/x-www-form-urlencoded')) {
+    return Object.fromEntries(new URLSearchParams(raw));
+  }
+  try {
+    return JSON.parse(raw);
+  } catch {
+    return { value: raw };
+  }
+}
+
+function requestHeaders(request: Request): Record<string, string> {
+  return Object.fromEntries(request.headers.entries());
+}
+
+function renderLoginPage(): string {
+  return `<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Codistan Prospect Desk Login</title>
+  <style>
+    :root{font-family:Inter,ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;color:#172033;background:#0f172a}
+    *{box-sizing:border-box}body{margin:0}.shell{min-height:100vh;display:grid;place-items:center;padding:20px}.card{width:min(430px,100%);background:#fff;border-radius:22px;padding:34px;box-shadow:0 30px 80px rgba(0,0,0,.35)}
+    .mark{width:52px;height:52px;border-radius:15px;background:#f8c838;display:grid;place-items:center;font-weight:900;font-size:24px}.eyebrow{text-transform:uppercase;letter-spacing:.08em;font-size:11px;font-weight:700;color:#667085;margin:20px 0 5px}
+    h1{margin:0 0 8px}p{color:#667085}label{display:grid;gap:7px;font-size:12px;font-weight:700;margin-top:22px}input{border:1px solid #d0d5dd;border-radius:10px;padding:12px;font:inherit}button{width:100%;margin-top:14px;border:0;border-radius:10px;background:#3157d5;color:#fff;padding:12px;font-weight:800;cursor:pointer}pre{background:#fef3f2;color:#b42318;border-radius:9px;padding:10px;font:12px inherit;white-space:pre-wrap}
+  </style>
+</head>
+<body><main class="shell"><section class="card"><div class="mark">C</div><p class="eyebrow">Internal system</p><h1>Codistan Prospect Desk</h1><p>Enter the admin password to access prospect discovery and management.</p><form id="login-form"><label>Admin password<input name="password" type="password" autocomplete="current-password" required autofocus /></label><button type="submit">Sign in</button></form><pre id="login-result" hidden></pre></section></main>
+<script>
+const form=document.getElementById('login-form');const result=document.getElementById('login-result');
+form.addEventListener('submit',async(event)=>{event.preventDefault();const button=form.querySelector('button');button.disabled=true;result.hidden=true;try{const response=await fetch('/api/login',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({password:new FormData(form).get('password')})});const data=await response.json();if(!response.ok)throw new Error(data.error||'Login failed');location.href='/';}catch(error){result.textContent=error.message;result.hidden=false;button.disabled=false;}});
+</script></body></html>`;
+}
+
+async function createSessionToken(expiresAt: number, secret: string): Promise<string> {
+  const { createHmac } = await import('node:crypto');
+  const payload = `admin:${expiresAt}`;
+  const signature = createHmac('sha256', secret).update(payload).digest('base64url');
+  return `${expiresAt}.${signature}`;
+}
+
+async function isAuthenticated(cookieHeader: string | null, secret: string): Promise<boolean> {
+  const token = parseCookies(cookieHeader ?? undefined)[SESSION_COOKIE];
+  if (!token) return false;
+  const match = token.match(/^(\d+)\.([A-Za-z0-9_-]+)$/);
+  if (!match?.[1] || !match[2]) return false;
+  const expiresAt = Number(match[1]);
+  if (!Number.isFinite(expiresAt) || expiresAt <= Math.floor(Date.now() / 1_000)) return false;
+  return safeEqual(token, await createSessionToken(expiresAt, secret));
+}
+
+async function safeEqual(left: string, right: string): Promise<boolean> {
+  const { timingSafeEqual } = await import('node:crypto');
+  const leftBuffer = Buffer.from(left);
+  const rightBuffer = Buffer.from(right);
+  return leftBuffer.length === rightBuffer.length && timingSafeEqual(leftBuffer, rightBuffer);
+}
+
+function buildSessionCookie(token: string): string {
+  return `${SESSION_COOKIE}=${token}; Path=/; HttpOnly; SameSite=Strict; Max-Age=${SESSION_LIFETIME_SECONDS}; Secure`;
+}
+
+function parseCookies(value: string | undefined): Record<string, string> {
+  const cookies: Record<string, string> = {};
+  for (const part of value?.split(';') ?? []) {
+    const [name, ...rest] = part.trim().split('=');
+    if (name) cookies[name] = rest.join('=');
+  }
+  return cookies;
+}
+
+function isRateLimited(key: string): boolean {
+  const state = loginAttempts.get(key);
+  if (!state) return false;
+  if (Date.now() - state.firstAttemptAt > 15 * 60 * 1_000) {
+    loginAttempts.delete(key);
+    return false;
+  }
+  return state.count >= 5;
+}
+
+function registerFailedAttempt(key: string): void {
+  const existing = loginAttempts.get(key);
+  if (!existing || Date.now() - existing.firstAttemptAt > 15 * 60 * 1_000) {
+    loginAttempts.set(key, { count: 1, firstAttemptAt: Date.now() });
+    return;
+  }
+  existing.count += 1;
+}
+
+function requireEnvironment(name: string): string {
+  const value = process.env[name];
+  if (!value?.trim()) throw new Error(`${name} is required.`);
+  return value.trim();
+}
+
+function requireString(value: unknown, field: string): string {
+  if (typeof value !== 'string' || !value.trim()) throw new Error(`${field} is required.`);
+  return value.trim();
+}
+
+function asObject(value: unknown): Record<string, unknown> {
+  return value && typeof value === 'object' && !Array.isArray(value)
+    ? value as Record<string, unknown>
+    : {};
+}
+
+function splitList(value: string | undefined): string[] | undefined {
+  if (!value?.trim()) return undefined;
+  return value.split(/[\n,;]+/).map((item) => item.trim()).filter(Boolean);
+}
+
+function positiveInteger(value: string | undefined, fallback: number): number {
+  const parsed = Number.parseInt(value ?? '', 10);
+  return Number.isInteger(parsed) && parsed > 0 ? parsed : fallback;
+}
+
+function securityHeaders(): Record<string, string> {
+  return {
+    'x-content-type-options': 'nosniff',
+    'x-frame-options': 'DENY',
+    'referrer-policy': 'same-origin',
+    'content-security-policy': "default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'",
+  };
+}
+
+function html(body: string, status = 200): Response {
+  return new Response(body, {
+    status,
+    headers: { ...securityHeaders(), 'content-type': 'text/html; charset=utf-8', 'cache-control': 'no-store' },
+  });
+}
+
+function json(value: unknown, status = 200): Response {
+  return new Response(JSON.stringify(value), {
+    status,
+    headers: { ...securityHeaders(), 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store' },
+  });
+}
+
+function runtimeErrorResponse(request: Request, phase: string, message: string): Response {
+  const acceptsHtml = request.headers.get('accept')?.includes('text/html') ?? false;
+  if (!acceptsHtml) return json({ error: 'Application runtime failed.', phase, detail: message }, 500);
+  return html(`<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Prospect Desk startup error</title><style>body{font-family:system-ui;background:#f8fafc;color:#172033;margin:0;padding:40px}.card{max-width:760px;margin:8vh auto;background:white;border:1px solid #e2e8f0;border-radius:16px;padding:28px}code{display:block;background:#0f172a;color:#e2e8f0;padding:14px;border-radius:10px;overflow-wrap:anywhere}p{color:#475569}</style></head><body><main class="card"><h1>Prospect Desk could not start</h1><p>The Vercel function is running, but the application failed during <strong>${escapeHtml(phase)}</strong>.</p><code>${escapeHtml(message)}</code><p>Open the Vercel Runtime Logs and search for <strong>VERCEL_DASHBOARD_RUNTIME_ERROR</strong>.</p></main></body></html>`, 500);
+}
+
+function normalizeError(error: unknown): { message: string; stack?: string } {
+  if (error instanceof Error) return { message: error.message, stack: error.stack };
+  return { message: String(error) };
+}
+
+function escapeHtml(value: string): string {
+  return value.replace(/[&<>"']/g, (character) => ({
+    '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
+  })[character] ?? character);
+}
