@@ -17,19 +17,22 @@ jobs:
         with:
           show-progress: false
 
+      - name: Install standalone pnpm executable
+        run: npm install --global --force @pnpm/exe@9.15.9
+
       - name: Show runtime versions
         run: |
           node --version
           npm --version
-          npm exec --yes --package=@pnpm/exe@9.15.9 -- pnpm --version
+          pnpm --version
 
       - name: Install dependencies
-        run: npm exec --yes --package=@pnpm/exe@9.15.9 -- pnpm install --no-frozen-lockfile --silent
+        run: pnpm install --no-frozen-lockfile --silent
 
       - name: Typecheck
         id: typecheck
         continue-on-error: true
-        run: npm exec --yes --package=@pnpm/exe@9.15.9 -- pnpm typecheck > typecheck.log 2>&1
+        run: pnpm typecheck > typecheck.log 2>&1
 
       - name: Print typecheck log tail
         if: always()
@@ -49,7 +52,7 @@ jobs:
       - name: Test
         id: test
         continue-on-error: true
-        run: npm exec --yes --package=@pnpm/exe@9.15.9 -- pnpm test > test.log 2>&1
+        run: pnpm test > test.log 2>&1
 
       - name: Print test log tail
         if: always()
@@ -67,4 +70,4 @@ jobs:
         run: exit 1
 
       - name: Build
-        run: npm exec --yes --package=@pnpm/exe@9.15.9 -- pnpm build
+        run: pnpm build
