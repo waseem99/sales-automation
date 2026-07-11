@@ -1,3 +1,6 @@
+import type { EvaluateLeadInput, LeadEvaluation } from '@sales-automation/evaluator';
+import type { Lead, PortfolioItem } from '@sales-automation/shared';
+
 const SESSION_COOKIE = 'codistan_admin_session';
 const SESSION_LIFETIME_SECONDS = 12 * 60 * 60;
 const loginAttempts = new Map<string, { count: number; firstAttemptAt: number }>();
@@ -234,11 +237,11 @@ export default {
 interface StarterImportInput {
   repository: {
     getLead(leadId: string): unknown;
-    saveEvaluation(evaluation: unknown, actor?: string): unknown;
+    saveEvaluation(evaluation: LeadEvaluation, actor?: string): unknown;
   };
-  portfolioItems: unknown[];
-  starterLeads: Array<{ id: string }>;
-  evaluateLead(input: { lead: unknown; portfolioItems: unknown[]; generatedAt: string }): unknown;
+  portfolioItems: PortfolioItem[];
+  starterLeads: Lead[];
+  evaluateLead(input: EvaluateLeadInput): LeadEvaluation;
   actor: string;
 }
 
