@@ -28,63 +28,63 @@
   "rewrites": [
     {
       "source": "/health",
-      "destination": "/api/index?__route=/health"
+      "destination": "/api/index?__path=/health"
     },
     {
       "source": "/login",
-      "destination": "/api/index?__route=/login"
+      "destination": "/api/index?__path=/login"
     },
     {
       "source": "/prospects",
-      "destination": "/api/index?__route=/prospects"
+      "destination": "/api/index?__path=/prospects"
     },
     {
       "source": "/lead-desk",
-      "destination": "/api/index?__route=/lead-desk"
+      "destination": "/api/index?__path=/lead-desk"
     },
     {
       "source": "/api/login",
-      "destination": "/api/index?__route=/api/login"
+      "destination": "/api/index?__path=/api/login"
     },
     {
       "source": "/api/logout",
-      "destination": "/api/index?__route=/api/logout"
+      "destination": "/api/index?__path=/api/logout"
     },
     {
       "source": "/api/prospects",
-      "destination": "/api/index?__route=/api/prospects"
+      "destination": "/api/index?__path=/api/prospects"
     },
     {
       "source": "/api/prospect-runs",
-      "destination": "/api/index?__route=/api/prospect-runs"
+      "destination": "/api/index?__path=/api/prospect-runs"
     },
     {
       "source": "/api/prospects/:path*",
-      "destination": "/api/index?__route=/api/prospects/:path*"
+      "destination": "/api/index?__path=/api/prospects/:path*"
     },
     {
       "source": "/api/session",
-      "destination": "/api/index?__route=/api/session"
+      "destination": "/api/index?__path=/api/session"
     },
     {
       "source": "/api/summary",
-      "destination": "/api/index?__route=/api/summary"
+      "destination": "/api/index?__path=/api/summary"
     },
     {
       "source": "/api/opportunities",
-      "destination": "/api/index?__route=/api/opportunities"
+      "destination": "/api/index?__path=/api/opportunities"
     },
     {
       "source": "/api/opportunities/:path*",
-      "destination": "/api/index?__route=/api/opportunities/:path*"
+      "destination": "/api/index?__path=/api/opportunities/:path*"
     },
     {
       "source": "/api/ingest/:path*",
-      "destination": "/api/index?__route=/api/ingest/:path*"
+      "destination": "/api/index?__path=/api/ingest/:path*"
     },
     {
       "source": "/api/dev/:path*",
-      "destination": "/api/index?__route=/api/dev/:path*"
+      "destination": "/api/index?__path=/api/dev/:path*"
     }
   ]
 }
