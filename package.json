@@ -23,10 +23,10 @@
     "typecheck": "pnpm build && pnpm -r --filter \"@sales-automation/*\" --sort typecheck && pnpm typecheck:vercel"
   },
   "engines": {
-    "node": "24.x"
+    "node": "22.x"
   },
   "devDependencies": {
-    "@types/node": "^24.0.0",
+    "@types/node": "^22.0.0",
     "tsx": "^4.19.2",
     "typescript": "^5.7.2"
   }
