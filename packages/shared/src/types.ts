@@ -74,6 +74,23 @@ export type PipelineStatus =
 
 export type LeadOutcomeStatus = 'won' | 'lost' | 'rejected' | 'nurture' | 'no_response' | 'not_fit' | 'duplicate';
 
+export type FeedbackStatus = 'pending' | 'complete';
+export type ContactAccuracy = 'accurate' | 'partially_accurate' | 'wrong' | 'missing';
+export type SourceQuality = 'high' | 'medium' | 'low';
+export type RepeatRecommendation = 'increase' | 'keep' | 'reduce' | 'stop';
+
+export interface ProspectFeedback {
+  status: FeedbackStatus;
+  relevanceRating?: 1 | 2 | 3 | 4 | 5;
+  contactAccuracy?: ContactAccuracy;
+  sourceQuality?: SourceQuality;
+  repeatRecommendation?: RepeatRecommendation;
+  correctedServiceCategory?: ServiceCategory;
+  reason?: string;
+  recordedBy?: string;
+  recordedAt?: string;
+}
+
 export type CodistanProfile =
   | 'us_ai_fullstack_profile'
   | 'waseem_ai_founder_profile'
@@ -154,6 +171,7 @@ export interface Lead {
   outcomeStatus?: LeadOutcomeStatus;
   outcomeReason?: string;
   outcomeRecordedAt?: string;
+  feedback?: ProspectFeedback;
   pipelineStatus: PipelineStatus;
   createdAt: string;
   updatedAt: string;
