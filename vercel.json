@@ -18,18 +18,73 @@
       "schedule": "0 4 * * *"
     }
   ],
-  "rewrites": [
-    {
-      "source": "/api/cron/prospect-discovery",
-      "destination": "/api/cron/prospect-discovery"
-    },
+  "redirects": [
     {
       "source": "/",
-      "destination": "/api/index?__path=/"
+      "destination": "/prospects",
+      "permanent": false
+    }
+  ],
+  "rewrites": [
+    {
+      "source": "/health",
+      "destination": "/api/index?__path=/health"
     },
     {
-      "source": "/:path*",
-      "destination": "/api/index?__path=/:path*"
+      "source": "/login",
+      "destination": "/api/index?__path=/login"
+    },
+    {
+      "source": "/prospects",
+      "destination": "/api/index?__path=/prospects"
+    },
+    {
+      "source": "/lead-desk",
+      "destination": "/api/index?__path=/lead-desk"
+    },
+    {
+      "source": "/api/login",
+      "destination": "/api/index?__path=/api/login"
+    },
+    {
+      "source": "/api/logout",
+      "destination": "/api/index?__path=/api/logout"
+    },
+    {
+      "source": "/api/prospects",
+      "destination": "/api/index?__path=/api/prospects"
+    },
+    {
+      "source": "/api/prospect-runs",
+      "destination": "/api/index?__path=/api/prospect-runs"
+    },
+    {
+      "source": "/api/prospects/:path*",
+      "destination": "/api/index?__path=/api/prospects/:path*"
+    },
+    {
+      "source": "/api/session",
+      "destination": "/api/index?__path=/api/session"
+    },
+    {
+      "source": "/api/summary",
+      "destination": "/api/index?__path=/api/summary"
+    },
+    {
+      "source": "/api/opportunities",
+      "destination": "/api/index?__path=/api/opportunities"
+    },
+    {
+      "source": "/api/opportunities/:path*",
+      "destination": "/api/index?__path=/api/opportunities/:path*"
+    },
+    {
+      "source": "/api/ingest/:path*",
+      "destination": "/api/index?__path=/api/ingest/:path*"
+    },
+    {
+      "source": "/api/dev/:path*",
+      "destination": "/api/index?__path=/api/dev/:path*"
     }
   ]
 }
