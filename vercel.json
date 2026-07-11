@@ -1,8 +1,8 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "version": 2,
-  "installCommand": "corepack enable && corepack prepare pnpm@9.15.9 --activate && pnpm install --no-frozen-lockfile",
-  "buildCommand": "pnpm build",
+  "installCommand": "npx --yes --package=@pnpm/exe@9.15.9 pnpm install --no-frozen-lockfile",
+  "buildCommand": "npx --yes --package=@pnpm/exe@9.15.9 pnpm build",
   "functions": {
     "api/index.ts": {
       "maxDuration": 300
