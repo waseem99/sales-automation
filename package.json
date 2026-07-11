@@ -27,6 +27,7 @@
     "node": "22.x"
   },
   "dependencies": {
+    "@sales-automation/evaluator": "workspace:*",
     "@sales-automation/fixtures": "workspace:*",
     "@sales-automation/neon-state": "workspace:*",
     "@sales-automation/prospect-discovery": "workspace:*",
