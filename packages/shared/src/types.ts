@@ -4,6 +4,10 @@ export type LeadSource =
   | 'sales_navigator'
   | 'partner_research'
   | 'solution_campaign'
+  | 'public_web'
+  | 'public_job_board'
+  | 'public_directory'
+  | 'public_procurement'
   | 'manual'
   | 'future_source';
 
@@ -15,6 +19,9 @@ export type LeadType =
   | 'sales_navigator_cold_prospect'
   | 'partner_prospect'
   | 'solution_led_prospect'
+  | 'public_opportunity'
+  | 'hiring_signal'
+  | 'partnership_target'
   | 'manual_lead'
   | 'future_source';
 
@@ -25,6 +32,11 @@ export type ProspectStage =
   | 'solution_prospect'
   | 'manual_lead'
   | 'unknown';
+
+export type OpportunitySignalStatus =
+  | 'live_opportunity'
+  | 'recent_demand_signal'
+  | 'partnership_target';
 
 export type ServiceCategory =
   | 'ai_automation'
@@ -107,12 +119,22 @@ export interface Lead {
   title: string;
   description: string;
   companyName?: string;
+  companyWebsite?: string;
   contactName?: string;
   contactRole?: string;
+  contactEmail?: string;
+  contactPhone?: string;
+  contactFormUrl?: string;
+  linkedinUrl?: string;
   country?: string;
   region?: string;
   industry?: string;
   serviceCategory: ServiceCategory;
+  opportunityStatus?: OpportunitySignalStatus;
+  discoverySource?: string;
+  evidenceUrl?: string;
+  evidenceSummary?: string;
+  discoveredAt?: string;
   budgetSignal?: string;
   timelineSignal?: string;
   postedAt?: string;
@@ -127,6 +149,8 @@ export interface Lead {
   owner?: string;
   nextFollowUpAt?: string;
   followUpNote?: string;
+  lastContactedAt?: string;
+  lastResponseAt?: string;
   outcomeStatus?: LeadOutcomeStatus;
   outcomeReason?: string;
   outcomeRecordedAt?: string;
