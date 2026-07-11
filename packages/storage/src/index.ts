@@ -71,6 +71,10 @@ interface PersistedLeadRepositoryFile {
 export class InMemoryLeadRepository implements LeadRepository {
   protected readonly records = new Map<string, StoredLeadRecord>();
 
+  constructor(initialRecords: StoredLeadRecord[] = []) {
+    this.replaceRecords(initialRecords);
+  }
+
   upsertLead(lead: Lead, actor = 'system'): StoredLeadRecord {
     const existing = this.records.get(lead.id);
     const record: StoredLeadRecord = existing ?? {
