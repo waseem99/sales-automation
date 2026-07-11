@@ -11,6 +11,10 @@ interface PersistedRunFile {
 export class InMemoryProspectDiscoveryRunStore implements ProspectDiscoveryRunStore {
   protected runs: ProspectDiscoveryRun[] = [];
 
+  constructor(initialRuns: ProspectDiscoveryRun[] = []) {
+    this.replaceRuns(initialRuns);
+  }
+
   listRuns(limit = 30): ProspectDiscoveryRun[] {
     return [...this.runs]
       .sort((a, b) => b.startedAt.localeCompare(a.startedAt))

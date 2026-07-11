@@ -29,6 +29,7 @@ const lead: Lead = {
   evidenceSummary: 'Official public requirement checked today.',
   discoveredAt: now,
   capturedAt: now,
+  feedback: { status: 'pending' },
   pipelineStatus: 'needs_human_review',
   createdAt: now,
   updatedAt: now,
@@ -94,7 +95,16 @@ assert.equal(dashboard.status, 200);
 const dashboardHtml = await dashboard.text();
 assert.ok(dashboardHtml.includes('Prospect Discovery &amp; Management') || dashboardHtml.includes('Prospect Discovery & Management'));
 assert.ok(dashboardHtml.includes('Example Company'));
+assert.ok(dashboardHtml.includes('Required BD feedback'));
 assert.ok(dashboardHtml.includes('Run discovery now'));
+
+const blockedFinalStatus = await fetch(`${base}/api/prospects/${lead.id}/status`, {
+  method: 'POST',
+  headers: { cookie, 'content-type': 'application/json' },
+  body: JSON.stringify({ status: 'won' }),
+});
+assert.equal(blockedFinalStatus.status, 400);
+assert.match((await blockedFinalStatus.json()).error, /Complete the required BD feedback/);
 
 const activity = await fetch(`${base}/api/prospects/${lead.id}/activity`, {
   method: 'POST',
@@ -105,6 +115,32 @@ assert.equal(activity.status, 200);
 assert.equal((await activity.json()).pipelineStatus, 'replied');
 assert.equal(repository.getLead(lead.id)?.lead.lastResponseAt, now);
 assert.ok(repository.getLead(lead.id)?.notes.some((note) => note.includes('Interested; requested a meeting')));
+
+const feedback = await fetch(`${base}/api/prospects/${lead.id}/feedback`, {
+  method: 'POST',
+  headers: { cookie, 'content-type': 'application/json' },
+  body: JSON.stringify({
+    relevanceRating: '5',
+    contactAccuracy: 'accurate',
+    sourceQuality: 'high',
+    repeatRecommendation: 'increase',
+    correctedServiceCategory: '',
+    reason: 'Strong active requirement and the correct founder contact was identified.',
+  }),
+});
+assert.equal(feedback.status, 200);
+const feedbackPayload = await feedback.json();
+assert.equal(feedbackPayload.feedback.status, 'complete');
+assert.equal(feedbackPayload.feedback.relevanceRating, 5);
+assert.equal(repository.getLead(lead.id)?.lead.feedback?.repeatRecommendation, 'increase');
+
+const wonStatus = await fetch(`${base}/api/prospects/${lead.id}/status`, {
+  method: 'POST',
+  headers: { cookie, 'content-type': 'application/json' },
+  body: JSON.stringify({ status: 'won' }),
+});
+assert.equal(wonStatus.status, 200);
+assert.equal((await wonStatus.json()).pipelineStatus, 'won');
 
 const discovery = await fetch(`${base}/api/prospects/run`, {
   method: 'POST',

@@ -39,22 +39,16 @@ export async function runProspectDiscovery(options: ProspectDiscoveryOptions): P
       options.maxSearchQueries ?? 12,
     ));
   }
-  if (options.remoteOkEnabled !== false) {
-    sourceResults.push(await collectRemoteOkCandidates(fetchImpl));
-  }
-  if (options.greenhouseBoards?.length) {
-    sourceResults.push(await collectGreenhouseCandidates(fetchImpl, options.greenhouseBoards));
-  }
-  if (options.leverSites?.length) {
-    sourceResults.push(await collectLeverCandidates(fetchImpl, options.leverSites));
-  }
-  if (options.rssFeeds?.length) {
-    sourceResults.push(await collectGenericRssCandidates(fetchImpl, options.rssFeeds));
-  }
+  if (options.remoteOkEnabled !== false) sourceResults.push(await collectRemoteOkCandidates(fetchImpl));
+  if (options.greenhouseBoards?.length) sourceResults.push(await collectGreenhouseCandidates(fetchImpl, options.greenhouseBoards));
+  if (options.leverSites?.length) sourceResults.push(await collectLeverCandidates(fetchImpl, options.leverSites));
+  if (options.rssFeeds?.length) sourceResults.push(await collectGenericRssCandidates(fetchImpl, options.rssFeeds));
 
-  const collected = dedupeCandidates(sourceResults.flatMap((result) => result.candidates));
+  const existingRecords = options.repository.listLeads();
+  const existingLeads = existingRecords.map((record) => record.lead);
+  const collected = dedupeCandidates(sourceResults.flatMap((result) => result.candidates), existingLeads);
   const maxCandidates = normalizePositiveInteger(options.maxCandidates, 50);
-  const existingKeys = buildExistingKeys(options.repository.listLeads().map((record) => record.lead));
+  const existingKeys = buildExistingKeys(existingLeads);
   const newLeads: Lead[] = [];
   let duplicateCount = 0;
   let enrichedCount = 0;
@@ -144,6 +138,7 @@ export function candidateToLead(candidate: DiscoveryCandidate, capturedAt: strin
     postedAt,
     capturedAt,
     freshnessMinutes,
+    feedback: { status: 'pending' },
     rawPayload: {
       prospectDiscovery: {
         sourceName: candidate.sourceName,
@@ -226,9 +221,9 @@ function leadKeys(lead: Lead): string[] {
   return keys.filter((key) => !key.endsWith(':'));
 }
 
-function dedupeCandidates(candidates: DiscoveryCandidate[]): DiscoveryCandidate[] {
+function dedupeCandidates(candidates: DiscoveryCandidate[], historicalLeads: Lead[]): DiscoveryCandidate[] {
   const seen = new Set<string>();
-  const ordered = [...candidates].sort((a, b) => priority(b) - priority(a));
+  const ordered = [...candidates].sort((a, b) => priority(b, historicalLeads) - priority(a, historicalLeads));
   return ordered.filter((candidate) => {
     const key = normalizeUrl(candidate.sourceUrl);
     if (seen.has(key)) return false;
@@ -237,11 +232,29 @@ function dedupeCandidates(candidates: DiscoveryCandidate[]): DiscoveryCandidate[
   });
 }
 
-function priority(candidate: DiscoveryCandidate): number {
+function priority(candidate: DiscoveryCandidate, historicalLeads: Lead[]): number {
   const status = candidate.opportunityStatus === 'live_opportunity' ? 300
     : candidate.opportunityStatus === 'recent_demand_signal' ? 200 : 100;
   const recency = candidate.publishedAt ? Math.max(0, 60 - Math.floor((Date.now() - Date.parse(candidate.publishedAt)) / 86_400_000)) : 0;
-  return status + recency;
+  return status + recency + historicalSourceAdjustment(candidate.sourceName, historicalLeads);
+}
+
+function historicalSourceAdjustment(sourceName: string, leads: Lead[]): number {
+  const relevant = leads.filter((lead) => lead.discoverySource === sourceName && lead.feedback?.status === 'complete');
+  if (relevant.length === 0) return 0;
+  const averageRating = relevant.reduce((sum, lead) => sum + (lead.feedback?.relevanceRating ?? 3), 0) / relevant.length;
+  const outcomeScore = relevant.reduce((sum, lead) => {
+    if (lead.pipelineStatus === 'won') return sum + 40;
+    if (lead.pipelineStatus === 'meeting_booked' || lead.pipelineStatus === 'proposal_sent') return sum + 20;
+    if (lead.pipelineStatus === 'replied') return sum + 10;
+    if (lead.pipelineStatus === 'rejected' || lead.outcomeStatus === 'not_fit') return sum - 20;
+    return sum;
+  }, 0) / relevant.length;
+  const repeatScore = relevant.reduce((sum, lead) => {
+    const recommendation = lead.feedback?.repeatRecommendation;
+    return sum + (recommendation === 'increase' ? 25 : recommendation === 'keep' ? 5 : recommendation === 'reduce' ? -20 : recommendation === 'stop' ? -50 : 0);
+  }, 0) / relevant.length;
+  return Math.round((averageRating - 3) * 15 + outcomeScore + repeatScore);
 }
 
 function canonicalDomain(value: string): string {
