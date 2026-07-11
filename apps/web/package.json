@@ -11,7 +11,7 @@
     "start": "node dist/dev.js",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "lint": "tsc -p tsconfig.json --noEmit",
-    "test": "tsx src/index.test.ts"
+    "test": "tsx src/index.test.ts && tsx src/prospect-server.test.ts"
   },
   "dependencies": {
     "@sales-automation/access-control": "workspace:*",
@@ -19,6 +19,7 @@
     "@sales-automation/auth": "workspace:*",
     "@sales-automation/dashboard": "workspace:*",
     "@sales-automation/ingestion": "workspace:*",
+    "@sales-automation/prospect-discovery": "workspace:*",
     "@sales-automation/shared": "workspace:*",
     "@sales-automation/storage": "workspace:*"
   },

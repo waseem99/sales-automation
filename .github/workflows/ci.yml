@@ -31,7 +31,24 @@ jobs:
         run: pnpm install --no-frozen-lockfile --silent
 
       - name: Typecheck
-        run: pnpm typecheck
+        id: typecheck
+        continue-on-error: true
+        run: pnpm typecheck > typecheck.log 2>&1
+
+      - name: Print typecheck log tail
+        if: always()
+        run: tail -n 160 typecheck.log || true
+
+      - name: Upload typecheck log
+        if: always()
+        uses: actions/upload-artifact@v5
+        with:
+          name: typecheck-log
+          path: typecheck.log
+
+      - name: Fail if typecheck failed
+        if: steps.typecheck.outcome != 'success'
+        run: exit 1
 
       - name: Test
         id: test
