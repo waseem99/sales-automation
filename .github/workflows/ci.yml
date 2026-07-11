@@ -21,15 +21,15 @@ jobs:
         run: |
           node --version
           npm --version
-          npx --yes --package=@pnpm/exe@9.15.9 pnpm --version
+          npm exec --yes --package=@pnpm/exe@9.15.9 -- pnpm --version
 
       - name: Install dependencies
-        run: npx --yes --package=@pnpm/exe@9.15.9 pnpm install --no-frozen-lockfile --silent
+        run: npm exec --yes --package=@pnpm/exe@9.15.9 -- pnpm install --no-frozen-lockfile --silent
 
       - name: Typecheck
         id: typecheck
         continue-on-error: true
-        run: npx --yes --package=@pnpm/exe@9.15.9 pnpm typecheck > typecheck.log 2>&1
+        run: npm exec --yes --package=@pnpm/exe@9.15.9 -- pnpm typecheck > typecheck.log 2>&1
 
       - name: Print typecheck log tail
         if: always()
@@ -49,7 +49,7 @@ jobs:
       - name: Test
         id: test
         continue-on-error: true
-        run: npx --yes --package=@pnpm/exe@9.15.9 pnpm test > test.log 2>&1
+        run: npm exec --yes --package=@pnpm/exe@9.15.9 -- pnpm test > test.log 2>&1
 
       - name: Print test log tail
         if: always()
@@ -67,4 +67,4 @@ jobs:
         run: exit 1
 
       - name: Build
-        run: npx --yes --package=@pnpm/exe@9.15.9 pnpm build
+        run: npm exec --yes --package=@pnpm/exe@9.15.9 -- pnpm build
