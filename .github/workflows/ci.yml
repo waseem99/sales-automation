@@ -17,23 +17,19 @@ jobs:
         with:
           show-progress: false
 
-      - name: Setup pnpm
-        uses: pnpm/action-setup@v4
-        with:
-          version: 9.15.9
-
       - name: Show runtime versions
         run: |
           node --version
-          pnpm --version
+          npm --version
+          npx --yes --package=@pnpm/exe@9.15.9 pnpm --version
 
       - name: Install dependencies
-        run: pnpm install --no-frozen-lockfile --silent
+        run: npx --yes --package=@pnpm/exe@9.15.9 pnpm install --no-frozen-lockfile --silent
 
       - name: Typecheck
         id: typecheck
         continue-on-error: true
-        run: pnpm typecheck > typecheck.log 2>&1
+        run: npx --yes --package=@pnpm/exe@9.15.9 pnpm typecheck > typecheck.log 2>&1
 
       - name: Print typecheck log tail
         if: always()
@@ -53,7 +49,7 @@ jobs:
       - name: Test
         id: test
         continue-on-error: true
-        run: pnpm test > test.log 2>&1
+        run: npx --yes --package=@pnpm/exe@9.15.9 pnpm test > test.log 2>&1
 
       - name: Print test log tail
         if: always()
@@ -71,4 +67,4 @@ jobs:
         run: exit 1
 
       - name: Build
-        run: pnpm build
+        run: npx --yes --package=@pnpm/exe@9.15.9 pnpm build
