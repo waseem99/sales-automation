@@ -2,9 +2,9 @@ import type { DiscoveryCandidate, ProspectFetch } from './types.js';
 import { fetchWithTimeout, parseRssItems } from './sources.js';
 
 const blockedHosts = new Set([
-  'www.bing.com', 'bing.com', 'www.google.com', 'google.com', 'remoteok.com', 'www.remoteok.com',
+  'bing.com', 'www.bing.com', 'google.com', 'www.google.com', 'remoteok.com', 'www.remoteok.com',
   'linkedin.com', 'www.linkedin.com', 'facebook.com', 'www.facebook.com', 'instagram.com', 'www.instagram.com',
-  'twitter.com', 'www.twitter.com', 'x.com', 'www.x.com', 'youtube.com', 'www.youtube.com',
+  'x.com', 'www.x.com', 'twitter.com', 'www.twitter.com', 'youtube.com', 'www.youtube.com',
   'boards.greenhouse.io', 'job-boards.greenhouse.io', 'jobs.lever.co', 'api.lever.co',
   'indeed.com', 'www.indeed.com', 'glassdoor.com', 'www.glassdoor.com',
 ]);
@@ -17,10 +17,20 @@ const targetRoles = [
   'Head of AI', 'AI Director', 'Partnerships Director', 'Head of Partnerships', 'Commercial Director',
 ];
 
-const navigationWords = new Set([
-  'about', 'blog', 'careers', 'company', 'contact', 'home', 'leadership', 'linkedin', 'menu',
+const nameNoise = new Set([
+  'about', 'blog', 'careers', 'company', 'contact', 'home', 'in', 'leadership', 'linkedin', 'menu',
   'news', 'portfolio', 'services', 'team', 'website', 'work',
 ]);
+
+interface CrawledPage {
+  url: string;
+  html: string;
+}
+
+interface DecisionMaker {
+  name: string;
+  role: string;
+}
 
 export async function enrichCandidate(
   fetchImpl: ProspectFetch,
@@ -29,19 +39,14 @@ export async function enrichCandidate(
   const companyWebsite = candidate.companyWebsite
     ?? deriveCompanyWebsite(candidate.sourceUrl)
     ?? (candidate.companyName ? await findCompanyWebsite(fetchImpl, candidate.companyName) : undefined);
-
   if (!companyWebsite) return candidate;
 
   const pages = await crawlCompanyPages(fetchImpl, companyWebsite);
   if (pages.length === 0) return { ...candidate, companyWebsite };
 
-  const combinedHtml = pages.map((page) => page.html).join('\n');
-  const combinedText = pages.map((page) => stripHtml(page.html)).join(' ');
-  const emails = extractEmails(combinedHtml);
-  const phones = extractPhones(combinedText);
-  const contactFormUrl = findContactFormUrl(pages, companyWebsite);
-  const linkedinUrl = extractLinkedInUrl(combinedHtml);
-  const leader = extractDecisionMaker(combinedText);
+  const html = pages.map((page) => page.html).join('\n');
+  const text = pages.map((page) => stripHtml(page.html)).join(' ');
+  const leader = extractDecisionMaker(text);
   const companyName = candidate.companyName ?? extractCompanyName(pages[0]?.html ?? '', companyWebsite);
 
   return {
@@ -50,10 +55,10 @@ export async function enrichCandidate(
     companyWebsite,
     contactName: candidate.contactName ?? leader?.name,
     contactRole: candidate.contactRole ?? leader?.role,
-    contactEmail: candidate.contactEmail ?? chooseBestEmail(emails),
-    contactPhone: candidate.contactPhone ?? phones[0],
-    contactFormUrl: candidate.contactFormUrl ?? contactFormUrl,
-    linkedinUrl: candidate.linkedinUrl ?? linkedinUrl,
+    contactEmail: candidate.contactEmail ?? chooseBestEmail(extractEmails(html)),
+    contactPhone: candidate.contactPhone ?? extractPhones(text)[0],
+    contactFormUrl: candidate.contactFormUrl ?? findContactFormUrl(pages, companyWebsite),
+    linkedinUrl: candidate.linkedinUrl ?? extractLinkedInUrl(html),
     evidenceSummary: candidate.evidenceSummary
       ? `${candidate.evidenceSummary} Official company website and public contact pages checked.`
       : 'Official company website and public contact pages checked.',
@@ -65,18 +70,17 @@ export async function findCompanyWebsite(fetchImpl: ProspectFetch, companyName: 
   try {
     const response = await fetchWithTimeout(fetchImpl, `https://www.bing.com/search?format=rss&q=${encodeURIComponent(query)}`);
     if (!response.ok) return undefined;
-    const items = parseRssItems(await response.text());
-    const companyTokens = companyName.toLowerCase().split(/\W+/).filter((token) => token.length > 2);
-    for (const item of items) {
+    const tokens = companyName.toLowerCase().split(/\W+/).filter((token) => token.length > 2);
+    for (const item of parseRssItems(await response.text())) {
       const website = deriveCompanyWebsite(item.link);
       if (!website) continue;
-      const text = `${item.title} ${item.description} ${website}`.toLowerCase();
-      if (companyTokens.length === 0 || companyTokens.some((token) => text.includes(token))) return website;
+      const haystack = `${item.title} ${item.description} ${website}`.toLowerCase();
+      if (tokens.length === 0 || tokens.some((token) => haystack.includes(token))) return website;
     }
-    return undefined;
   } catch {
     return undefined;
   }
+  return undefined;
 }
 
 export function deriveCompanyWebsite(sourceUrl: string): string | undefined {
@@ -90,36 +94,23 @@ export function deriveCompanyWebsite(sourceUrl: string): string | undefined {
   }
 }
 
-interface CrawledPage {
-  url: string;
-  html: string;
-}
-
 async function crawlCompanyPages(fetchImpl: ProspectFetch, companyWebsite: string): Promise<CrawledPage[]> {
   const root = normalizeRootUrl(companyWebsite);
   if (!root) return [];
-  const pages: CrawledPage[] = [];
-  const rootPage = await fetchHtml(fetchImpl, root);
-  if (!rootPage) return [];
-  pages.push({ url: root, html: rootPage });
+  const rootHtml = await fetchHtml(fetchImpl, root);
+  if (!rootHtml) return [];
 
-  const candidateLinks = extractLinks(rootPage, root)
+  const pages: CrawledPage[] = [{ url: root, html: rootHtml }];
+  const discovered = extractLinks(rootHtml, root)
     .filter((url) => sameHost(url, root))
-    .filter((url) => /\/(about|team|leadership|company|contact|services|work|portfolio|careers)(\/|$|\?)/i.test(new URL(url).pathname + new URL(url).search))
-    .filter((url, index, all) => all.indexOf(url) === index)
-    .slice(0, 5);
+    .filter((url) => /\/(about|team|leadership|company|contact|services|work|portfolio|careers)(\/|$|\?)/i.test(new URL(url).pathname + new URL(url).search));
+  const fallbacks = ['/about', '/team', '/leadership', '/contact'].map((path) => new URL(path, root).toString().replace(/\/$/, ''));
+  const urls = [...new Set([...discovered, ...fallbacks])].slice(0, 6);
 
-  const fallbackPaths = ['/about', '/team', '/leadership', '/contact'];
-  for (const path of fallbackPaths) {
-    const url = new URL(path, root).toString().replace(/\/$/, '');
-    if (!candidateLinks.includes(url)) candidateLinks.push(url);
-  }
-
-  for (const url of candidateLinks.slice(0, 6)) {
+  for (const url of urls) {
     const html = await fetchHtml(fetchImpl, url);
     if (html) pages.push({ url, html });
   }
-
   return pages;
 }
 
@@ -130,7 +121,7 @@ async function fetchHtml(fetchImpl: ProspectFetch, url: string): Promise<string 
     const contentType = response.headers.get('content-type') ?? '';
     if (contentType && !contentType.includes('text/html') && !contentType.includes('application/xhtml+xml')) return undefined;
     const html = await response.text();
-    return html.length > 1_500_000 ? html.slice(0, 1_500_000) : html;
+    return html.slice(0, 1_500_000);
   } catch {
     return undefined;
   }
@@ -140,10 +131,10 @@ function extractLinks(html: string, baseUrl: string): string[] {
   const links: string[] = [];
   for (const match of html.matchAll(/<a\b[^>]*href=["']([^"']+)["'][^>]*>/gi)) {
     const href = decodeEntities(match[1] ?? '').trim();
-    if (!href || href.startsWith('#') || href.startsWith('mailto:') || href.startsWith('tel:') || href.startsWith('javascript:')) continue;
+    if (!href || /^(#|mailto:|tel:|javascript:)/i.test(href)) continue;
     try {
       const url = new URL(href, baseUrl);
-      if (url.protocol !== 'http:' && url.protocol !== 'https:') continue;
+      if (!['http:', 'https:'].includes(url.protocol)) continue;
       url.hash = '';
       links.push(url.toString().replace(/\/$/, ''));
     } catch {
@@ -154,9 +145,8 @@ function extractLinks(html: string, baseUrl: string): string[] {
 }
 
 function extractEmails(html: string): string[] {
-  const normalized = decodeEntities(html);
   const emails = new Set<string>();
-  for (const match of normalized.matchAll(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/gi)) {
+  for (const match of decodeEntities(html).matchAll(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/gi)) {
     const email = (match[0] ?? '').toLowerCase().replace(/[),.;:]+$/, '');
     if (!email || /example\.|sentry\.|wixpress|cloudflare|domain\.com/.test(email)) continue;
     if (/\.(png|jpg|jpeg|gif|svg|webp)$/i.test(email)) continue;
@@ -191,49 +181,43 @@ function extractPhones(text: string): string[] {
 function findContactFormUrl(pages: CrawledPage[], companyWebsite: string): string | undefined {
   const contactPage = pages.find((page) => /\/contact(\/|$|\?)/i.test(new URL(page.url).pathname + new URL(page.url).search));
   if (contactPage && /<form\b/i.test(contactPage.html)) return contactPage.url;
-
   for (const page of pages) {
-    for (const link of extractLinks(page.html, page.url)) {
-      if (sameHost(link, companyWebsite) && /contact|new-business|get-in-touch|lets-talk|book-a-call/i.test(link)) return link;
-    }
+    const match = extractLinks(page.html, page.url).find((url) => sameHost(url, companyWebsite)
+      && /contact|new-business|get-in-touch|lets-talk|book-a-call/i.test(url));
+    if (match) return match;
   }
   return contactPage?.url;
 }
 
 function extractLinkedInUrl(html: string): string | undefined {
-  const match = html.match(/https?:\/\/(?:www\.)?linkedin\.com\/(?:company|in)\/[^"'\s<>]+/i);
-  return match?.[0]?.replace(/[),.;]+$/, '');
-}
-
-interface DecisionMaker {
-  name: string;
-  role: string;
+  return html.match(/https?:\/\/(?:www\.)?linkedin\.com\/(?:company|in)\/[^"'\s<>]+/i)?.[0]?.replace(/[),.;]+$/, '');
 }
 
 function extractDecisionMaker(text: string): DecisionMaker | undefined {
   const normalized = text.replace(/\s+/g, ' ');
   const rolePattern = targetRoles.map(escapeRegex).sort((a, b) => b.length - a.length).join('|');
   const namePattern = '[A-Z][a-z]+(?:[ \\u2019\'-][A-Z][a-z]+){1,3}';
-  const forward = new RegExp(`(${namePattern})\\s*(?:[-–|,]|is|—)\\s*(${rolePattern})`, 'g');
-  const reverse = new RegExp(`(${rolePattern})\\s*(?:[-–|,:]|is|—)\\s*(${namePattern})`, 'gi');
+  const patterns = [
+    { regex: new RegExp(`(${namePattern})\\s*(?:[-–|,]|is|—)\\s*(${rolePattern})`, 'g'), nameIndex: 1, roleIndex: 2 },
+    { regex: new RegExp(`(${rolePattern})\\s*(?:[-–|,:]|is|—)\\s*(${namePattern})`, 'gi'), nameIndex: 2, roleIndex: 1 },
+  ];
 
-  for (const match of normalized.matchAll(forward)) {
-    const name = cleanPersonName(match[1] ?? '');
-    if (name && match[2]) return { name, role: normalizeRole(match[2]) };
-  }
-  for (const match of normalized.matchAll(reverse)) {
-    const name = cleanPersonName(match[2] ?? '');
-    if (name && match[1]) return { name, role: normalizeRole(match[1]) };
+  for (const pattern of patterns) {
+    for (const match of normalized.matchAll(pattern.regex)) {
+      const name = cleanPersonName(match[pattern.nameIndex] ?? '');
+      const role = match[pattern.roleIndex];
+      if (name && role) return { name, role: normalizeRole(role) };
+    }
   }
   return undefined;
 }
 
 function cleanPersonName(value: string): string | undefined {
   const words = value.trim().split(/\s+/).filter(Boolean);
-  while (words.length > 2 && navigationWords.has((words[0] ?? '').toLowerCase())) words.shift();
+  while (words.length > 2 && nameNoise.has((words[0] ?? '').toLowerCase())) words.shift();
   if (words.length < 2 || words.length > 4) return undefined;
-  if (words.some((word) => navigationWords.has(word.toLowerCase()))) return undefined;
-  return titleCaseName(words.join(' '));
+  if (words.some((word) => nameNoise.has(word.toLowerCase()))) return undefined;
+  return words.join(' ').replace(/\b\w/g, (letter) => letter.toUpperCase());
 }
 
 function extractCompanyName(html: string, companyWebsite: string): string {
@@ -257,7 +241,8 @@ function normalizeRootUrl(value: string): string | undefined {
 
 function hostnameLabel(value: string): string {
   try {
-    return new URL(value).hostname.replace(/^www\./, '').split('.')[0]?.replace(/[-_]+/g, ' ').replace(/\b\w/g, (letter) => letter.toUpperCase()) ?? value;
+    const label = new URL(value).hostname.replace(/^www\./, '').split('.')[0] ?? value;
+    return label.replace(/[-_]+/g, ' ').replace(/\b\w/g, (letter) => letter.toUpperCase());
   } catch {
     return value;
   }
@@ -265,16 +250,10 @@ function hostnameLabel(value: string): string {
 
 function sameHost(value: string, other: string): boolean {
   try {
-    const left = new URL(value).hostname.replace(/^www\./, '');
-    const right = new URL(other).hostname.replace(/^www\./, '');
-    return left === right;
+    return new URL(value).hostname.replace(/^www\./, '') === new URL(other).hostname.replace(/^www\./, '');
   } catch {
     return false;
   }
-}
-
-function titleCaseName(value: string): string {
-  return value.trim().replace(/\b\w/g, (letter) => letter.toUpperCase());
 }
 
 function normalizeRole(value: string): string {
