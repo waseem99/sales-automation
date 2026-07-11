@@ -1,8 +1,8 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "version": 2,
-  "installCommand": "npm install --global --force @pnpm/exe@9.15.9 && pnpm --version && pnpm install --no-frozen-lockfile",
-  "buildCommand": "pnpm build",
+  "installCommand": "npm install --global --prefix \"$PWD/.pnpm-cli\" --force @pnpm/exe@9.15.9 && PATH=\"$PWD/.pnpm-cli/bin:$PATH\" pnpm --version && PATH=\"$PWD/.pnpm-cli/bin:$PATH\" pnpm install --no-frozen-lockfile",
+  "buildCommand": "PATH=\"$PWD/.pnpm-cli/bin:$PATH\" pnpm build",
   "functions": {
     "api/index.ts": {
       "maxDuration": 300

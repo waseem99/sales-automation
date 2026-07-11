@@ -18,12 +18,15 @@ jobs:
           show-progress: false
 
       - name: Install standalone pnpm executable
-        run: npm install --global --force @pnpm/exe@9.15.9
+        run: |
+          npm install --global --prefix "$PWD/.pnpm-cli" --force @pnpm/exe@9.15.9
+          echo "$PWD/.pnpm-cli/bin" >> "$GITHUB_PATH"
 
       - name: Show runtime versions
         run: |
           node --version
           npm --version
+          command -v pnpm
           pnpm --version
 
       - name: Install dependencies
