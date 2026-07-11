@@ -17,6 +17,11 @@ const targetRoles = [
   'Head of AI', 'AI Director', 'Partnerships Director', 'Head of Partnerships', 'Commercial Director',
 ];
 
+const navigationWords = new Set([
+  'about', 'blog', 'careers', 'company', 'contact', 'home', 'leadership', 'linkedin', 'menu',
+  'news', 'portfolio', 'services', 'team', 'website', 'work',
+]);
+
 export async function enrichCandidate(
   fetchImpl: ProspectFetch,
   candidate: DiscoveryCandidate,
@@ -209,13 +214,26 @@ function extractDecisionMaker(text: string): DecisionMaker | undefined {
   const normalized = text.replace(/\s+/g, ' ');
   const rolePattern = targetRoles.map(escapeRegex).sort((a, b) => b.length - a.length).join('|');
   const namePattern = '[A-Z][a-z]+(?:[ \\u2019\'-][A-Z][a-z]+){1,3}';
-  const forward = new RegExp(`(${namePattern})\\s*(?:[-–|,]|is|—)\\s*(${rolePattern})`, 'i');
-  const reverse = new RegExp(`(${rolePattern})\\s*(?:[-–|,:]|is|—)\\s*(${namePattern})`, 'i');
-  const forwardMatch = normalized.match(forward);
-  if (forwardMatch?.[1] && forwardMatch[2]) return { name: titleCaseName(forwardMatch[1]), role: normalizeRole(forwardMatch[2]) };
-  const reverseMatch = normalized.match(reverse);
-  if (reverseMatch?.[1] && reverseMatch[2]) return { name: titleCaseName(reverseMatch[2]), role: normalizeRole(reverseMatch[1]) };
+  const forward = new RegExp(`(${namePattern})\\s*(?:[-–|,]|is|—)\\s*(${rolePattern})`, 'g');
+  const reverse = new RegExp(`(${rolePattern})\\s*(?:[-–|,:]|is|—)\\s*(${namePattern})`, 'gi');
+
+  for (const match of normalized.matchAll(forward)) {
+    const name = cleanPersonName(match[1] ?? '');
+    if (name && match[2]) return { name, role: normalizeRole(match[2]) };
+  }
+  for (const match of normalized.matchAll(reverse)) {
+    const name = cleanPersonName(match[2] ?? '');
+    if (name && match[1]) return { name, role: normalizeRole(match[1]) };
+  }
   return undefined;
+}
+
+function cleanPersonName(value: string): string | undefined {
+  const words = value.trim().split(/\s+/).filter(Boolean);
+  while (words.length > 2 && navigationWords.has((words[0] ?? '').toLowerCase())) words.shift();
+  if (words.length < 2 || words.length > 4) return undefined;
+  if (words.some((word) => navigationWords.has(word.toLowerCase()))) return undefined;
+  return titleCaseName(words.join(' '));
 }
 
 function extractCompanyName(html: string, companyWebsite: string): string {
