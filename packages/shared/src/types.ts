@@ -38,6 +38,8 @@ export type OpportunitySignalStatus =
   | 'recent_demand_signal'
   | 'partnership_target';
 
+export type ProspectConfidence = 'high' | 'medium' | 'low';
+
 export type ServiceCategory =
   | 'ai_automation'
   | 'rag_document_intelligence'
@@ -147,11 +149,16 @@ export interface Lead {
   region?: string;
   industry?: string;
   serviceCategory: ServiceCategory;
+  serviceOffer?: string;
+  materialsToShare?: string;
+  reachMethod?: string;
   opportunityStatus?: OpportunitySignalStatus;
   discoverySource?: string;
   evidenceUrl?: string;
   evidenceSummary?: string;
   discoveredAt?: string;
+  rank?: number;
+  confidence?: ProspectConfidence;
   budgetSignal?: string;
   timelineSignal?: string;
   postedAt?: string;
