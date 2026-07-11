@@ -1,0 +1,18 @@
+export type StarterProspectRow = [
+  rank: string,
+  company: string,
+  website: string,
+  leadTypeLabel: string,
+  currentStatusLabel: string,
+  evidence: string,
+  checkedOn: string,
+  evidenceUrl: string,
+  whoToReach: string,
+  howToReach: string,
+  publicContact: string,
+  codistanOffer: string,
+  whatToShare: string,
+  suggestedMessage: string,
+  recommendedAction: string,
+  confidence: string,
+];

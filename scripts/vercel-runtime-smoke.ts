@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
+import { verifiedStarterProspects } from '@sales-automation/fixtures';
 
 interface VercelConfig {
   redirects?: Array<{ source: string; destination: string; permanent?: boolean }>;
@@ -9,6 +10,12 @@ interface VercelConfig {
 async function main(): Promise<void> {
   process.env.ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || 'vercel-smoke-password';
   process.env.SESSION_SECRET = process.env.SESSION_SECRET || 'vercel-smoke-session-secret-123456789';
+
+  assert.equal(verifiedStarterProspects.length, 25);
+  assert.equal(new Set(verifiedStarterProspects.map((lead) => lead.id)).size, 25);
+  assert.deepEqual(verifiedStarterProspects.map((lead) => lead.rank), Array.from({ length: 25 }, (_value, index) => index + 1));
+  assert.equal(verifiedStarterProspects.filter((lead) => lead.opportunityStatus === 'live_opportunity').length, 3);
+  assert.ok(verifiedStarterProspects.every((lead) => Boolean(lead.companyName && lead.evidenceUrl && lead.serviceOffer && lead.materialsToShare && lead.draftMessage)));
 
   const config = JSON.parse(
     readFileSync(new URL('../vercel.json', import.meta.url), 'utf8'),
@@ -47,7 +54,7 @@ async function main(): Promise<void> {
   assert.match(loginAction.headers.get('set-cookie') ?? '', /^codistan_admin_session=/);
   assert.deepEqual(await loginAction.json(), { ok: true });
 
-  console.log('Vercel runtime and explicit routing smoke tests passed');
+  console.log('Vercel runtime, routing and starter prospect smoke tests passed');
 }
 
 main().catch((error) => {
