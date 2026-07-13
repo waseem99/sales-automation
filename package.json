@@ -33,6 +33,7 @@
     "@sales-automation/outreach-email": "workspace:*",
     "@sales-automation/prospect-discovery": "workspace:*",
     "@sales-automation/shared": "workspace:*",
+    "@sales-automation/storage": "workspace:*",
     "@sales-automation/web": "workspace:*"
   },
   "devDependencies": {
