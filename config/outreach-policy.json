@@ -1,8 +1,15 @@
 {
-  "version": 1,
+  "version": 2,
   "approvalModel": "fully_automatic_after_qualification_and_compliance_gates",
   "emailProvider": "cpanel",
   "businessAddress": "Codistan Ventures Building, Plot No. 15, I-11/3, Islamabad 44000, Pakistan",
+  "teamMembers": [
+    "talha.bashir@codistan.org",
+    "jawad.jutt@codistan.org",
+    "moiz.khalid@codistan.org",
+    "subainaaamir@codistan.org",
+    "danishkhalid@codistan.org"
+  ],
   "senderStrategy": {
     "primarySenders": [
       "talha.bashir@codistan.org",
@@ -13,7 +20,27 @@
       "subainaaamir@codistan.org",
       "danishkhalid@codistan.org"
     ],
-    "notes": "Talha and Jawad own the initial reply flow. Add the three secondary senders only after their signatures, SMTP/IMAP credentials and reply ownership are confirmed and the domain has passed the warm-up period."
+    "notes": "Talha and Jawad are the initial sending mailboxes. Leads may be owned by any configured team member. A non-sender owner receives Reply-To routing while the sending mailbox is selected deterministically from the active sender pool."
+  },
+  "portfolioLibrary": {
+    "environmentVariable": "PORTFOLIO_LIBRARY_URL",
+    "access": "read_only_google_drive_folder",
+    "use": "Open from the dashboard and select only relevant approved material for each prospect."
+  },
+  "replyRouting": {
+    "fixedAlertEmails": [
+      "waseem@codistan.org",
+      "sales@codistan.org"
+    ],
+    "fixedAlertEnvironmentVariable": "OUTREACH_ALERT_EMAILS",
+    "additionalOwnerEnvironmentVariable": "ADDITIONAL_LEAD_OWNERS",
+    "activeSenderEnvironmentVariable": "OUTREACH_SENDER_EMAILS",
+    "rules": [
+      "Set Reply-To to the assigned lead owner when the owner is a valid email address.",
+      "Always notify the fixed alert emails.",
+      "Also notify the assigned lead owner.",
+      "Use Talha or Jawad as the sending mailbox during launch unless OUTREACH_SENDER_EMAILS overrides the sender pool."
+    ]
   },
   "targeting": {
     "preferredCountries": [
