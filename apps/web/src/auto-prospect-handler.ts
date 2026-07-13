@@ -11,6 +11,13 @@ export type {
   ProspectDashboardRequest,
   ProspectDashboardResponse,
 } from './secure-prospect-handler.js';
+export {
+  accessScopePayload,
+  canAccessLead,
+  resolveDashboardAccess,
+  scopeRecords,
+} from './dashboard-access.js';
+export type { DashboardAccessScope } from './dashboard-access.js';
 
 const NON_AUDIT_PATHS = new Set([
   '/health',
