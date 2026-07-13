@@ -22,12 +22,18 @@ const lead: Lead = {
   contactName: 'Sarah Jones',
   contactRole: 'Founder',
   contactEmail: 'sarah@example.com',
+  country: 'United States',
+  industry: 'Enterprise software',
   serviceCategory: 'rag_document_intelligence',
+  serviceOffer: 'A focused RAG and workflow-automation delivery pod.',
+  materialsToShare: 'Approved RAG case study and delivery-pod overview.',
   opportunityStatus: 'live_opportunity',
   discoverySource: 'Test public source',
   evidenceUrl: 'https://example.com/opportunity',
   evidenceSummary: 'Official public requirement checked today.',
   discoveredAt: now,
+  budgetSignal: 'The company requested an implementation partner for a funded enterprise project.',
+  timelineSignal: 'The requirement is active now.',
   capturedAt: now,
   feedback: { status: 'pending' },
   pipelineStatus: 'needs_human_review',
@@ -97,6 +103,35 @@ assert.ok(dashboardHtml.includes('Prospect Discovery &amp; Management') || dashb
 assert.ok(dashboardHtml.includes('Example Company'));
 assert.ok(dashboardHtml.includes('Required BD feedback'));
 assert.ok(dashboardHtml.includes('Run discovery now'));
+assert.ok(dashboardHtml.includes('Engagement intelligence'));
+assert.ok(dashboardHtml.includes('Run lead audit and prepare first outreach'));
+assert.ok(dashboardHtml.includes('Analyse reply and draft response'));
+
+const firstOutreachGuidance = await fetch(`${base}/api/prospects/${lead.id}/guidance/first-outreach`, {
+  method: 'POST',
+  headers: { cookie, 'content-type': 'application/json' },
+  body: '{}',
+});
+assert.equal(firstOutreachGuidance.status, 201);
+const firstGuidancePayload = await firstOutreachGuidance.json();
+assert.ok(firstGuidancePayload.guidance.qualificationScore >= 55);
+assert.ok(firstGuidancePayload.guidance.subjectOptions.length === 3);
+assert.match(firstGuidancePayload.guidance.draft, /Hi Sarah/);
+assert.ok(repository.getLead(lead.id)?.notes.some((note) => note.startsWith('guidance::first_outreach::')));
+assert.ok(repository.getLead(lead.id)?.lead.draftMessage?.includes('Would it be useful'));
+
+const replyGuidance = await fetch(`${base}/api/prospects/${lead.id}/guidance/reply`, {
+  method: 'POST',
+  headers: { cookie, 'content-type': 'application/json' },
+  body: JSON.stringify({ replyBody: 'This looks relevant. Can you share pricing and an estimate for a six-week pilot?' }),
+});
+assert.equal(replyGuidance.status, 201);
+const replyGuidancePayload = await replyGuidance.json();
+assert.equal(replyGuidancePayload.guidance.classification, 'pricing_or_budget_question');
+assert.equal(replyGuidancePayload.guidance.requiresHumanApproval, true);
+assert.equal(replyGuidancePayload.guidance.recommendedPipelineStatus, 'replied');
+assert.ok(repository.getLead(lead.id)?.notes.some((note) => note.startsWith('guidance::reply::')));
+assert.equal(repository.getLead(lead.id)?.lead.lastResponseAt, now);
 
 const blockedFinalStatus = await fetch(`${base}/api/prospects/${lead.id}/status`, {
   method: 'POST',
