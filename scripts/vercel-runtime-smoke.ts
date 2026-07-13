@@ -9,6 +9,8 @@ interface VercelConfig {
 
 async function main(): Promise<void> {
   process.env.ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || 'vercel-smoke-password';
+  process.env.TALHA_DASHBOARD_PASSWORD = process.env.TALHA_DASHBOARD_PASSWORD || 'talha-smoke-password';
+  process.env.JAWAD_DASHBOARD_PASSWORD = process.env.JAWAD_DASHBOARD_PASSWORD || 'jawad-smoke-password';
   process.env.SESSION_SECRET = process.env.SESSION_SECRET || 'vercel-smoke-session-secret-123456789';
 
   assert.equal(verifiedStarterProspects.length, 25);
@@ -38,23 +40,52 @@ async function main(): Promise<void> {
   const healthBody = await health.json() as Record<string, unknown>;
   assert.equal(healthBody.ok, true);
   assert.equal(healthBody.service, 'codistan-prospect-desk');
+  assert.equal(healthBody.talhaAccountConfigured, true);
+  assert.equal(healthBody.jawadAccountConfigured, true);
 
   const login = await handler.fetch(new Request('https://example.test/api/index?__path=/login'));
   assert.equal(login.status, 200);
   const loginHtml = await login.text();
   assert.match(loginHtml, /Codistan Prospect Desk/i);
-  assert.match(loginHtml, /Admin password/i);
+  assert.match(loginHtml, /Email or admin username/i);
+  assert.match(loginHtml, /All configured accounts currently have the same administrator access/i);
 
-  const loginAction = await handler.fetch(new Request('https://example.test/api/index?__path=/api/login', {
+  await assertSuccessfulLogin(handler, 'admin', process.env.ADMIN_PASSWORD, 'Administrator');
+  await assertSuccessfulLogin(handler, 'talha.bashir@codistan.org', process.env.TALHA_DASHBOARD_PASSWORD, 'Talha Bashir');
+  await assertSuccessfulLogin(handler, 'jawad.jutt@codistan.org', process.env.JAWAD_DASHBOARD_PASSWORD, 'Jawad Jutt');
+
+  const invalidLogin = await handler.fetch(new Request('https://example.test/api/index?__path=/api/login', {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ password: process.env.ADMIN_PASSWORD }),
+    body: JSON.stringify({ identifier: 'talha.bashir@codistan.org', password: 'wrong-password' }),
   }));
-  assert.equal(loginAction.status, 200);
-  assert.match(loginAction.headers.get('set-cookie') ?? '', /^codistan_admin_session=/);
-  assert.deepEqual(await loginAction.json(), { ok: true });
+  assert.equal(invalidLogin.status, 401);
+  assert.deepEqual(await invalidLogin.json(), { error: 'Incorrect email or password.' });
 
-  console.log('Vercel runtime, routing and starter prospect smoke tests passed');
+  console.log('Vercel runtime, routing, starter prospect and multi-admin smoke tests passed');
+}
+
+async function assertSuccessfulLogin(
+  handler: { fetch(request: Request): Promise<Response> },
+  identifier: string,
+  password: string | undefined,
+  displayName: string,
+): Promise<void> {
+  const response = await handler.fetch(new Request('https://example.test/api/index?__path=/api/login', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ identifier, password }),
+  }));
+  assert.equal(response.status, 200);
+  const cookies = response.headers.get('set-cookie') ?? '';
+  assert.match(cookies, /codistan_admin_session=/);
+  assert.match(cookies, /codistan_admin_actor=/);
+  assert.deepEqual(await response.json(), {
+    ok: true,
+    identifier,
+    displayName,
+    access: 'admin',
+  });
 }
 
 main().catch((error) => {
