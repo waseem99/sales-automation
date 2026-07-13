@@ -10,13 +10,13 @@ import type {
 import { enrichCandidate } from './enrichment.js';
 import { sendProspectDigest } from './digest.js';
 import {
-  DEFAULT_SEARCH_QUERIES,
   collectBingRssCandidates,
   collectGenericRssCandidates,
   collectGreenhouseCandidates,
   collectLeverCandidates,
   collectRemoteOkCandidates,
 } from './sources.js';
+import { classifyTargeting, EXPANDED_TARGET_SEARCH_QUERIES } from './targeting.js';
 import type {
   DiscoveryCandidate,
   ProspectDiscoveryOptions,
@@ -35,7 +35,7 @@ export async function runProspectDiscovery(options: ProspectDiscoveryOptions): P
   if (options.bingRssEnabled !== false) {
     sourceResults.push(await collectBingRssCandidates(
       fetchImpl,
-      options.searchQueries?.length ? options.searchQueries : DEFAULT_SEARCH_QUERIES,
+      options.searchQueries?.length ? options.searchQueries : EXPANDED_TARGET_SEARCH_QUERIES,
       options.maxSearchQueries ?? 12,
     ));
   }
@@ -105,7 +105,9 @@ export function candidateToLead(candidate: DiscoveryCandidate, capturedAt: strin
   const source = mapSource(candidate);
   const leadType = mapLeadType(candidate.opportunityStatus);
   const company = candidate.companyName ?? hostnameLabel(candidate.companyWebsite ?? candidate.sourceUrl);
-  const serviceCategory = classifyServiceCategory(`${candidate.title} ${candidate.summary} ${(candidate.tags ?? []).join(' ')}`);
+  const targetingText = `${candidate.title} ${candidate.summary} ${(candidate.tags ?? []).join(' ')}`;
+  const targeting = classifyTargeting(targetingText, candidate.country);
+  const serviceCategory = targeting.serviceCategory;
   const postedAt = candidate.publishedAt;
   const freshnessMinutes = postedAt ? Math.max(0, Math.round((Date.parse(capturedAt) - Date.parse(postedAt)) / 60_000)) : undefined;
   const evidenceSummary = candidate.evidenceSummary ?? candidate.summary;
@@ -129,6 +131,9 @@ export function candidateToLead(candidate: DiscoveryCandidate, capturedAt: strin
     linkedinUrl: candidate.linkedinUrl,
     country: candidate.country,
     serviceCategory,
+    serviceOffer: targeting.serviceOffer,
+    materialsToShare: targeting.materialsToShare,
+    reachMethod: targeting.reachMethod,
     opportunityStatus: candidate.opportunityStatus,
     discoverySource: candidate.sourceName,
     evidenceUrl: candidate.sourceUrl,
@@ -147,6 +152,12 @@ export function candidateToLead(candidate: DiscoveryCandidate, capturedAt: strin
         opportunityStatus: candidate.opportunityStatus,
         tags: candidate.tags ?? [],
         evidenceSummary,
+        targeting: {
+          serviceKey: targeting.serviceKey,
+          portfolioIdentity: targeting.portfolioIdentity,
+          deliveryModel: targeting.deliveryModel,
+          reason: targeting.reason,
+        },
       },
     },
     pipelineStatus: candidate.opportunityStatus === 'live_opportunity' ? 'needs_human_review' : 'needs_research',
@@ -156,16 +167,7 @@ export function candidateToLead(candidate: DiscoveryCandidate, capturedAt: strin
 }
 
 export function classifyServiceCategory(text: string): ServiceCategory {
-  const normalized = text.toLowerCase();
-  if (/rag|retrieval augmented|knowledge base|document intelligence|ocr|pdf extraction/.test(normalized)) return 'rag_document_intelligence';
-  if (/voice ai|calling agent|elevenlabs|twilio|speech-to-text|text-to-speech/.test(normalized)) return 'voice_ai_agent';
-  if (/unity|unreal|augmented reality|virtual reality|webar|webxr|3d|animation|cgi|vfx/.test(normalized)) return 'ar_3d_unity_unreal';
-  if (/next\.?js|react|fastapi|python backend/.test(normalized)) return 'nextjs_python_app';
-  if (/saas|mvp|ai product|ai application|generative ai/.test(normalized)) return 'ai_saas_mvp';
-  if (/ai|llm|openai|agentic|automation|n8n|workflow/.test(normalized)) return 'ai_automation';
-  if (/portal|dashboard|website|web application/.test(normalized)) return 'website_portal';
-  if (/full.?stack|node\.?js|api integration|software development|mobile app/.test(normalized)) return 'fullstack_web_app';
-  return 'unknown';
+  return classifyTargeting(text).serviceCategory;
 }
 
 function enrichEvaluation(evaluation: LeadEvaluation): LeadEvaluation {
