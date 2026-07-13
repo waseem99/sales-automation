@@ -23,17 +23,15 @@ const lead: Lead = {
   contactRole: 'Founder',
   contactEmail: 'sarah@example.com',
   country: 'United States',
-  industry: 'Enterprise software',
+  industry: 'Software',
   serviceCategory: 'rag_document_intelligence',
-  serviceOffer: 'A focused RAG and workflow-automation delivery pod.',
-  materialsToShare: 'Approved RAG case study and delivery-pod overview.',
   opportunityStatus: 'live_opportunity',
   discoverySource: 'Test public source',
   evidenceUrl: 'https://example.com/opportunity',
   evidenceSummary: 'Official public requirement checked today.',
   discoveredAt: now,
-  budgetSignal: 'The company requested an implementation partner for a funded enterprise project.',
-  timelineSignal: 'The requirement is active now.',
+  budgetSignal: 'Established software company with a live implementation requirement.',
+  timelineSignal: 'The implementation requirement is current.',
   capturedAt: now,
   feedback: { status: 'pending' },
   pipelineStatus: 'needs_human_review',
@@ -41,6 +39,19 @@ const lead: Lead = {
   updatedAt: now,
 };
 repository.upsertLead(lead, 'test');
+
+const discoveredLead: Lead = {
+  ...lead,
+  id: 'prospect-test-002',
+  companyName: 'Discovered Company',
+  companyWebsite: 'https://discovered.example.com',
+  contactEmail: 'founder@discovered.example.com',
+  sourceUrl: 'https://discovered.example.com/news',
+  evidenceUrl: 'https://discovered.example.com/news',
+  evidenceSummary: 'Discovered Company announced a current AI product expansion.',
+  title: 'AI product expansion',
+  pipelineStatus: 'approved_to_contact',
+};
 
 const fakeResult: ProspectDiscoveryResult = {
   run: {
@@ -54,9 +65,9 @@ const fakeResult: ProspectDiscoveryResult = {
     duplicateCount: 2,
     emailStatus: 'skipped',
     errors: [],
-    newLeadIds: ['prospect-test-001'],
+    newLeadIds: [discoveredLead.id],
   },
-  newLeads: [lead],
+  newLeads: [discoveredLead],
   sourceResults: [],
 };
 
@@ -64,7 +75,10 @@ const server = createProspectDashboardHttpServer({
   repository,
   portfolioItems: samplePortfolioItems,
   runStore,
-  runDiscovery: async () => fakeResult,
+  runDiscovery: async () => {
+    repository.upsertLead(discoveredLead, 'discovery-test');
+    return fakeResult;
+  },
   adminPassword: 'strong-test-password',
   sessionSecret: 'strong-test-session-secret-123456789',
   secureCookies: false,
@@ -103,35 +117,17 @@ assert.ok(dashboardHtml.includes('Prospect Discovery &amp; Management') || dashb
 assert.ok(dashboardHtml.includes('Example Company'));
 assert.ok(dashboardHtml.includes('Required BD feedback'));
 assert.ok(dashboardHtml.includes('Run discovery now'));
-assert.ok(dashboardHtml.includes('Engagement intelligence'));
-assert.ok(dashboardHtml.includes('Run lead audit and prepare first outreach'));
-assert.ok(dashboardHtml.includes('Analyse reply and draft response'));
 
-const firstOutreachGuidance = await fetch(`${base}/api/prospects/${lead.id}/guidance/first-outreach`, {
+const backfill = await fetch(`${base}/api/prospects/guidance/backfill`, {
   method: 'POST',
   headers: { cookie, 'content-type': 'application/json' },
   body: '{}',
 });
-assert.equal(firstOutreachGuidance.status, 201);
-const firstGuidancePayload = await firstOutreachGuidance.json();
-assert.ok(firstGuidancePayload.guidance.qualificationScore >= 55);
-assert.ok(firstGuidancePayload.guidance.subjectOptions.length === 3);
-assert.match(firstGuidancePayload.guidance.draft, /Hi Sarah/);
+assert.equal(backfill.status, 201);
+const backfillPayload = await backfill.json();
+assert.equal(backfillPayload.audited, 1);
 assert.ok(repository.getLead(lead.id)?.notes.some((note) => note.startsWith('guidance::first_outreach::')));
-assert.ok(repository.getLead(lead.id)?.lead.draftMessage?.includes('Would it be useful'));
-
-const replyGuidance = await fetch(`${base}/api/prospects/${lead.id}/guidance/reply`, {
-  method: 'POST',
-  headers: { cookie, 'content-type': 'application/json' },
-  body: JSON.stringify({ replyBody: 'This looks relevant. Can you share pricing and an estimate for a six-week pilot?' }),
-});
-assert.equal(replyGuidance.status, 201);
-const replyGuidancePayload = await replyGuidance.json();
-assert.equal(replyGuidancePayload.guidance.classification, 'pricing_or_budget_question');
-assert.equal(replyGuidancePayload.guidance.requiresHumanApproval, true);
-assert.equal(replyGuidancePayload.guidance.recommendedPipelineStatus, 'replied');
-assert.ok(repository.getLead(lead.id)?.notes.some((note) => note.startsWith('guidance::reply::')));
-assert.equal(repository.getLead(lead.id)?.lead.lastResponseAt, now);
+assert.ok(repository.getLead(lead.id)?.lead.draftMessage);
 
 const blockedFinalStatus = await fetch(`${base}/api/prospects/${lead.id}/status`, {
   method: 'POST',
@@ -144,12 +140,15 @@ assert.match((await blockedFinalStatus.json()).error, /Complete the required BD 
 const activity = await fetch(`${base}/api/prospects/${lead.id}/activity`, {
   method: 'POST',
   headers: { cookie, 'content-type': 'application/json' },
-  body: JSON.stringify({ type: 'response', channel: 'email', body: 'Interested; requested a meeting next week.' }),
+  body: JSON.stringify({ type: 'response', channel: 'email', body: 'This sounds useful. Can you share pricing for a six-week pilot?' }),
 });
 assert.equal(activity.status, 200);
-assert.equal((await activity.json()).pipelineStatus, 'replied');
+const activityPayload = await activity.json();
+assert.equal(activityPayload.pipelineStatus, 'replied');
+assert.equal(activityPayload.replyGuidance.classification, 'pricing_or_budget_question');
+assert.equal(activityPayload.replyGuidance.requiresHumanApproval, true);
 assert.equal(repository.getLead(lead.id)?.lead.lastResponseAt, now);
-assert.ok(repository.getLead(lead.id)?.notes.some((note) => note.includes('Interested; requested a meeting')));
+assert.ok(repository.getLead(lead.id)?.notes.some((note) => note.startsWith('guidance::reply::')));
 
 const feedback = await fetch(`${base}/api/prospects/${lead.id}/feedback`, {
   method: 'POST',
@@ -183,7 +182,22 @@ const discovery = await fetch(`${base}/api/prospects/run`, {
   body: '{}',
 });
 assert.equal(discovery.status, 201);
-assert.equal((await discovery.json()).run.newLeadCount, 1);
+const discoveryPayload = await discovery.json();
+assert.equal(discoveryPayload.run.newLeadCount, 1);
+assert.equal(discoveryPayload.engagementAudit.audited, 1);
+assert.ok(repository.getLead(discoveredLead.id)?.notes.some((note) => note.startsWith('guidance::first_outreach::')));
+assert.ok(repository.getLead(discoveredLead.id)?.lead.draftMessage);
+
+const unsubscribe = await fetch(`${base}/api/prospects/${discoveredLead.id}/activity`, {
+  method: 'POST',
+  headers: { cookie, 'content-type': 'application/json' },
+  body: JSON.stringify({ type: 'response', channel: 'email', body: 'Please remove me from your list and do not contact me again.' }),
+});
+assert.equal(unsubscribe.status, 200);
+const unsubscribePayload = await unsubscribe.json();
+assert.equal(unsubscribePayload.pipelineStatus, 'archived');
+assert.equal(unsubscribePayload.replyGuidance.classification, 'unsubscribe_or_stop');
+assert.equal(repository.getLead(discoveredLead.id)?.lead.nextFollowUpAt, undefined);
 
 const logout = await fetch(`${base}/api/logout`, { method: 'POST', headers: { cookie } });
 assert.equal(logout.status, 200);
@@ -191,4 +205,4 @@ assert.ok(logout.headers.get('set-cookie')?.includes('Max-Age=0'));
 
 server.close();
 await once(server, 'close');
-console.log('prospect dashboard tests passed');
+console.log('prospect dashboard automatic engagement-processing tests passed');
