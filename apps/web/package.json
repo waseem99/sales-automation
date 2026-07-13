@@ -11,8 +11,8 @@
       "default": "./dist/index.js"
     },
     "./prospect-handler": {
-      "types": "./dist/prospect-handler.d.ts",
-      "default": "./dist/prospect-handler.js"
+      "types": "./dist/auto-prospect-handler.d.ts",
+      "default": "./dist/auto-prospect-handler.js"
     }
   },
   "scripts": {
@@ -21,7 +21,7 @@
     "start": "node dist/dev.js",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "lint": "tsc -p tsconfig.json --noEmit",
-    "test": "tsx src/index.test.ts && tsx src/prospect-server.test.ts"
+    "test": "tsx src/index.test.ts && tsx src/prospect-server.test.ts && tsx src/auto-prospect-handler.test.ts"
   },
   "dependencies": {
     "@sales-automation/access-control": "workspace:*",
