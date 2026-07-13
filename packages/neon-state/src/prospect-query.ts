@@ -80,12 +80,20 @@ export async function loadNeonProspectPage(
     sql`
       SELECT COUNT(*)::int AS count
       FROM prospect_records
-      WHERE ${canViewAll}::boolean OR ${scopePredicate(ownerTokensJson)}
+      WHERE ${canViewAll}::boolean OR EXISTS (
+        SELECT 1 FROM jsonb_array_elements_text(${ownerTokensJson}::jsonb) AS visible_token(value)
+        WHERE LOWER(COALESCE(record->'lead'->>'owner', '')) = LOWER(visible_token.value)
+           OR LOWER(COALESCE(record->'lead'->>'owner', '')) LIKE '%' || LOWER(visible_token.value) || '%'
+      )
     `,
     sql`
       SELECT COUNT(*)::int AS count
       FROM prospect_records
-      WHERE (${canViewAll}::boolean OR ${scopePredicate(ownerTokensJson)})
+      WHERE (${canViewAll}::boolean OR EXISTS (
+        SELECT 1 FROM jsonb_array_elements_text(${ownerTokensJson}::jsonb) AS visible_token(value)
+        WHERE LOWER(COALESCE(record->'lead'->>'owner', '')) = LOWER(visible_token.value)
+           OR LOWER(COALESCE(record->'lead'->>'owner', '')) LIKE '%' || LOWER(visible_token.value) || '%'
+      ))
         AND (${filters.search} = '' OR LOWER(record::text) LIKE '%' || LOWER(${filters.search}) || '%')
         AND (${filters.status} = '' OR COALESCE(record->'lead'->>'pipelineStatus', '') = ${filters.status})
         AND (${filters.signal} = '' OR COALESCE(record->'lead'->>'opportunityStatus', '') = ${filters.signal})
@@ -96,7 +104,11 @@ export async function loadNeonProspectPage(
     sql`
       SELECT DISTINCT NULLIF(record->'lead'->>'owner', '') AS owner
       FROM prospect_records
-      WHERE (${canViewAll}::boolean OR ${scopePredicate(ownerTokensJson)})
+      WHERE (${canViewAll}::boolean OR EXISTS (
+        SELECT 1 FROM jsonb_array_elements_text(${ownerTokensJson}::jsonb) AS visible_token(value)
+        WHERE LOWER(COALESCE(record->'lead'->>'owner', '')) = LOWER(visible_token.value)
+           OR LOWER(COALESCE(record->'lead'->>'owner', '')) LIKE '%' || LOWER(visible_token.value) || '%'
+      ))
         AND NULLIF(record->'lead'->>'owner', '') IS NOT NULL
       ORDER BY owner
     `,
@@ -111,7 +123,11 @@ export async function loadNeonProspectPage(
   const rows = await sql`
     SELECT record
     FROM prospect_records
-    WHERE (${canViewAll}::boolean OR ${scopePredicate(ownerTokensJson)})
+    WHERE (${canViewAll}::boolean OR EXISTS (
+      SELECT 1 FROM jsonb_array_elements_text(${ownerTokensJson}::jsonb) AS visible_token(value)
+      WHERE LOWER(COALESCE(record->'lead'->>'owner', '')) = LOWER(visible_token.value)
+         OR LOWER(COALESCE(record->'lead'->>'owner', '')) LIKE '%' || LOWER(visible_token.value) || '%'
+    ))
       AND (${filters.search} = '' OR LOWER(record::text) LIKE '%' || LOWER(${filters.search}) || '%')
       AND (${filters.status} = '' OR COALESCE(record->'lead'->>'pipelineStatus', '') = ${filters.status})
       AND (${filters.signal} = '' OR COALESCE(record->'lead'->>'opportunityStatus', '') = ${filters.signal})
@@ -150,11 +166,16 @@ export async function loadNeonProspectRecord(
 ): Promise<StoredLeadRecord | undefined> {
   await ensureNeonSchema(databaseUrl);
   const sql = neon(requireDatabaseUrl(databaseUrl));
+  const ownerTokensJson = JSON.stringify(normalizeTokens(visibility.ownerTokens));
   const rows = await sql`
     SELECT record
     FROM prospect_records
     WHERE lead_id = ${leadId}
-      AND (${visibility.canViewAll}::boolean OR ${scopePredicate(JSON.stringify(normalizeTokens(visibility.ownerTokens)))})
+      AND (${visibility.canViewAll}::boolean OR EXISTS (
+        SELECT 1 FROM jsonb_array_elements_text(${ownerTokensJson}::jsonb) AS visible_token(value)
+        WHERE LOWER(COALESCE(record->'lead'->>'owner', '')) = LOWER(visible_token.value)
+           OR LOWER(COALESCE(record->'lead'->>'owner', '')) LIKE '%' || LOWER(visible_token.value) || '%'
+      ))
     LIMIT 1
   ` as RecordRow[];
   return parseJson<StoredLeadRecord>(rows[0]?.record);
@@ -167,10 +188,15 @@ export async function loadNeonScopedRecords(
 ): Promise<StoredLeadRecord[]> {
   await ensureNeonSchema(databaseUrl);
   const sql = neon(requireDatabaseUrl(databaseUrl));
+  const ownerTokensJson = JSON.stringify(normalizeTokens(visibility.ownerTokens));
   const rows = await sql`
     SELECT record
     FROM prospect_records
-    WHERE ${visibility.canViewAll}::boolean OR ${scopePredicate(JSON.stringify(normalizeTokens(visibility.ownerTokens)))}
+    WHERE ${visibility.canViewAll}::boolean OR EXISTS (
+      SELECT 1 FROM jsonb_array_elements_text(${ownerTokensJson}::jsonb) AS visible_token(value)
+      WHERE LOWER(COALESCE(record->'lead'->>'owner', '')) = LOWER(visible_token.value)
+         OR LOWER(COALESCE(record->'lead'->>'owner', '')) LIKE '%' || LOWER(visible_token.value) || '%'
+    )
     ORDER BY COALESCE(record->'lead'->>'updatedAt', record->'lead'->>'createdAt', '') DESC
     LIMIT ${Math.max(1, Math.min(limit, 10_000))}
   ` as RecordRow[];
@@ -187,18 +213,6 @@ export async function loadNeonDiscoveryRuns(databaseUrl: string, limit = 30): Pr
     LIMIT ${Math.max(1, Math.min(limit, 180))}
   ` as RunRow[];
   return rows.map((row) => parseJson<ProspectDiscoveryRun>(row.run)).filter((run): run is ProspectDiscoveryRun => Boolean(run?.id));
-}
-
-function scopePredicate(ownerTokensJson: string) {
-  const sql = neon('postgresql://placeholder.invalid/placeholder');
-  return sql`
-    EXISTS (
-      SELECT 1
-      FROM jsonb_array_elements_text(${ownerTokensJson}::jsonb) AS visible_token(value)
-      WHERE LOWER(COALESCE(record->'lead'->>'owner', '')) = LOWER(visible_token.value)
-         OR LOWER(COALESCE(record->'lead'->>'owner', '')) LIKE '%' || LOWER(visible_token.value) || '%'
-    )
-  `;
 }
 
 function normalizeTokens(tokens: string[]): string[] {
