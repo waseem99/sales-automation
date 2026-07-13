@@ -7,6 +7,28 @@ interface VercelConfig {
   rewrites?: Array<{ source: string; destination: string }>;
 }
 
+interface OutreachPolicy {
+  businessAddress: string;
+  senderStrategy: {
+    primarySenders: string[];
+    secondarySendersAfterWarmup: string[];
+  };
+  targeting: {
+    preferredCountries: string[];
+    excludedCompanyHeadquartersOrPrimaryOperations: string[];
+    excludedIndustries: string[];
+  };
+  companyQualification: {
+    doNotRejectOnHeadcountAlone: boolean;
+    standardAutomaticQualification: { minimumEmployees: number };
+    microCompanyQualification: { minimumStrongCommercialSignals: number };
+  };
+  sending: {
+    steadyStateDailyNewMessagesAcrossDomain: { minimum: number; maximum: number };
+  };
+  followUpSequence: Array<{ day: number; purpose: string }>;
+}
+
 async function main(): Promise<void> {
   process.env.ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || 'vercel-smoke-password';
   process.env.TALHA_DASHBOARD_PASSWORD = process.env.TALHA_DASHBOARD_PASSWORD || 'talha-smoke-password';
@@ -38,6 +60,26 @@ async function main(): Promise<void> {
   assert.ok(newBatch.every((lead) => Boolean(lead.companyWebsite && lead.contactFormUrl)));
   assert.ok(newBatch.every((lead) => lead.discoverySource === 'Qualified prospect research — 2026-07-13'));
   assert.ok(newBatch.every((lead) => lead.feedback?.status === 'pending'));
+
+  const outreachPolicy = JSON.parse(
+    readFileSync(new URL('../config/outreach-policy.json', import.meta.url), 'utf8'),
+  ) as OutreachPolicy;
+  assert.equal(outreachPolicy.businessAddress, 'Codistan Ventures Building, Plot No. 15, I-11/3, Islamabad 44000, Pakistan');
+  assert.deepEqual(outreachPolicy.senderStrategy.primarySenders, [
+    'talha.bashir@codistan.org',
+    'jawad.jutt@codistan.org',
+  ]);
+  assert.equal(outreachPolicy.senderStrategy.secondarySendersAfterWarmup.length, 3);
+  assert.ok(outreachPolicy.targeting.preferredCountries.includes('United States'));
+  assert.ok(outreachPolicy.targeting.preferredCountries.includes('Pakistan'));
+  assert.ok(outreachPolicy.targeting.excludedCompanyHeadquartersOrPrimaryOperations.includes('Israel'));
+  assert.ok(outreachPolicy.targeting.excludedCompanyHeadquartersOrPrimaryOperations.includes('India'));
+  assert.deepEqual(outreachPolicy.targeting.excludedIndustries, ['gambling', 'adult', 'cryptocurrency']);
+  assert.equal(outreachPolicy.companyQualification.doNotRejectOnHeadcountAlone, true);
+  assert.equal(outreachPolicy.companyQualification.standardAutomaticQualification.minimumEmployees, 10);
+  assert.equal(outreachPolicy.companyQualification.microCompanyQualification.minimumStrongCommercialSignals, 2);
+  assert.deepEqual(outreachPolicy.sending.steadyStateDailyNewMessagesAcrossDomain, { minimum: 50, maximum: 100 });
+  assert.deepEqual(outreachPolicy.followUpSequence.map((step) => step.day), [0, 3, 7, 14]);
 
   const config = JSON.parse(
     readFileSync(new URL('../vercel.json', import.meta.url), 'utf8'),
@@ -89,7 +131,7 @@ async function main(): Promise<void> {
   assert.equal(invalidLogin.status, 401);
   assert.deepEqual(await invalidLogin.json(), { error: 'Incorrect email or password.' });
 
-  console.log('Vercel runtime, routing, 75-prospect and five-team-admin smoke tests passed');
+  console.log('Vercel runtime, outreach policy, routing, 75-prospect and five-team-admin smoke tests passed');
 }
 
 async function assertSuccessfulLogin(

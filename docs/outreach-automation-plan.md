@@ -3,28 +3,47 @@
 ## Confirmed operating model
 
 - Email provider: cPanel-hosted mailboxes.
-- Approval model: fully automatic after a prospect passes qualification and compliance gates.
+- Approval model: fully automatic only after a prospect passes qualification and compliance gates.
+- Primary senders for launch: `talha.bashir@codistan.org` and `jawad.jutt@codistan.org`.
+- Secondary senders after warm-up: `moiz.khalid@codistan.org`, `subainaaamir@codistan.org`, and `danishkhalid@codistan.org` once their sender profiles and mailbox connections are approved.
 - Target steady-state volume: 50–100 new outbound messages per business day across the domain, not per mailbox.
 - Sending window: recipient-local business hours.
 - Reply notifications: Prospect Desk plus email notification.
 - Equal administrator access for all configured dashboard users.
+- Commercial-email footer address: Codistan Ventures Building, Plot No. 15, I-11/3, Islamabad 44000, Pakistan.
+
+## Why Talha and Jawad are the launch senders
+
+Talha and Jawad are already the original BD users and should own the initial reply flow. Starting with two accountable senders keeps replies, meetings and follow-ups easier to manage while the infrastructure is being validated. The other three accounts remain full dashboard administrators and become additional senders only after deliverability is stable and their signatures, SMTP/IMAP credentials and reply ownership are confirmed.
 
 ## Safety gates before the first automatic send
 
 Automatic sending remains disabled until all of the following are configured and verified:
 
-1. Exact Codistan physical postal address or valid registered PO box for the commercial-email footer.
-2. cPanel secure SMTP and IMAP settings for every sender mailbox.
-3. SPF, DKIM and DMARC records for codistan.org.
-4. Valid forward and reverse DNS for the sending host/IP where controlled by the hosting provider.
-5. Approved sender identities, titles and signatures.
-6. Approved public case-study and sales-material library.
-7. Working unsubscribe endpoint and suppression list.
-8. Bounce and reply ingestion through IMAP.
-9. Duplicate-send prevention and per-domain rate controls.
-10. Geographic and industry filters applied to company location and business category.
+1. cPanel secure SMTP and IMAP settings for the active sender mailboxes.
+2. SPF, DKIM and DMARC records for codistan.org.
+3. Valid forward and reverse DNS for the sending host/IP where controlled by the hosting provider.
+4. Approved sender identities, titles and signatures.
+5. Approved public case-study and sales-material library.
+6. Working unsubscribe endpoint and suppression list.
+7. Bounce and reply ingestion through IMAP.
+8. Duplicate-send prevention and per-domain rate controls.
+9. Geographic and industry filters applied to company location and business category.
+10. Reply-alert recipients confirmed.
 
 Passwords, mailbox credentials and DNS credentials must be stored only as Vercel encrypted environment variables. They must not be committed to GitHub.
+
+## Dashboard password environment variables
+
+The application already reads these Vercel environment variables:
+
+- `TALHA_DASHBOARD_PASSWORD`
+- `JAWAD_DASHBOARD_PASSWORD`
+- `MOIZ_DASHBOARD_PASSWORD`
+- `SUBAINA_DASHBOARD_PASSWORD`
+- `DANISH_DASHBOARD_PASSWORD`
+
+The fixed private values must be entered directly in Vercel for Production and Preview, then the latest deployment must be redeployed.
 
 ## Sender configuration to collect
 
@@ -48,6 +67,8 @@ Collect the values shown in cPanel under Email Accounts → Connect Devices:
 - outgoing SMTP server hostname
 - SMTP SSL port, normally 465
 - full mailbox username
+- current cPanel hourly and daily send limits
+- whether the host uses a shared or dedicated outgoing IP
 - whether the host requires a different server hostname matching its TLS certificate
 
 ## Recommended volume ramp
@@ -56,8 +77,9 @@ The requested steady-state range is 50–100 messages per day across all sender 
 
 - Days 1–3: 10 new messages/day total
 - Days 4–6: 20 new messages/day total
-- Days 7–10: 35–40 new messages/day total
-- Thereafter: 50 new messages/day, increasing toward 100 only when authentication passes, SMTP deferrals remain low, bounces remain controlled and no reputation warning appears
+- Days 7–10: 40 new messages/day total
+- Day 11 onward: 50 new messages/day
+- Increase toward 100 only when authentication passes, SMTP deferrals remain low, bounces remain controlled, complaint levels remain low and domain/IP reputation is stable
 
 Messages should be distributed evenly across configured mailboxes and sent at a consistent rate rather than in bursts.
 
@@ -76,23 +98,48 @@ One clear call to action per email. Do not use false “Re:” or “Fwd:” sub
 
 Apply exclusions at the company/entity level, not based on an individual person’s ethnicity or nationality.
 
+Preferred markets:
+
+- United States
+- Pakistan
+
 Exclude:
 
-- companies headquartered or primarily operating in excluded countries once the final country list is confirmed
-- Pakistan-based companies unless the owner later removes that exclusion
+- companies headquartered or primarily operating in Israel
+- companies headquartered or primarily operating in India
 - gambling
 - adult businesses
 - cryptocurrency
-- companies below the agreed minimum size threshold
 
-Until the contradictory Pakistan instruction is resolved, the system should target the United States and other approved non-excluded markets, while excluding Pakistan-based prospects.
+Pakistan must remain eligible and should not be blocked.
+
+## Company-size and commercial qualification
+
+Do not reject companies on employee count alone. A small AI or software company can be commercially valuable despite having a very small team.
+
+Use this qualification model:
+
+- Companies with 10 or more employees may pass the size gate when the remaining fit, evidence and contact requirements are met.
+- Companies with 2–9 employees may pass only when at least two strong commercial signals are verified.
+- One-person companies are rejected by default unless there is a verified live opportunity plus clear evidence of budget or revenue.
+
+Strong commercial signals include:
+
+- funding or investment within the last 24 months
+- credible revenue or paid-product evidence
+- recognised enterprise or government clients
+- active hiring for relevant roles
+- a recent expansion, partnership or contract
+- an established high-ticket service business
+- a clear live opportunity or active partner programme
+- public evidence of budget or procurement
 
 ## Qualification gate
 
 A prospect may enter automatic outreach only when:
 
 - official company website is active
-- company size passes the minimum threshold
+- company passes the commercial qualification model
 - country and industry pass filters
 - business email is verified or obtained from an official company source
 - evidence and reason for outreach are current

@@ -1,0 +1,102 @@
+{
+  "version": 1,
+  "approvalModel": "fully_automatic_after_qualification_and_compliance_gates",
+  "emailProvider": "cpanel",
+  "businessAddress": "Codistan Ventures Building, Plot No. 15, I-11/3, Islamabad 44000, Pakistan",
+  "senderStrategy": {
+    "primarySenders": [
+      "talha.bashir@codistan.org",
+      "jawad.jutt@codistan.org"
+    ],
+    "secondarySendersAfterWarmup": [
+      "moiz.khalid@codistan.org",
+      "subainaaamir@codistan.org",
+      "danishkhalid@codistan.org"
+    ],
+    "notes": "Talha and Jawad own the initial reply flow. Add the three secondary senders only after their signatures, SMTP/IMAP credentials and reply ownership are confirmed and the domain has passed the warm-up period."
+  },
+  "targeting": {
+    "preferredCountries": [
+      "United States",
+      "Pakistan"
+    ],
+    "excludedCompanyHeadquartersOrPrimaryOperations": [
+      "Israel",
+      "India"
+    ],
+    "excludedIndustries": [
+      "gambling",
+      "adult",
+      "cryptocurrency"
+    ],
+    "applyCountryRulesAtCompanyLevel": true
+  },
+  "companyQualification": {
+    "doNotRejectOnHeadcountAlone": true,
+    "standardAutomaticQualification": {
+      "minimumEmployees": 10
+    },
+    "microCompanyQualification": {
+      "employeeRange": "2-9",
+      "minimumStrongCommercialSignals": 2,
+      "strongCommercialSignals": [
+        "funding_or_investment_within_24_months",
+        "credible_revenue_or_paid_product_signal",
+        "recognised_enterprise_or_government_clients",
+        "active_hiring_for_relevant_roles",
+        "recent_expansion_partnership_or_contract",
+        "established_high_ticket_service_business",
+        "clear_live_opportunity_or_partner_programme",
+        "public_evidence_of_budget_or_procurement"
+      ]
+    },
+    "soloCompanyRule": "Reject by default unless there is a verified live opportunity and clear evidence of budget or revenue.",
+    "minimumDataRequirements": [
+      "active_official_website",
+      "business_email_or_official_contact_route",
+      "current_reason_for_outreach",
+      "matched_codistan_service",
+      "approved_case_study_or_proof_asset",
+      "country_and_industry_pass",
+      "not_suppressed_or_previously_opted_out"
+    ]
+  },
+  "sending": {
+    "recipientLocalBusinessHours": true,
+    "steadyStateDailyNewMessagesAcrossDomain": {
+      "minimum": 50,
+      "maximum": 100
+    },
+    "warmupRamp": [
+      { "days": "1-3", "dailyNewMessagesTotal": 10 },
+      { "days": "4-6", "dailyNewMessagesTotal": 20 },
+      { "days": "7-10", "dailyNewMessagesTotal": 40 },
+      { "days": "11+", "dailyNewMessagesTotal": 50 }
+    ],
+    "increaseToward100OnlyWhen": [
+      "spf_dkim_dmarc_pass",
+      "forward_and_reverse_dns_pass",
+      "bounce_rate_is_controlled",
+      "smtp_deferrals_are_low",
+      "complaints_are_low",
+      "domain_and_ip_reputation_are_stable"
+    ]
+  },
+  "followUpSequence": [
+    { "day": 0, "purpose": "personalised_introduction" },
+    { "day": 3, "purpose": "relevant_case_study_or_proof" },
+    { "day": 7, "purpose": "specific_pilot_or_delivery_model" },
+    { "day": 14, "purpose": "close_the_loop" }
+  ],
+  "stopConditions": [
+    "any_reply",
+    "unsubscribe",
+    "hard_bounce",
+    "manual_rejection",
+    "suppression_match"
+  ],
+  "replyNotifications": [
+    "dashboard",
+    "email"
+  ]
+}
