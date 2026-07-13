@@ -1,4 +1,3 @@
-import type { ProspectDiscoveryResult } from '@sales-automation/prospect-discovery';
 import type { StoredLeadRecord } from '@sales-automation/storage';
 import {
   handleProspectDashboardRequest as handleBaseProspectDashboardRequest,
@@ -13,7 +12,10 @@ import {
   resolveDashboardAccess,
   type DashboardAccessScope,
 } from './dashboard-access.js';
-import { renderProspectDashboardPage, type ProspectDashboardPagination } from './prospects-page.js';
+import {
+  renderPaginatedProspectDashboardPage,
+  type ProspectDashboardPagination,
+} from './paginated-prospects-page.js';
 
 export interface ProspectDashboardContext extends BaseProspectDashboardContext {
   access?: DashboardAccessScope;
@@ -71,7 +73,7 @@ export async function handleProspectDashboardRequest(
     if (method === 'GET' && (pathname === '/' || pathname === '/prospects') && context.pagination) {
       const selectedId = url.searchParams.get('leadId') ?? undefined;
       const selected = selectedId ? context.repository.getLead(selectedId) : context.pagination.records[0];
-      return html(renderProspectDashboardPage({
+      return html(renderPaginatedProspectDashboardPage({
         records: context.pagination.records,
         selected,
         runs: context.runStore.listRuns(20),
@@ -100,7 +102,7 @@ export async function handleProspectDashboardRequest(
     return response;
   } catch (error) {
     const message = (error as Error).message;
-    return json({ error: message }, message.startsWith('Forbidden:') ? 403 : message.includes('not found') ? 404 : 400);
+    return json({ error: message }, message.startsWith('Forbidden:') ? 403 : message.toLowerCase().includes('not found') ? 404 : 400);
   }
 }
 
