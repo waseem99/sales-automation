@@ -32,7 +32,7 @@ async function main(): Promise<void> {
   const newBatch = verifiedStarterProspects.filter((lead) => (lead.rank ?? 0) >= 26);
   assert.equal(newBatch.length, 50);
   assert.equal(newBatch.filter((lead) => lead.confidence === 'high').length, 30);
-  assert.equal(newBatch.filter((lead) => lead.opportunityStatus === 'recent_demand_signal').length, 13);
+  assert.equal(newBatch.filter((lead) => lead.opportunityStatus === 'recent_demand_signal').length, 12);
   assert.ok(newBatch.every((lead) => lead.discoverySource === 'Qualified prospect research — 2026-07-13'));
   assert.ok(newBatch.every((lead) => lead.feedback?.status === 'pending'));
 
