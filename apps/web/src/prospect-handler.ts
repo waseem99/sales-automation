@@ -1,10 +1,4 @@
 import { createHmac, timingSafeEqual } from 'node:crypto';
-import {
-  analyzeInboundReply,
-  formatFirstOutreachGuidance,
-  formatReplyGuidance,
-  generateFirstOutreachGuidance,
-} from '@sales-automation/engagement-guidance';
 import type { ProspectDiscoveryResult, ProspectDiscoveryRunStore } from '@sales-automation/prospect-discovery';
 import type {
   ContactAccuracy,
@@ -15,6 +9,11 @@ import type {
   SourceQuality,
 } from '@sales-automation/shared';
 import type { LeadRepository, StoredLeadRecord } from '@sales-automation/storage';
+import {
+  applyFirstOutreachGuidance,
+  applyReplyGuidance,
+  auditMissingFirstOutreachGuidance,
+} from './engagement-automation.js';
 import { renderLoginPage, renderProspectDashboardPage } from './prospects-page.js';
 import { handleSalesAutomationRequest } from './server.js';
 
@@ -130,7 +129,30 @@ export async function handleProspectDashboardRequest(
       if (!context.runDiscovery) return json({ error: 'Prospect discovery is not configured.' }, 503);
       if (!activeDiscoveryRun) activeDiscoveryRun = context.runDiscovery().finally(() => { activeDiscoveryRun = undefined; });
       const result = await activeDiscoveryRun;
-      return json({ run: result.run, newLeads: result.newLeads.map((lead) => lead.id) }, 201);
+      const engagementAudit = auditMissingFirstOutreachGuidance({
+        repository: context.repository,
+        portfolioItems: context.portfolioItems,
+        actor: 'engagement-intelligence',
+        generatedAt: now(context),
+        leadIds: result.newLeads.map((lead) => lead.id),
+      });
+      return json({
+        run: result.run,
+        newLeads: result.newLeads.map((lead) => lead.id),
+        engagementAudit,
+      }, 201);
+    }
+
+    if (method === 'POST' && pathname === '/api/prospects/guidance/backfill') {
+      const payload = asObject(request.body);
+      const result = auditMissingFirstOutreachGuidance({
+        repository: context.repository,
+        portfolioItems: context.portfolioItems,
+        actor: 'engagement-intelligence',
+        generatedAt: now(context),
+        force: payload.force === true || payload.force === 'true',
+      });
+      return json({ ok: true, ...result }, result.audited > 0 ? 201 : 200);
     }
 
     const guidanceMatch = pathname.match(/^\/api\/prospects\/([^/]+)\/guidance\/(first-outreach|reply)$/);
@@ -142,40 +164,27 @@ export async function handleProspectDashboardRequest(
       const generatedAt = now(context);
 
       if (guidanceType === 'first-outreach') {
-        const guidance = generateFirstOutreachGuidance(existing.lead, context.portfolioItems, { generatedAt });
-        const updatedLead = {
-          ...existing.lead,
-          draftMessage: guidance.draft,
-          recommendedNextAction: guidance.nextAction,
-          pipelineStatus: guidance.requiresHumanReview ? 'needs_human_review' as const : 'draft_ready' as const,
-          updatedAt: generatedAt,
-        };
-        context.repository.upsertLead(updatedLead, actor);
-        const record = context.repository.addNote(
-          leadId,
-          `guidance::first_outreach::${formatFirstOutreachGuidance(guidance)}`,
+        const applied = applyFirstOutreachGuidance({
+          repository: context.repository,
+          record: existing,
+          portfolioItems: context.portfolioItems,
           actor,
-        );
-        return json({ guidance, prospect: serializeProspect(record) }, 201);
+          generatedAt,
+        });
+        return json({ guidance: applied.guidance, prospect: serializeProspect(applied.record) }, 201);
       }
 
       const payload = asObject(request.body);
       const replyBody = requireString(payload.replyBody, 'replyBody');
-      const guidance = analyzeInboundReply(existing.lead, replyBody, { generatedAt });
-      const updatedLead = {
-        ...existing.lead,
-        lastResponseAt: generatedAt,
-        pipelineStatus: guidance.recommendedPipelineStatus,
-        updatedAt: generatedAt,
-      };
-      context.repository.upsertLead(updatedLead, actor);
-      context.repository.addNote(leadId, `activity::response::email::${replyBody}`, actor);
-      const record = context.repository.addNote(
-        leadId,
-        `guidance::reply::${formatReplyGuidance(guidance)}`,
+      const applied = applyReplyGuidance({
+        repository: context.repository,
+        record: existing,
+        replyBody,
+        channel: requireString(payload.channel ?? 'email', 'channel'),
         actor,
-      );
-      return json({ guidance, prospect: serializeProspect(record) }, 201);
+        generatedAt,
+      });
+      return json({ guidance: applied.guidance, prospect: serializeProspect(applied.record) }, 201);
     }
 
     const actionMatch = pathname.match(/^\/api\/prospects\/([^/]+)\/(status|owner|activity|feedback)$/);
@@ -241,9 +250,24 @@ export async function handleProspectDashboardRequest(
       const activityBody = requireString(payload.body, 'body');
       if (activityBody.length < 5) return json({ error: 'Activity details must contain at least 5 characters.' }, 400);
       const occurredAt = now(context);
+
+      if (type === 'response') {
+        const applied = applyReplyGuidance({
+          repository: context.repository,
+          record: existing,
+          replyBody: activityBody,
+          channel,
+          actor,
+          generatedAt: occurredAt,
+        });
+        return json({
+          ...serializeProspect(applied.record),
+          replyGuidance: applied.guidance,
+        });
+      }
+
       const leadUpdate = { ...existing.lead, updatedAt: occurredAt };
       if (type === 'outreach') leadUpdate.lastContactedAt = occurredAt;
-      if (type === 'response') leadUpdate.lastResponseAt = occurredAt;
       context.repository.upsertLead(leadUpdate, actor);
       let record = context.repository.addNote(leadId, `activity::${type}::${channel}::${activityBody}`, actor);
       const nextStatus = activityStatus(type);
@@ -279,7 +303,6 @@ function serializeProspect(record: StoredLeadRecord) {
 
 function activityStatus(type: ActivityType): PipelineStatus | undefined {
   if (type === 'outreach') return 'sent_manually';
-  if (type === 'response') return 'replied';
   if (type === 'meeting') return 'meeting_booked';
   if (type === 'proposal') return 'proposal_sent';
   return undefined;
