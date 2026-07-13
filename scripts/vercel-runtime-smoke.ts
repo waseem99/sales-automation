@@ -8,10 +8,21 @@ interface VercelConfig {
 }
 
 interface OutreachPolicy {
+  version: number;
   businessAddress: string;
+  teamMembers: string[];
   senderStrategy: {
     primarySenders: string[];
     secondarySendersAfterWarmup: string[];
+  };
+  portfolioLibrary: {
+    environmentVariable: string;
+  };
+  replyRouting: {
+    fixedAlertEmails: string[];
+    fixedAlertEnvironmentVariable: string;
+    additionalOwnerEnvironmentVariable: string;
+    activeSenderEnvironmentVariable: string;
   };
   targeting: {
     preferredCountries: string[];
@@ -37,6 +48,8 @@ async function main(): Promise<void> {
   process.env.SUBAINA_DASHBOARD_PASSWORD = process.env.SUBAINA_DASHBOARD_PASSWORD || 'subaina-smoke-password';
   process.env.DANISH_DASHBOARD_PASSWORD = process.env.DANISH_DASHBOARD_PASSWORD || 'danish-smoke-password';
   process.env.SESSION_SECRET = process.env.SESSION_SECRET || 'vercel-smoke-session-secret-123456789';
+  process.env.PORTFOLIO_LIBRARY_URL = process.env.PORTFOLIO_LIBRARY_URL || 'https://drive.google.com/drive/folders/smoke-test';
+  process.env.OUTREACH_ALERT_EMAILS = process.env.OUTREACH_ALERT_EMAILS || 'waseem@codistan.org,sales@codistan.org';
 
   assert.equal(verifiedStarterProspects.length, 75);
   assert.equal(new Set(verifiedStarterProspects.map((lead) => lead.id)).size, 75);
@@ -64,12 +77,19 @@ async function main(): Promise<void> {
   const outreachPolicy = JSON.parse(
     readFileSync(new URL('../config/outreach-policy.json', import.meta.url), 'utf8'),
   ) as OutreachPolicy;
+  assert.equal(outreachPolicy.version, 2);
   assert.equal(outreachPolicy.businessAddress, 'Codistan Ventures Building, Plot No. 15, I-11/3, Islamabad 44000, Pakistan');
   assert.deepEqual(outreachPolicy.senderStrategy.primarySenders, [
     'talha.bashir@codistan.org',
     'jawad.jutt@codistan.org',
   ]);
   assert.equal(outreachPolicy.senderStrategy.secondarySendersAfterWarmup.length, 3);
+  assert.equal(outreachPolicy.teamMembers.length, 5);
+  assert.equal(outreachPolicy.portfolioLibrary.environmentVariable, 'PORTFOLIO_LIBRARY_URL');
+  assert.deepEqual(outreachPolicy.replyRouting.fixedAlertEmails, ['waseem@codistan.org', 'sales@codistan.org']);
+  assert.equal(outreachPolicy.replyRouting.fixedAlertEnvironmentVariable, 'OUTREACH_ALERT_EMAILS');
+  assert.equal(outreachPolicy.replyRouting.additionalOwnerEnvironmentVariable, 'ADDITIONAL_LEAD_OWNERS');
+  assert.equal(outreachPolicy.replyRouting.activeSenderEnvironmentVariable, 'OUTREACH_SENDER_EMAILS');
   assert.ok(outreachPolicy.targeting.preferredCountries.includes('United States'));
   assert.ok(outreachPolicy.targeting.preferredCountries.includes('Pakistan'));
   assert.ok(outreachPolicy.targeting.excludedCompanyHeadquartersOrPrimaryOperations.includes('Israel'));
@@ -80,6 +100,26 @@ async function main(): Promise<void> {
   assert.equal(outreachPolicy.companyQualification.microCompanyQualification.minimumStrongCommercialSignals, 2);
   assert.deepEqual(outreachPolicy.sending.steadyStateDailyNewMessagesAcrossDomain, { minimum: 50, maximum: 100 });
   assert.deepEqual(outreachPolicy.followUpSequence.map((step) => step.day), [0, 3, 7, 14]);
+
+  const routingModule = await import('../apps/web/src/outreach-routing.ts');
+  const teamMembers = routingModule.getTeamMembers();
+  assert.equal(teamMembers.length, 5);
+  assert.deepEqual(teamMembers.filter((member) => member.canSendAtLaunch).map((member) => member.email), [
+    'talha.bashir@codistan.org',
+    'jawad.jutt@codistan.org',
+  ]);
+  assert.equal(routingModule.getPortfolioLibraryUrl(), process.env.PORTFOLIO_LIBRARY_URL);
+  const moizRouting = routingModule.resolveLeadRouting({ id: 'qualified-26', owner: 'moiz.khalid@codistan.org' });
+  assert.equal(moizRouting.replyTo, 'moiz.khalid@codistan.org');
+  assert.ok(['talha.bashir@codistan.org', 'jawad.jutt@codistan.org'].includes(moizRouting.sendFrom));
+  assert.deepEqual(moizRouting.alertEmails.sort(), [
+    'moiz.khalid@codistan.org',
+    'sales@codistan.org',
+    'waseem@codistan.org',
+  ].sort());
+  const talhaRouting = routingModule.resolveLeadRouting({ id: 'qualified-27', owner: 'talha.bashir@codistan.org' });
+  assert.equal(talhaRouting.sendFrom, 'talha.bashir@codistan.org');
+  assert.equal(talhaRouting.replyTo, 'talha.bashir@codistan.org');
 
   const config = JSON.parse(
     readFileSync(new URL('../vercel.json', import.meta.url), 'utf8'),
@@ -131,7 +171,7 @@ async function main(): Promise<void> {
   assert.equal(invalidLogin.status, 401);
   assert.deepEqual(await invalidLogin.json(), { error: 'Incorrect email or password.' });
 
-  console.log('Vercel runtime, outreach policy, routing, 75-prospect and five-team-admin smoke tests passed');
+  console.log('Vercel runtime, owner assignment, reply routing, outreach policy and 75-prospect smoke tests passed');
 }
 
 async function assertSuccessfulLogin(
