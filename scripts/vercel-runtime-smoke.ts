@@ -19,7 +19,6 @@ async function main(): Promise<void> {
   assert.equal(verifiedStarterProspects.filter((lead) => lead.opportunityStatus === 'live_opportunity').length, 3);
   assert.ok(verifiedStarterProspects.every((lead) => Boolean(
     lead.companyName
-    && lead.companyWebsite
     && lead.evidenceUrl
     && lead.contactRole
     && lead.serviceOffer
@@ -33,6 +32,7 @@ async function main(): Promise<void> {
   assert.equal(newBatch.length, 50);
   assert.equal(newBatch.filter((lead) => lead.confidence === 'high').length, 30);
   assert.equal(newBatch.filter((lead) => lead.opportunityStatus === 'recent_demand_signal').length, 12);
+  assert.ok(newBatch.every((lead) => Boolean(lead.companyWebsite && lead.contactFormUrl)));
   assert.ok(newBatch.every((lead) => lead.discoverySource === 'Qualified prospect research — 2026-07-13'));
   assert.ok(newBatch.every((lead) => lead.feedback?.status === 'pending'));
 
