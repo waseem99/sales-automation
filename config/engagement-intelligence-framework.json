@@ -1,0 +1,101 @@
+{
+  "version": 1,
+  "qualification": {
+    "weights": {
+      "strategicServiceFit": 20,
+      "verifiedDemandOrTrigger": 15,
+      "buyerQualityAndAuthority": 10,
+      "commercialCapacity": 15,
+      "timingAndUrgency": 10,
+      "portfolioAndProofMatch": 10,
+      "contactQuality": 5,
+      "personalisationDepth": 5,
+      "partnershipPotential": 5,
+      "riskAndCompliance": 5
+    },
+    "thresholds": {
+      "priority": 80,
+      "qualified": 68,
+      "humanReview": 55
+    },
+    "hardStops": [
+      "excluded_country_or_industry",
+      "unverified_company_presence",
+      "no_legitimate_contact_route",
+      "suppressed_or_opted_out",
+      "unsupported_or_stale_reason",
+      "no_credible_codistan_service_match",
+      "unverified_claim_required"
+    ]
+  },
+  "firstOutreach": {
+    "structure": [
+      "verified_observation",
+      "business_implication",
+      "single_relevant_codistan_offer",
+      "one_relevant_proof_point",
+      "low_friction_call_to_action"
+    ],
+    "targetWordCount": {
+      "minimum": 65,
+      "maximum": 110
+    },
+    "subjectWordCount": {
+      "minimum": 3,
+      "maximum": 7
+    },
+    "rules": [
+      "no_false_familiarity",
+      "no_fake_reply_or_forward_subject",
+      "no_unsupported_buying_or_budget_claim",
+      "no_generic_service_list",
+      "no_attachment_by_default",
+      "one_clear_call_to_action",
+      "signature_added_at_send_time"
+    ]
+  },
+  "replyProcessing": {
+    "classifications": [
+      "positive_interest",
+      "meeting_request",
+      "request_for_information",
+      "pricing_or_budget_question",
+      "technical_or_capability_question",
+      "referral_to_another_person",
+      "not_now",
+      "existing_vendor_or_internal_team",
+      "budget_objection",
+      "not_relevant",
+      "unsubscribe_or_stop",
+      "automatic_reply_or_out_of_office",
+      "bounce_or_delivery_failure",
+      "ambiguous"
+    ],
+    "humanApprovalTriggers": [
+      "pricing_or_discount",
+      "refund_or_payment_commitment",
+      "delivery_timeline_or_staffing_guarantee",
+      "legal_or_contractual_claim",
+      "data_protection_or_compliance_claim",
+      "security_assurance",
+      "confidential_client_reference",
+      "negotiation_or_dispute",
+      "complaint_or_reputational_risk",
+      "ambiguous_low_confidence",
+      "custom_proposal_or_statement_of_work"
+    ],
+    "automaticStopClassifications": [
+      "unsubscribe_or_stop",
+      "not_relevant",
+      "bounce_or_delivery_failure"
+    ]
+  },
+  "learningMetrics": [
+    "positive_reply_rate",
+    "qualified_meeting_rate",
+    "proposal_rate",
+    "win_rate",
+    "objection_type",
+    "reason_lost"
+  ]
+}

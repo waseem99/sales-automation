@@ -28,6 +28,7 @@
     "@sales-automation/api": "workspace:*",
     "@sales-automation/auth": "workspace:*",
     "@sales-automation/dashboard": "workspace:*",
+    "@sales-automation/engagement-guidance": "workspace:*",
     "@sales-automation/evaluator": "workspace:*",
     "@sales-automation/ingestion": "workspace:*",
     "@sales-automation/prospect-discovery": "workspace:*",
