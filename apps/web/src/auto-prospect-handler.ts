@@ -1,16 +1,16 @@
 import { auditMissingFirstOutreachGuidance } from './engagement-automation.js';
 import {
-  handleProspectDashboardRequest as handleBaseProspectDashboardRequest,
+  handleProspectDashboardRequest as handleSecureProspectDashboardRequest,
   type ProspectDashboardContext,
   type ProspectDashboardRequest,
   type ProspectDashboardResponse,
-} from './prospect-handler.js';
+} from './secure-prospect-handler.js';
 
 export type {
   ProspectDashboardContext,
   ProspectDashboardRequest,
   ProspectDashboardResponse,
-} from './prospect-handler.js';
+} from './secure-prospect-handler.js';
 
 const NON_AUDIT_PATHS = new Set([
   '/health',
@@ -23,15 +23,15 @@ const NON_AUDIT_PATHS = new Set([
 /**
  * Production wrapper around the Prospect Desk handler.
  *
- * It silently backfills engagement intelligence for existing prospects and
- * immediately audits leads added by any successful discovery or ingestion
- * request. The audit is idempotent, so already-processed leads are skipped.
+ * It silently backfills engagement intelligence for records already loaded in
+ * the caller's authorized scope. The caller is responsible for persisting any
+ * resulting record changes.
  */
 export async function handleProspectDashboardRequest(
   request: ProspectDashboardRequest,
   context: ProspectDashboardContext,
 ): Promise<ProspectDashboardResponse> {
-  const response = await handleBaseProspectDashboardRequest(request, context);
+  const response = await handleSecureProspectDashboardRequest(request, context);
   const method = request.method.toUpperCase();
   const pathname = trimTrailingSlash(new URL(request.url, 'http://localhost').pathname) || '/';
 
@@ -44,10 +44,8 @@ export async function handleProspectDashboardRequest(
     generatedAt: context.now?.() ?? new Date().toISOString(),
   });
 
-  // Re-render read responses after a first-time backfill so the user sees the
-  // prepared audit and outreach guidance immediately without a second refresh.
   if (audit.audited > 0 && method === 'GET') {
-    return handleBaseProspectDashboardRequest(request, context);
+    return handleSecureProspectDashboardRequest(request, context);
   }
 
   return response;
