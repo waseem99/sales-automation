@@ -1,4 +1,10 @@
 import { createHmac, timingSafeEqual } from 'node:crypto';
+import {
+  analyzeInboundReply,
+  formatFirstOutreachGuidance,
+  formatReplyGuidance,
+  generateFirstOutreachGuidance,
+} from '@sales-automation/engagement-guidance';
 import type { ProspectDiscoveryResult, ProspectDiscoveryRunStore } from '@sales-automation/prospect-discovery';
 import type {
   ContactAccuracy,
@@ -125,6 +131,51 @@ export async function handleProspectDashboardRequest(
       if (!activeDiscoveryRun) activeDiscoveryRun = context.runDiscovery().finally(() => { activeDiscoveryRun = undefined; });
       const result = await activeDiscoveryRun;
       return json({ run: result.run, newLeads: result.newLeads.map((lead) => lead.id) }, 201);
+    }
+
+    const guidanceMatch = pathname.match(/^\/api\/prospects\/([^/]+)\/guidance\/(first-outreach|reply)$/);
+    if (method === 'POST' && guidanceMatch) {
+      const leadId = decodeURIComponent(guidanceMatch[1] ?? '');
+      const guidanceType = guidanceMatch[2];
+      const existing = context.repository.getLead(leadId);
+      if (!existing) return json({ error: 'Prospect not found.' }, 404);
+      const generatedAt = now(context);
+
+      if (guidanceType === 'first-outreach') {
+        const guidance = generateFirstOutreachGuidance(existing.lead, context.portfolioItems, { generatedAt });
+        const updatedLead = {
+          ...existing.lead,
+          draftMessage: guidance.draft,
+          recommendedNextAction: guidance.nextAction,
+          pipelineStatus: guidance.requiresHumanReview ? 'needs_human_review' as const : 'draft_ready' as const,
+          updatedAt: generatedAt,
+        };
+        context.repository.upsertLead(updatedLead, actor);
+        const record = context.repository.addNote(
+          leadId,
+          `guidance::first_outreach::${formatFirstOutreachGuidance(guidance)}`,
+          actor,
+        );
+        return json({ guidance, prospect: serializeProspect(record) }, 201);
+      }
+
+      const payload = asObject(request.body);
+      const replyBody = requireString(payload.replyBody, 'replyBody');
+      const guidance = analyzeInboundReply(existing.lead, replyBody, { generatedAt });
+      const updatedLead = {
+        ...existing.lead,
+        lastResponseAt: generatedAt,
+        pipelineStatus: guidance.recommendedPipelineStatus,
+        updatedAt: generatedAt,
+      };
+      context.repository.upsertLead(updatedLead, actor);
+      context.repository.addNote(leadId, `activity::response::email::${replyBody}`, actor);
+      const record = context.repository.addNote(
+        leadId,
+        `guidance::reply::${formatReplyGuidance(guidance)}`,
+        actor,
+      );
+      return json({ guidance, prospect: serializeProspect(record) }, 201);
     }
 
     const actionMatch = pathname.match(/^\/api\/prospects\/([^/]+)\/(status|owner|activity|feedback)$/);
