@@ -2,17 +2,15 @@ import { neon } from '@neondatabase/serverless';
 import {
   InMemoryProspectDiscoveryRunStore,
   type ProspectDiscoveryRun,
-  type ProspectDiscoveryRunStore,
 } from '@sales-automation/prospect-discovery';
 import {
   InMemoryLeadRepository,
-  type LeadRepository,
   type StoredLeadRecord,
 } from '@sales-automation/storage';
 
 export interface NeonAppState {
-  repository: LeadRepository;
-  runStore: ProspectDiscoveryRunStore;
+  repository: InMemoryLeadRepository;
+  runStore: InMemoryProspectDiscoveryRunStore;
 }
 
 interface LeadRow {
