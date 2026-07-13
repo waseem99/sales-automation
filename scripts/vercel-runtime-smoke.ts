@@ -5,6 +5,8 @@ import { verifiedStarterProspects } from '@sales-automation/fixtures';
 interface VercelConfig {
   redirects?: Array<{ source: string; destination: string; permanent?: boolean }>;
   rewrites?: Array<{ source: string; destination: string }>;
+  crons?: Array<{ path: string; schedule: string }>;
+  functions?: Record<string, { maxDuration?: number }>;
 }
 
 interface OutreachPolicy {
@@ -121,11 +123,27 @@ async function main(): Promise<void> {
   assert.equal(talhaRouting.sendFrom, 'talha.bashir@codistan.org');
   assert.equal(talhaRouting.replyTo, 'talha.bashir@codistan.org');
 
+  const outreachModule = await import('@sales-automation/outreach-email');
+  const safeOutreachConfig = outreachModule.loadOutreachEmailConfig({
+    OUTREACH_SMTP_HOST: 'sgp200.greengeeks.net',
+    OUTREACH_SMTP_PORT: '465',
+    OUTREACH_IMAP_HOST: 'sgp200.greengeeks.net',
+    OUTREACH_IMAP_PORT: '993',
+    OUTREACH_SENDING_ENABLED: 'false',
+    OUTREACH_DNS_READY: 'false',
+    OUTREACH_DRY_RUN: 'true',
+  });
+  assert.equal(safeOutreachConfig.smtpHost, 'sgp200.greengeeks.net');
+  assert.equal(safeOutreachConfig.smtpPort, 465);
+  assert.equal(safeOutreachConfig.imapPort, 993);
+  assert.equal(outreachModule.isLiveSendingAllowed(safeOutreachConfig), false);
+
   const config = JSON.parse(
     readFileSync(new URL('../vercel.json', import.meta.url), 'utf8'),
   ) as VercelConfig;
   const rewriteSources = (config.rewrites ?? []).map((rewrite) => rewrite.source);
   const rootRedirect = (config.redirects ?? []).find((redirect) => redirect.source === '/');
+  const outreachCron = (config.crons ?? []).find((cron) => cron.path === '/api/cron/outreach');
 
   assert.equal(rootRedirect?.destination, '/prospects');
   assert.ok(rewriteSources.includes('/prospects'));
@@ -133,6 +151,8 @@ async function main(): Promise<void> {
   assert.ok(rewriteSources.includes('/api/prospects/:path*'));
   assert.ok(!rewriteSources.includes('/:path*'), 'Vercel internal routes must not be captured by a global rewrite.');
   assert.ok(!rewriteSources.includes('/api/preview'), 'Vercel preview routes must remain owned by Vercel.');
+  assert.equal(outreachCron?.schedule, '0 * * * *');
+  assert.equal(config.functions?.['api/cron/outreach.ts']?.maxDuration, 300);
 
   const module = await import('../api/index.ts');
   const handler = module.default as { fetch(request: Request): Promise<Response> };
@@ -171,7 +191,7 @@ async function main(): Promise<void> {
   assert.equal(invalidLogin.status, 401);
   assert.deepEqual(await invalidLogin.json(), { error: 'Incorrect email or password.' });
 
-  console.log('Vercel runtime, owner assignment, reply routing, outreach policy and 75-prospect smoke tests passed');
+  console.log('Vercel runtime, guarded outreach cron, owner routing, policy and 75-prospect smoke tests passed');
 }
 
 async function assertSuccessfulLogin(

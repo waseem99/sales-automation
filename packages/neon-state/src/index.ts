@@ -126,16 +126,18 @@ export async function persistNeonAppState(databaseUrl: string, state: NeonAppSta
   ]);
 }
 
-export async function acquireProspectRunLock(
+export async function acquireNamedRunLock(
   databaseUrl: string,
+  lockName: string,
   token: string,
   durationMinutes = 10,
 ): Promise<boolean> {
+  if (!lockName.trim()) throw new Error('lockName is required.');
   await ensureNeonSchema(databaseUrl);
   const sql = neon(requireDatabaseUrl(databaseUrl));
   const rows = await sql`
     INSERT INTO prospect_run_locks (lock_name, token, locked_until, updated_at)
-    VALUES ('daily-prospect-discovery', ${token}, NOW() + make_interval(mins => ${durationMinutes}), NOW())
+    VALUES (${lockName}, ${token}, NOW() + make_interval(mins => ${durationMinutes}), NOW())
     ON CONFLICT (lock_name) DO UPDATE SET
       token = EXCLUDED.token,
       locked_until = EXCLUDED.locked_until,
@@ -146,13 +148,29 @@ export async function acquireProspectRunLock(
   return rows[0]?.token === token;
 }
 
-export async function releaseProspectRunLock(databaseUrl: string, token: string): Promise<void> {
+export async function releaseNamedRunLock(
+  databaseUrl: string,
+  lockName: string,
+  token: string,
+): Promise<void> {
   const sql = neon(requireDatabaseUrl(databaseUrl));
   await sql`
     UPDATE prospect_run_locks
     SET locked_until = NOW(), updated_at = NOW()
-    WHERE lock_name = 'daily-prospect-discovery' AND token = ${token}
+    WHERE lock_name = ${lockName} AND token = ${token}
   `;
+}
+
+export async function acquireProspectRunLock(
+  databaseUrl: string,
+  token: string,
+  durationMinutes = 10,
+): Promise<boolean> {
+  return acquireNamedRunLock(databaseUrl, 'daily-prospect-discovery', token, durationMinutes);
+}
+
+export async function releaseProspectRunLock(databaseUrl: string, token: string): Promise<void> {
+  return releaseNamedRunLock(databaseUrl, 'daily-prospect-discovery', token);
 }
 
 export function requireDatabaseUrl(value: string | undefined): string {
