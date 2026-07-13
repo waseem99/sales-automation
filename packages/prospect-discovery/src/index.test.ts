@@ -3,7 +3,8 @@ import { samplePortfolioItems } from '@sales-automation/fixtures';
 import { InMemoryLeadRepository } from '@sales-automation/storage';
 import { renderProspectCsv } from './digest.js';
 import { parseRssItems } from './sources.js';
-import { runProspectDiscovery } from './runner.js';
+import { candidateToLead, runProspectDiscovery } from './runner.js';
+import { classifyTargeting, EXPANDED_TARGET_SEARCH_QUERIES } from './targeting.js';
 import { InMemoryProspectDiscoveryRunStore } from './run-store.js';
 
 const rss = `<?xml version="1.0"?><rss><channel><item>
@@ -17,7 +18,60 @@ assert.equal(parsed.length, 1);
 assert.equal(parsed[0]?.title, 'Looking for an AI development partner');
 assert.equal(parsed[0]?.link, 'https://example.com/opportunity');
 
+assert.ok(EXPANDED_TARGET_SEARCH_QUERIES.some((query) => query.includes('digital marketing agency')));
+assert.ok(EXPANDED_TARGET_SEARCH_QUERIES.some((query) => query.includes('cybersecurity consultancy')));
+assert.ok(EXPANDED_TARGET_SEARCH_QUERIES.some((query) => query.includes('animation VFX studio')));
+
+const remoteAiTarget = classifyTargeting(
+  'Need a RAG and AI workflow automation implementation partner',
+  'United States',
+);
+assert.equal(remoteAiTarget.portfolioIdentity, 'Hilarious AI');
+assert.equal(remoteAiTarget.serviceCategory, 'rag_document_intelligence');
+assert.equal(remoteAiTarget.deliveryModel, 'remote_first');
+
+const cyberTarget = classifyTargeting(
+  'Seeking SOC 2, ISO 27001 and cloud security consulting',
+  'United Kingdom',
+);
+assert.equal(cyberTarget.portfolioIdentity, 'Cytas');
+assert.equal(cyberTarget.serviceCategory, 'cybersecurity_compliance');
+assert.equal(cyberTarget.deliveryModel, 'remote_first');
+
+const localCampaignTarget = classifyTargeting(
+  'Social media management, influencer activation and an on-site video shoot',
+  'Islamabad, Pakistan',
+);
+assert.equal(localCampaignTarget.portfolioIdentity, 'Codistan');
+assert.equal(localCampaignTarget.deliveryModel, 'local_weighted');
+assert.ok(localCampaignTarget.reachMethod.includes('Local-first Pakistan'));
+
+const motionlyTarget = classifyTargeting(
+  'Unity game development with AR/VR and immersive production',
+  'UAE',
+);
+assert.equal(motionlyTarget.portfolioIdentity, 'Motionly');
+assert.equal(motionlyTarget.serviceCategory, 'ar_3d_unity_unreal');
+assert.equal(motionlyTarget.deliveryModel, 'remote_first');
+
 const now = '2026-07-11T10:00:00.000Z';
+const classifiedLead = candidateToLead({
+  sourceName: 'Public search',
+  sourceType: 'search',
+  sourceUrl: 'https://example-security.com/rfp',
+  title: 'Cybersecurity compliance partner required',
+  summary: 'Need ISO 27001, SOC 2 and cloud security support.',
+  companyName: 'Example Security Buyer',
+  companyWebsite: 'https://example-security.com',
+  country: 'Canada',
+  opportunityStatus: 'live_opportunity',
+  evidenceSummary: 'Current public RFP.',
+}, now);
+assert.equal(classifiedLead.serviceCategory, 'cybersecurity_compliance');
+assert.equal(classifiedLead.serviceOffer, 'Cybersecurity, cloud security and compliance services');
+assert.ok(classifiedLead.materialsToShare?.includes('Cytas'));
+assert.ok(classifiedLead.reachMethod?.includes('Remote-first'));
+
 const remoteOkPayload = [
   { legal: 'metadata' },
   {
@@ -86,6 +140,8 @@ assert.equal(first.newLeads[0]?.contactName, 'Sarah Jones');
 assert.equal(first.newLeads[0]?.contactRole, 'Founder');
 assert.equal(first.newLeads[0]?.contactEmail, 'partnerships@example-ai.com');
 assert.equal(first.newLeads[0]?.opportunityStatus, 'live_opportunity');
+assert.equal(first.newLeads[0]?.serviceCategory, 'rag_document_intelligence');
+assert.equal(first.newLeads[0]?.serviceOffer, 'AI solutions, RAG, agents and workflow automation');
 assert.ok(first.newLeads[0]?.recommendedNextAction);
 assert.ok(first.newLeads[0]?.draftMessage);
 assert.equal(runStore.listRuns().length, 1);

@@ -1,5 +1,6 @@
 export * from './types.js';
 export * from './sources.js';
+export * from './targeting.js';
 export * from './enrichment.js';
 export * from './run-store.js';
 export * from './digest.js';
