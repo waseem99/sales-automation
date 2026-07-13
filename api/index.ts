@@ -34,6 +34,40 @@ interface DashboardSession {
   displayName: string;
 }
 
+interface DashboardAccountSpec {
+  identifier: string;
+  displayName: string;
+  passwordEnvironmentName: string;
+}
+
+const dashboardAccountSpecs: DashboardAccountSpec[] = [
+  {
+    identifier: 'talha.bashir@codistan.org',
+    displayName: 'Talha Bashir',
+    passwordEnvironmentName: 'TALHA_DASHBOARD_PASSWORD',
+  },
+  {
+    identifier: 'jawad.jutt@codistan.org',
+    displayName: 'Jawad Jutt',
+    passwordEnvironmentName: 'JAWAD_DASHBOARD_PASSWORD',
+  },
+  {
+    identifier: 'moiz.khalid@codistan.org',
+    displayName: 'Moiz Khalid',
+    passwordEnvironmentName: 'MOIZ_DASHBOARD_PASSWORD',
+  },
+  {
+    identifier: 'subainaaamir@codistan.org',
+    displayName: 'Subaina Aamir',
+    passwordEnvironmentName: 'SUBAINA_DASHBOARD_PASSWORD',
+  },
+  {
+    identifier: 'danishkhalid@codistan.org',
+    displayName: 'Danish Khalid',
+    passwordEnvironmentName: 'DANISH_DASHBOARD_PASSWORD',
+  },
+];
+
 export const maxDuration = 300;
 
 export default {
@@ -53,6 +87,10 @@ export default {
           adminPasswordConfigured: Boolean(process.env.ADMIN_PASSWORD?.trim()),
           talhaAccountConfigured: Boolean(process.env.TALHA_DASHBOARD_PASSWORD?.trim()),
           jawadAccountConfigured: Boolean(process.env.JAWAD_DASHBOARD_PASSWORD?.trim()),
+          moizAccountConfigured: Boolean(process.env.MOIZ_DASHBOARD_PASSWORD?.trim()),
+          subainaAccountConfigured: Boolean(process.env.SUBAINA_DASHBOARD_PASSWORD?.trim()),
+          danishAccountConfigured: Boolean(process.env.DANISH_DASHBOARD_PASSWORD?.trim()),
+          configuredTeamAccountCount: dashboardAccountSpecs.filter((spec) => Boolean(process.env[spec.passwordEnvironmentName]?.trim())).length,
           sessionSecretConfigured: Boolean(process.env.SESSION_SECRET?.trim()),
           deploymentCommit: process.env.VERCEL_GIT_COMMIT_SHA ?? null,
           region: process.env.VERCEL_REGION ?? null,
@@ -330,20 +368,16 @@ function loadDashboardAccounts(adminPassword: string): DashboardAccount[] {
     password: adminPassword,
     aliases: uniqueIdentifiers([adminIdentifier, 'admin']),
   }];
-  const talhaPassword = process.env.TALHA_DASHBOARD_PASSWORD?.trim();
-  if (talhaPassword) accounts.push({
-    identifier: 'talha.bashir@codistan.org',
-    displayName: 'Talha Bashir',
-    password: talhaPassword,
-    aliases: ['talha.bashir@codistan.org'],
-  });
-  const jawadPassword = process.env.JAWAD_DASHBOARD_PASSWORD?.trim();
-  if (jawadPassword) accounts.push({
-    identifier: 'jawad.jutt@codistan.org',
-    displayName: 'Jawad Jutt',
-    password: jawadPassword,
-    aliases: ['jawad.jutt@codistan.org'],
-  });
+  for (const spec of dashboardAccountSpecs) {
+    const password = process.env[spec.passwordEnvironmentName]?.trim();
+    if (!password) continue;
+    accounts.push({
+      identifier: spec.identifier,
+      displayName: spec.displayName,
+      password,
+      aliases: [spec.identifier],
+    });
+  }
   return accounts;
 }
 
