@@ -105,11 +105,12 @@ async function main(): Promise<void> {
 
   const routingModule = await import('../apps/web/src/outreach-routing.ts');
   const teamMembers = routingModule.getTeamMembers();
-  assert.equal(teamMembers.length, 5);
+  assert.equal(teamMembers.length, 7);
   assert.deepEqual(teamMembers.filter((member) => member.canSendAtLaunch).map((member) => member.email), [
     'talha.bashir@codistan.org',
     'jawad.jutt@codistan.org',
   ]);
+  assert.deepEqual(teamMembers.filter((member) => member.canLogin === false).map((member) => member.email), ['hiba', 'bilal']);
   assert.equal(routingModule.getPortfolioLibraryUrl(), process.env.PORTFOLIO_LIBRARY_URL);
   const moizRouting = routingModule.resolveLeadRouting({ id: 'qualified-26', owner: 'moiz.khalid@codistan.org' });
   assert.equal(moizRouting.replyTo, 'moiz.khalid@codistan.org');

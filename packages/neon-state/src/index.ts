@@ -2,17 +2,15 @@ import { neon } from '@neondatabase/serverless';
 import {
   InMemoryProspectDiscoveryRunStore,
   type ProspectDiscoveryRun,
-  type ProspectDiscoveryRunStore,
 } from '@sales-automation/prospect-discovery';
 import {
   InMemoryLeadRepository,
-  type LeadRepository,
   type StoredLeadRecord,
 } from '@sales-automation/storage';
 
 export interface NeonAppState {
-  repository: LeadRepository;
-  runStore: ProspectDiscoveryRunStore;
+  repository: InMemoryLeadRepository;
+  runStore: InMemoryProspectDiscoveryRunStore;
 }
 
 interface LeadRow {
@@ -193,3 +191,5 @@ function chunk<T>(items: T[], size: number): T[][] {
   for (let index = 0; index < items.length; index += size) batches.push(items.slice(index, index + size));
   return batches;
 }
+
+export * from './prospect-query.js';

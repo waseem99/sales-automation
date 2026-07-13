@@ -8,6 +8,9 @@
     "api/index.ts": {
       "maxDuration": 300
     },
+    "api/dashboard.ts": {
+      "maxDuration": 300
+    },
     "api/cron/prospect-discovery.ts": {
       "maxDuration": 300
     },
@@ -35,63 +38,63 @@
   "rewrites": [
     {
       "source": "/health",
-      "destination": "/api/index?__path=/health"
+      "destination": "/api/dashboard?__path=/health"
     },
     {
       "source": "/login",
-      "destination": "/api/index?__path=/login"
+      "destination": "/api/dashboard?__path=/login"
     },
     {
       "source": "/prospects",
-      "destination": "/api/index?__path=/prospects"
+      "destination": "/api/dashboard?__path=/prospects"
     },
     {
       "source": "/lead-desk",
-      "destination": "/api/index?__path=/lead-desk"
+      "destination": "/api/dashboard?__path=/lead-desk"
     },
     {
       "source": "/api/login",
-      "destination": "/api/index?__path=/api/login"
+      "destination": "/api/dashboard?__path=/api/login"
     },
     {
       "source": "/api/logout",
-      "destination": "/api/index?__path=/api/logout"
+      "destination": "/api/dashboard?__path=/api/logout"
     },
     {
       "source": "/api/prospects",
-      "destination": "/api/index?__path=/api/prospects"
+      "destination": "/api/dashboard?__path=/api/prospects"
     },
     {
       "source": "/api/prospect-runs",
-      "destination": "/api/index?__path=/api/prospect-runs"
+      "destination": "/api/dashboard?__path=/api/prospect-runs"
     },
     {
       "source": "/api/prospects/:path*",
-      "destination": "/api/index?__path=/api/prospects/:path*"
+      "destination": "/api/dashboard?__path=/api/prospects/:path*"
     },
     {
       "source": "/api/session",
-      "destination": "/api/index?__path=/api/session"
+      "destination": "/api/dashboard?__path=/api/session"
     },
     {
       "source": "/api/summary",
-      "destination": "/api/index?__path=/api/summary"
+      "destination": "/api/dashboard?__path=/api/summary"
     },
     {
       "source": "/api/opportunities",
-      "destination": "/api/index?__path=/api/opportunities"
+      "destination": "/api/dashboard?__path=/api/opportunities"
     },
     {
       "source": "/api/opportunities/:path*",
-      "destination": "/api/index?__path=/api/opportunities/:path*"
+      "destination": "/api/dashboard?__path=/api/opportunities/:path*"
     },
     {
       "source": "/api/ingest/:path*",
-      "destination": "/api/index?__path=/api/ingest/:path*"
+      "destination": "/api/dashboard?__path=/api/ingest/:path*"
     },
     {
       "source": "/api/dev/:path*",
-      "destination": "/api/index?__path=/api/dev/:path*"
+      "destination": "/api/dashboard?__path=/api/dev/:path*"
     }
   ]
 }

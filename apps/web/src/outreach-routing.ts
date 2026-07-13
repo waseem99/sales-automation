@@ -4,6 +4,7 @@ export interface TeamMemberOption {
   email: string;
   displayName: string;
   canSendAtLaunch: boolean;
+  canLogin?: boolean;
 }
 
 export interface LeadRouting {
@@ -14,30 +15,33 @@ export interface LeadRouting {
 }
 
 const defaultTeamMembers: TeamMemberOption[] = [
-  { email: 'talha.bashir@codistan.org', displayName: 'Talha Bashir', canSendAtLaunch: true },
-  { email: 'jawad.jutt@codistan.org', displayName: 'Jawad Jutt', canSendAtLaunch: true },
-  { email: 'moiz.khalid@codistan.org', displayName: 'Moiz Khalid', canSendAtLaunch: false },
-  { email: 'subainaaamir@codistan.org', displayName: 'Subaina Aamir', canSendAtLaunch: false },
-  { email: 'danishkhalid@codistan.org', displayName: 'Danish Khalid', canSendAtLaunch: false },
+  { email: 'talha.bashir@codistan.org', displayName: 'Talha Bashir', canSendAtLaunch: true, canLogin: true },
+  { email: 'jawad.jutt@codistan.org', displayName: 'Jawad Jutt', canSendAtLaunch: true, canLogin: true },
+  { email: 'moiz.khalid@codistan.org', displayName: 'Moiz Khalid', canSendAtLaunch: false, canLogin: true },
+  { email: 'subainaaamir@codistan.org', displayName: 'Subaina Aamir', canSendAtLaunch: false, canLogin: true },
+  { email: 'danishkhalid@codistan.org', displayName: 'Danish Khalid', canSendAtLaunch: false, canLogin: true },
+  { email: 'hiba', displayName: 'Hiba (Talha team)', canSendAtLaunch: false, canLogin: false },
+  { email: 'bilal', displayName: 'Bilal (Talha team)', canSendAtLaunch: false, canLogin: false },
 ];
 
 const defaultAlertEmails = ['waseem@codistan.org', 'sales@codistan.org'];
 const defaultSenders = defaultTeamMembers.filter((member) => member.canSendAtLaunch).map((member) => member.email);
 
 export function getTeamMembers(existingOwners: string[] = []): TeamMemberOption[] {
-  const extraOwners = splitEmails(process.env.ADDITIONAL_LEAD_OWNERS);
-  const allEmails = unique([
+  const extraOwners = splitOwnerValues(process.env.ADDITIONAL_LEAD_OWNERS);
+  const allOwners = unique([
     ...defaultTeamMembers.map((member) => member.email),
     ...existingOwners,
     ...extraOwners,
   ]);
 
-  return allEmails.map((email) => {
-    const fixed = defaultTeamMembers.find((member) => member.email === email);
+  return allOwners.map((owner) => {
+    const fixed = defaultTeamMembers.find((member) => member.email === owner);
     return fixed ?? {
-      email,
-      displayName: displayNameFromEmail(email),
+      email: owner,
+      displayName: displayNameFromOwner(owner),
       canSendAtLaunch: false,
+      canLogin: false,
     };
   });
 }
@@ -73,7 +77,7 @@ export function resolveLeadRouting(lead: Pick<Lead, 'id' | 'owner'>): LeadRoutin
     : senders[stableIndex(lead.id, senders.length)] ?? defaultSenders[0]!;
   const replyTo = owner ?? sendFrom;
   return {
-    owner,
+    owner: lead.owner?.trim() || undefined,
     sendFrom,
     replyTo,
     alertEmails: unique([...getAlertEmails(), replyTo]),
@@ -86,6 +90,11 @@ function splitEmails(value: string | undefined): string[] {
     .split(/[\n,;]+/)
     .map((item) => normalizeEmail(item))
     .filter((item): item is string => Boolean(item));
+}
+
+function splitOwnerValues(value: string | undefined): string[] {
+  if (!value?.trim()) return [];
+  return value.split(/[\n,;]+/).map((item) => item.trim().toLowerCase()).filter(Boolean);
 }
 
 function normalizeEmail(value: string | undefined): string | undefined {
@@ -104,8 +113,8 @@ function stableIndex(value: string, length: number): number {
   return hash % length;
 }
 
-function displayNameFromEmail(email: string): string {
-  const local = email.split('@')[0] ?? email;
+function displayNameFromOwner(owner: string): string {
+  const local = owner.split('@')[0] ?? owner;
   return local
     .split(/[._-]+/)
     .filter(Boolean)
