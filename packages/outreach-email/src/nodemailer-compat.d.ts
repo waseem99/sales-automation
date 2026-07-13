@@ -1,7 +1,6 @@
-import 'nodemailer/lib/smtp-pool';
+import 'nodemailer';
+import type { Transporter } from 'nodemailer';
 
-declare module 'nodemailer/lib/smtp-pool' {
-  interface SentMessageInfo {
-    pending: string[];
-  }
+declare module 'nodemailer' {
+  function createTransport(options?: unknown): Transporter<unknown>;
 }
