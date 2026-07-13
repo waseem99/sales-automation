@@ -2,6 +2,7 @@ import type { EvaluateLeadInput, LeadEvaluation } from '@sales-automation/evalua
 import type { Lead, PortfolioItem } from '@sales-automation/shared';
 
 const SESSION_COOKIE = 'codistan_admin_session';
+const ACTOR_COOKIE = 'codistan_admin_actor';
 const SESSION_LIFETIME_SECONDS = 12 * 60 * 60;
 const loginAttempts = new Map<string, { count: number; firstAttemptAt: number }>();
 
@@ -21,6 +22,18 @@ const serviceCategories = [
 
 type ServiceCategory = typeof serviceCategories[number];
 
+interface DashboardAccount {
+  identifier: string;
+  displayName: string;
+  password: string;
+  aliases: string[];
+}
+
+interface DashboardSession {
+  identifier: string;
+  displayName: string;
+}
+
 export const maxDuration = 300;
 
 export default {
@@ -38,6 +51,8 @@ export default {
           nodeVersion: process.version,
           databaseConfigured: Boolean(process.env.DATABASE_URL?.trim()),
           adminPasswordConfigured: Boolean(process.env.ADMIN_PASSWORD?.trim()),
+          talhaAccountConfigured: Boolean(process.env.TALHA_DASHBOARD_PASSWORD?.trim()),
+          jawadAccountConfigured: Boolean(process.env.JAWAD_DASHBOARD_PASSWORD?.trim()),
           sessionSecretConfigured: Boolean(process.env.SESSION_SECRET?.trim()),
           deploymentCommit: process.env.VERCEL_GIT_COMMIT_SHA ?? null,
           region: process.env.VERCEL_REGION ?? null,
@@ -49,6 +64,7 @@ export default {
       const adminPassword = requireEnvironment('ADMIN_PASSWORD');
       const sessionSecret = requireEnvironment('SESSION_SECRET');
       if (sessionSecret.length < 24) throw new Error('SESSION_SECRET must contain at least 24 characters.');
+      const accounts = loadDashboardAccounts(adminPassword);
 
       if (request.method === 'GET' && pathname === '/login') {
         return html(renderLoginPage());
@@ -56,47 +72,54 @@ export default {
 
       if (request.method === 'POST' && pathname === '/api/login') {
         phase = 'authenticate_login';
-        const clientKey = request.headers.get('x-forwarded-for')
+        const payload = asObject(await parseRequestBody(request));
+        const identifier = normalizeIdentifier(optionalString(payload.identifier) ?? optionalString(payload.email) ?? 'admin');
+        const password = requireString(payload.password, 'password');
+        const clientAddress = request.headers.get('x-forwarded-for')
           ?? request.headers.get('x-real-ip')
           ?? 'vercel';
+        const clientKey = `${clientAddress}:${identifier}`;
         if (isRateLimited(clientKey)) {
           return json({ error: 'Too many failed attempts. Try again later.' }, 429);
         }
-        const payload = asObject(await parseRequestBody(request));
-        const password = requireString(payload.password, 'password');
-        if (!(await safeEqual(password, adminPassword))) {
+        const account = await authenticateAccount(identifier, password, accounts);
+        if (!account) {
           registerFailedAttempt(clientKey);
-          return json({ error: 'Incorrect password.' }, 401);
+          return json({ error: 'Incorrect email or password.' }, 401);
         }
         loginAttempts.delete(clientKey);
         const expiresAt = Math.floor(Date.now() / 1_000) + SESSION_LIFETIME_SECONDS;
         const token = await createSessionToken(expiresAt, sessionSecret);
-        return new Response(JSON.stringify({ ok: true }), {
-          status: 200,
-          headers: {
-            ...securityHeaders(),
-            'content-type': 'application/json; charset=utf-8',
-            'set-cookie': buildSessionCookie(token),
-            'cache-control': 'no-store',
-          },
+        const actorToken = await createActorToken(account.identifier, sessionSecret);
+        const headers = new Headers({
+          ...securityHeaders(),
+          'content-type': 'application/json; charset=utf-8',
+          'cache-control': 'no-store',
         });
+        headers.append('set-cookie', buildSessionCookie(token));
+        headers.append('set-cookie', buildActorCookie(actorToken));
+        return new Response(JSON.stringify({
+          ok: true,
+          identifier: account.identifier,
+          displayName: account.displayName,
+          access: 'admin',
+        }), { status: 200, headers });
       }
 
       if (request.method === 'POST' && pathname === '/api/logout') {
-        return new Response(JSON.stringify({ ok: true }), {
-          status: 200,
-          headers: {
-            ...securityHeaders(),
-            'content-type': 'application/json; charset=utf-8',
-            'set-cookie': `${SESSION_COOKIE}=; Path=/; HttpOnly; SameSite=Strict; Max-Age=0; Secure`,
-            'cache-control': 'no-store',
-          },
+        const headers = new Headers({
+          ...securityHeaders(),
+          'content-type': 'application/json; charset=utf-8',
+          'cache-control': 'no-store',
         });
+        headers.append('set-cookie', `${SESSION_COOKIE}=; Path=/; HttpOnly; SameSite=Strict; Max-Age=0; Secure`);
+        headers.append('set-cookie', `${ACTOR_COOKIE}=; Path=/; HttpOnly; SameSite=Strict; Max-Age=0; Secure`);
+        return new Response(JSON.stringify({ ok: true }), { status: 200, headers });
       }
 
       phase = 'validate_session';
-      const authenticated = await isAuthenticated(request.headers.get('cookie'), sessionSecret);
-      if (!authenticated) {
+      const session = await readDashboardSession(request.headers.get('cookie'), sessionSecret, accounts);
+      if (!session) {
         if (request.method === 'GET' && !pathname.startsWith('/api/')) {
           return new Response('', {
             status: 302,
@@ -104,6 +127,15 @@ export default {
           });
         }
         return json({ error: 'Authentication required.' }, 401);
+      }
+
+      if (request.method === 'GET' && pathname === '/api/session') {
+        return json({
+          authenticated: true,
+          identifier: session.identifier,
+          displayName: session.displayName,
+          access: 'admin',
+        });
       }
 
       phase = 'load_application_modules';
@@ -118,7 +150,7 @@ export default {
       phase = 'connect_database';
       const databaseUrl = neonModule.requireDatabaseUrl(process.env.DATABASE_URL);
       const state = await neonModule.loadNeonAppState(databaseUrl);
-      const actor = process.env.DASHBOARD_ACTOR ?? 'bd-team@codistan.org';
+      const actor = session.identifier;
       let stateChanged = false;
 
       phase = 'seed_verified_starter_prospects';
@@ -290,6 +322,57 @@ function buildDiscoveryOptions(repository: unknown, runStore: unknown, portfolio
   } as never;
 }
 
+function loadDashboardAccounts(adminPassword: string): DashboardAccount[] {
+  const adminIdentifier = normalizeIdentifier(process.env.ADMIN_EMAIL ?? 'admin');
+  const accounts: DashboardAccount[] = [{
+    identifier: adminIdentifier,
+    displayName: 'Administrator',
+    password: adminPassword,
+    aliases: uniqueIdentifiers([adminIdentifier, 'admin']),
+  }];
+  const talhaPassword = process.env.TALHA_DASHBOARD_PASSWORD?.trim();
+  if (talhaPassword) accounts.push({
+    identifier: 'talha.bashir@codistan.org',
+    displayName: 'Talha Bashir',
+    password: talhaPassword,
+    aliases: ['talha.bashir@codistan.org'],
+  });
+  const jawadPassword = process.env.JAWAD_DASHBOARD_PASSWORD?.trim();
+  if (jawadPassword) accounts.push({
+    identifier: 'jawad.jutt@codistan.org',
+    displayName: 'Jawad Jutt',
+    password: jawadPassword,
+    aliases: ['jawad.jutt@codistan.org'],
+  });
+  return accounts;
+}
+
+async function authenticateAccount(
+  identifier: string,
+  password: string,
+  accounts: DashboardAccount[],
+): Promise<DashboardAccount | undefined> {
+  const account = accounts.find((candidate) => candidate.aliases.includes(identifier));
+  const comparisonPassword = account?.password ?? accounts[0]?.password ?? 'not-a-valid-password';
+  const passwordMatches = await safeEqual(password, comparisonPassword);
+  return account && passwordMatches ? account : undefined;
+}
+
+async function readDashboardSession(
+  cookieHeader: string | null,
+  secret: string,
+  accounts: DashboardAccount[],
+): Promise<DashboardSession | undefined> {
+  if (!(await isAuthenticated(cookieHeader, secret))) return undefined;
+  const cookies = parseCookies(cookieHeader ?? undefined);
+  const actorIdentifier = await verifyActorToken(cookies[ACTOR_COOKIE], secret);
+  const account = actorIdentifier
+    ? accounts.find((candidate) => candidate.identifier === actorIdentifier)
+    : accounts[0];
+  if (!account) return undefined;
+  return { identifier: account.identifier, displayName: account.displayName };
+}
+
 function getOriginalRequestUrl(request: Request): string {
   const incoming = new URL(request.url);
   const rewrittenPath = incoming.searchParams.get('__path');
@@ -332,13 +415,13 @@ function renderLoginPage(): string {
     :root{font-family:Inter,ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;color:#172033;background:#0f172a}
     *{box-sizing:border-box}body{margin:0}.shell{min-height:100vh;display:grid;place-items:center;padding:20px}.card{width:min(430px,100%);background:#fff;border-radius:22px;padding:34px;box-shadow:0 30px 80px rgba(0,0,0,.35)}
     .mark{width:52px;height:52px;border-radius:15px;background:#f8c838;display:grid;place-items:center;font-weight:900;font-size:24px}.eyebrow{text-transform:uppercase;letter-spacing:.08em;font-size:11px;font-weight:700;color:#667085;margin:20px 0 5px}
-    h1{margin:0 0 8px}p{color:#667085}label{display:grid;gap:7px;font-size:12px;font-weight:700;margin-top:22px}input{border:1px solid #d0d5dd;border-radius:10px;padding:12px;font:inherit}button{width:100%;margin-top:14px;border:0;border-radius:10px;background:#3157d5;color:#fff;padding:12px;font-weight:800;cursor:pointer}pre{background:#fef3f2;color:#b42318;border-radius:9px;padding:10px;font:12px inherit;white-space:pre-wrap}
+    h1{margin:0 0 8px}p{color:#667085}label{display:grid;gap:7px;font-size:12px;font-weight:700;margin-top:18px}input{border:1px solid #d0d5dd;border-radius:10px;padding:12px;font:inherit}button{width:100%;margin-top:14px;border:0;border-radius:10px;background:#3157d5;color:#fff;padding:12px;font-weight:800;cursor:pointer}pre{background:#fef3f2;color:#b42318;border-radius:9px;padding:10px;font:12px inherit;white-space:pre-wrap}.note{font-size:12px;margin-top:16px}
   </style>
 </head>
-<body><main class="shell"><section class="card"><div class="mark">C</div><p class="eyebrow">Internal system</p><h1>Codistan Prospect Desk</h1><p>Enter the admin password to access prospect discovery and management.</p><form id="login-form"><label>Admin password<input name="password" type="password" autocomplete="current-password" required autofocus /></label><button type="submit">Sign in</button></form><pre id="login-result" hidden></pre></section></main>
+<body><main class="shell"><section class="card"><div class="mark">C</div><p class="eyebrow">Internal system</p><h1>Codistan Prospect Desk</h1><p>Sign in with your Codistan dashboard account. Every activity is recorded against the signed-in account.</p><form id="login-form"><label>Email or admin username<input name="identifier" type="text" autocomplete="username" required autofocus /></label><label>Password<input name="password" type="password" autocomplete="current-password" required /></label><button type="submit">Sign in</button></form><pre id="login-result" hidden></pre><p class="note">All configured accounts currently have the same administrator access.</p></section></main>
 <script>
 const form=document.getElementById('login-form');const result=document.getElementById('login-result');
-form.addEventListener('submit',async(event)=>{event.preventDefault();const button=form.querySelector('button');button.disabled=true;result.hidden=true;try{const response=await fetch('/api/login',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({password:new FormData(form).get('password')})});const data=await response.json();if(!response.ok)throw new Error(data.error||'Login failed');location.href='/';}catch(error){result.textContent=error.message;result.hidden=false;button.disabled=false;}});
+form.addEventListener('submit',async(event)=>{event.preventDefault();const button=form.querySelector('button');button.disabled=true;result.hidden=true;try{const formData=new FormData(form);const response=await fetch('/api/login',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({identifier:formData.get('identifier'),password:formData.get('password')})});const data=await response.json();if(!response.ok)throw new Error(data.error||'Login failed');location.href='/';}catch(error){result.textContent=error.message;result.hidden=false;button.disabled=false;}});
 </script></body></html>`;
 }
 
@@ -347,6 +430,21 @@ async function createSessionToken(expiresAt: number, secret: string): Promise<st
   const payload = `admin:${expiresAt}`;
   const signature = createHmac('sha256', secret).update(payload).digest('base64url');
   return `${expiresAt}.${signature}`;
+}
+
+async function createActorToken(identifier: string, secret: string): Promise<string> {
+  const { createHmac } = await import('node:crypto');
+  const encodedIdentifier = Buffer.from(identifier, 'utf8').toString('base64url');
+  const signature = createHmac('sha256', secret).update(`actor:${encodedIdentifier}`).digest('base64url');
+  return `${encodedIdentifier}.${signature}`;
+}
+
+async function verifyActorToken(token: string | undefined, secret: string): Promise<string | undefined> {
+  const match = token?.match(/^([A-Za-z0-9_-]+)\.([A-Za-z0-9_-]+)$/);
+  if (!match?.[1] || !match[2]) return undefined;
+  const expected = await createActorToken(Buffer.from(match[1], 'base64url').toString('utf8'), secret);
+  if (!(await safeEqual(token ?? '', expected))) return undefined;
+  return normalizeIdentifier(Buffer.from(match[1], 'base64url').toString('utf8'));
 }
 
 async function isAuthenticated(cookieHeader: string | null, secret: string): Promise<boolean> {
@@ -370,6 +468,10 @@ function buildSessionCookie(token: string): string {
   return `${SESSION_COOKIE}=${token}; Path=/; HttpOnly; SameSite=Strict; Max-Age=${SESSION_LIFETIME_SECONDS}; Secure`;
 }
 
+function buildActorCookie(token: string): string {
+  return `${ACTOR_COOKIE}=${token}; Path=/; HttpOnly; SameSite=Strict; Max-Age=${SESSION_LIFETIME_SECONDS}; Secure`;
+}
+
 function parseCookies(value: string | undefined): Record<string, string> {
   const cookies: Record<string, string> = {};
   for (const part of value?.split(';') ?? []) {
@@ -377,6 +479,14 @@ function parseCookies(value: string | undefined): Record<string, string> {
     if (name) cookies[name] = rest.join('=');
   }
   return cookies;
+}
+
+function normalizeIdentifier(value: string): string {
+  return value.trim().toLowerCase();
+}
+
+function uniqueIdentifiers(values: string[]): string[] {
+  return [...new Set(values.map(normalizeIdentifier).filter(Boolean))];
 }
 
 function isRateLimited(key: string): boolean {
