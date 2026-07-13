@@ -40,7 +40,7 @@ export async function handleProspectDashboardRequest(
   const method = request.method.toUpperCase();
   const url = new URL(request.url, 'http://localhost');
   const pathname = trimTrailingSlash(url.pathname) || '/';
-  const access = context.access ?? resolveDashboardAccess(context.actor ?? 'admin', 'Administrator');
+  const access = context.access ?? trustedLocalAccess(context.actor);
 
   try {
     if (method !== 'GET' && (GLOBAL_PATHS.has(pathname) || pathname.startsWith('/api/ingest/'))) {
@@ -104,6 +104,15 @@ export async function handleProspectDashboardRequest(
     const message = (error as Error).message;
     return json({ error: message }, message.startsWith('Forbidden:') ? 403 : message.toLowerCase().includes('not found') ? 404 : 400);
   }
+}
+
+function trustedLocalAccess(actor: string | undefined): DashboardAccessScope {
+  const admin = resolveDashboardAccess('admin', 'Administrator');
+  return {
+    ...admin,
+    identifier: actor?.trim() || admin.identifier,
+    displayName: actor?.trim() || admin.displayName,
+  };
 }
 
 function serializeProspect(record: StoredLeadRecord) {
