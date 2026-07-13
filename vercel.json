@@ -10,12 +10,19 @@
     },
     "api/cron/prospect-discovery.ts": {
       "maxDuration": 300
+    },
+    "api/cron/outreach.ts": {
+      "maxDuration": 300
     }
   },
   "crons": [
     {
       "path": "/api/cron/prospect-discovery",
       "schedule": "0 4 * * *"
+    },
+    {
+      "path": "/api/cron/outreach",
+      "schedule": "0 * * * *"
     }
   ],
   "redirects": [
