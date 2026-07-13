@@ -13,11 +13,28 @@ async function main(): Promise<void> {
   process.env.JAWAD_DASHBOARD_PASSWORD = process.env.JAWAD_DASHBOARD_PASSWORD || 'jawad-smoke-password';
   process.env.SESSION_SECRET = process.env.SESSION_SECRET || 'vercel-smoke-session-secret-123456789';
 
-  assert.equal(verifiedStarterProspects.length, 25);
-  assert.equal(new Set(verifiedStarterProspects.map((lead) => lead.id)).size, 25);
-  assert.deepEqual(verifiedStarterProspects.map((lead) => lead.rank), Array.from({ length: 25 }, (_value, index) => index + 1));
+  assert.equal(verifiedStarterProspects.length, 75);
+  assert.equal(new Set(verifiedStarterProspects.map((lead) => lead.id)).size, 75);
+  assert.deepEqual(verifiedStarterProspects.map((lead) => lead.rank), Array.from({ length: 75 }, (_value, index) => index + 1));
   assert.equal(verifiedStarterProspects.filter((lead) => lead.opportunityStatus === 'live_opportunity').length, 3);
-  assert.ok(verifiedStarterProspects.every((lead) => Boolean(lead.companyName && lead.evidenceUrl && lead.serviceOffer && lead.materialsToShare && lead.draftMessage)));
+  assert.ok(verifiedStarterProspects.every((lead) => Boolean(
+    lead.companyName
+    && lead.evidenceUrl
+    && lead.contactRole
+    && lead.serviceOffer
+    && lead.materialsToShare
+    && lead.reachMethod
+    && lead.draftMessage
+    && lead.recommendedNextAction
+  )));
+
+  const newBatch = verifiedStarterProspects.filter((lead) => (lead.rank ?? 0) >= 26);
+  assert.equal(newBatch.length, 50);
+  assert.equal(newBatch.filter((lead) => lead.confidence === 'high').length, 30);
+  assert.equal(newBatch.filter((lead) => lead.opportunityStatus === 'recent_demand_signal').length, 12);
+  assert.ok(newBatch.every((lead) => Boolean(lead.companyWebsite && lead.contactFormUrl)));
+  assert.ok(newBatch.every((lead) => lead.discoverySource === 'Qualified prospect research — 2026-07-13'));
+  assert.ok(newBatch.every((lead) => lead.feedback?.status === 'pending'));
 
   const config = JSON.parse(
     readFileSync(new URL('../vercel.json', import.meta.url), 'utf8'),
@@ -62,7 +79,7 @@ async function main(): Promise<void> {
   assert.equal(invalidLogin.status, 401);
   assert.deepEqual(await invalidLogin.json(), { error: 'Incorrect email or password.' });
 
-  console.log('Vercel runtime, routing, starter prospect and multi-admin smoke tests passed');
+  console.log('Vercel runtime, routing, 75-prospect and multi-admin smoke tests passed');
 }
 
 async function assertSuccessfulLogin(
