@@ -147,6 +147,12 @@ export default {
       phase = 'load_managed_portfolio_catalog';
       await loadApprovedPortfolioIntoRuntime(databaseUrl);
 
+      if (pathname === '/priorities' || pathname === '/api/closeability-rescore') {
+        phase = 'load_priority_queue_runtime';
+        const priorityRuntime = await import('../vercel/priority-queue-runtime.js');
+        return priorityRuntime.handlePriorityQueueRuntime({ request, databaseUrl, pathname, session });
+      }
+
       phase = 'load_scoped_dashboard_runtime';
       const runtime = await import('./dashboard-runtime.js');
       return runtime.handleAuthenticatedDashboardRequest({ request, originalUrl, session, adminPassword, sessionSecret });
