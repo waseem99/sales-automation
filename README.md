@@ -4,17 +4,7 @@ Internal opportunity-intelligence, tender-discovery and business-development wor
 
 ## Current product
 
-The production application is the **Prospect Desk**. It is designed to:
-
-1. Discover current public prospects and formal procurement opportunities.
-2. Reject weak, irrelevant and untrusted sources before they enter the pipeline.
-3. Retain evidence, buyer context and public contact routes.
-4. Score and qualify opportunities against Codistan services.
-5. Assign work to the relevant BD owner.
-6. Recommend the best compliant contact channel and next action.
-7. Prepare human-reviewed first-outreach and reply guidance.
-8. Track feedback, outreach, replies, meetings, proposals and outcomes.
-9. Improve source selection from real BD results.
+The production application is the **Prospect Desk**. It discovers public prospects and formal tenders, rejects weak sources, retains evidence, qualifies opportunities, assigns owners, recommends compliant next actions, prepares human-reviewed guidance, and tracks outcomes.
 
 ## Production routes
 
@@ -27,56 +17,19 @@ The old Local MVP Lead Desk and duplicate API runtime have been retired.
 
 ## Main capabilities
 
-### Prospect discovery
-
-- Focused public search/RSS collection.
-- Public Greenhouse and Lever sources where configured.
-- Official company website and contact-page enrichment.
+- Public prospect discovery and official company/contact enrichment.
 - 78-hour recent-opportunity refresh.
-- Deduplication and retained source evidence.
-- Automatic role-aware assignment.
-- Recommended email, LinkedIn, WhatsApp, contact-form, tender-portal or research-first approach.
-
-### Tender and RFP intelligence
-
-- Pakistan PPRA/EPADS.
-- CanadaBuys.
-- UNGM.
-- Pakistan/Canada private and nonprofit RFP searches.
-- Strict source-host, procurement-intent, language and software-service validation.
-- Deadline, eligibility, local-presence and consortium signals.
-- Closeability scoring and bid recommendation.
-- Automatic Jawad assignment.
-
-### Prospect management
-
-- Scoped access by signed-in account.
-- Neon-backed filtering, pagination and full-scope metrics.
-- Owner, status, follow-up, service plan and activity management.
-- Compulsory BD feedback before won/lost/rejected status.
-- Qualification audit and human-reviewed draft generation.
-- Inbound-reply classification and recommended response guidance.
-
-### Guarded email operations
-
-- Shared sender: `sales@codistan.org`.
-- Reply-To: assigned owner.
-- CC: assigned owner and `waseem@codistan.org`.
-- SMTP/IMAP reply and bounce processing.
-- Follow-up and suppression controls.
-- Live sending disabled unless all DNS, dry-run, ramp and mailbox gates pass.
+- PPRA/EPADS, CanadaBuys, UNGM and private/nonprofit tender discovery.
+- Strict source, procurement-intent, language and service validation.
+- Scoring, qualification, automatic owner assignment and recommended contact channel.
+- Scoped Neon-backed dashboard access, filtering, pagination and full-scope metrics.
+- Qualification audit, first-outreach draft and inbound-reply guidance.
+- Feedback, follow-up, activity, meeting, proposal and outcome tracking.
+- Guarded SMTP/IMAP outreach through `sales@codistan.org`.
 
 ## Safety boundaries
 
-The system does not:
-
-- Scrape authenticated LinkedIn or Upwork pages.
-- Bypass CAPTCHAs or platform controls.
-- Automate LinkedIn messages.
-- Submit Upwork proposals.
-- Submit tender bids.
-- Guess private contact details.
-- Send live external outreach unless the formal production gates are enabled.
+The system does not scrape authenticated LinkedIn or Upwork pages, bypass platform controls, automate LinkedIn messages, submit Upwork proposals, submit tender bids, guess private contact details, or send live external outreach unless every formal safety gate is enabled.
 
 Human review remains required for outreach, proposals, bids, pricing, legal, contractual, security, compliance and low-confidence responses.
 
@@ -88,8 +41,6 @@ Human review remains required for outreach, proposals, bids, pricing, legal, con
 - Neon Postgres.
 - Server-rendered internal dashboard.
 - SMTP/IMAP through the configured Codistan mailbox provider.
-
-See [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) for package and request-flow details.
 
 ## Developer setup
 
@@ -115,8 +66,6 @@ Deployment-sensitive check:
 pnpm deploy:check
 ```
 
-See [`docs/DEVELOPER_HANDOFF.md`](docs/DEVELOPER_HANDOFF.md) before making structural changes.
-
 ## Production configuration
 
 Use `.env.example` as the authoritative list of variable names. Real values belong in Vercel secrets and must never be committed.
@@ -130,8 +79,6 @@ SESSION_SECRET
 CRON_SECRET
 ```
 
-Each enabled dashboard account also requires its own `*_DASHBOARD_PASSWORD` variable.
-
 Keep these values until deliverability verification is complete:
 
 ```text
@@ -140,12 +87,11 @@ OUTREACH_DNS_READY=false
 OUTREACH_DRY_RUN=true
 ```
 
-Deployment instructions: [`docs/VERCEL_DEPLOYMENT.md`](docs/VERCEL_DEPLOYMENT.md).
-
 ## Documentation
 
 - [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md)
 - [`docs/DEVELOPER_HANDOFF.md`](docs/DEVELOPER_HANDOFF.md)
+- [`docs/CODEBASE_REVIEW.md`](docs/CODEBASE_REVIEW.md)
 - [`docs/VERCEL_DEPLOYMENT.md`](docs/VERCEL_DEPLOYMENT.md)
 - [`docs/PROSPECT_DISCOVERY_DASHBOARD.md`](docs/PROSPECT_DISCOVERY_DASHBOARD.md)
 
