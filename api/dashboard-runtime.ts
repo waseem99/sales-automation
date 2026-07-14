@@ -45,6 +45,7 @@ const GLOBAL_ROUTES = new Set([
   '/api/prospects/auto-assign',
   '/api/prospects/guidance/backfill',
   '/api/prospects/pseb-sync',
+  '/api/prospects/manual-intake',
 ]);
 
 export async function handleAuthenticatedDashboardRequest(input: AuthenticatedDashboardRuntimeInput): Promise<Response> {
@@ -152,6 +153,16 @@ async function handleGlobalRequest(input: AuthenticatedDashboardRuntimeInput & {
 }): Promise<Response> {
   const state = await loadNeonAppState(input.databaseUrl);
   const beforeRuns = state.runStore.listRuns(180).map((run) => JSON.stringify(run));
+
+  if (input.pathname === '/api/prospects/manual-intake') {
+    const manualIntake = await import('../vercel/manual-intake-runtime.js');
+    return manualIntake.handleManualIntakeRuntime({
+      body: input.body,
+      databaseUrl: input.databaseUrl,
+      actor: input.access.identifier,
+      state,
+    });
+  }
 
   if (input.pathname === '/api/prospects/import-starter') {
     let imported = 0;
