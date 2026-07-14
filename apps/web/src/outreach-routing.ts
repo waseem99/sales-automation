@@ -20,8 +20,8 @@ const defaultTeamMembers: TeamMemberOption[] = [
   { email: 'moiz.khalid@codistan.org', displayName: 'Moiz Khalid', canSendAtLaunch: false, canLogin: true },
   { email: 'subainaaamir@codistan.org', displayName: 'Subaina Aamir', canSendAtLaunch: false, canLogin: true },
   { email: 'danishkhalid@codistan.org', displayName: 'Danish Khalid', canSendAtLaunch: false, canLogin: true },
-  { email: 'hibasohail@codistan.org', displayName: 'Hiba Sohail', canSendAtLaunch: false, canLogin: true },
-  { email: 'bilalahmed@codistan.org', displayName: 'Bilal Ahmed', canSendAtLaunch: false, canLogin: true },
+  { email: 'hiba', displayName: 'Hiba (Talha team)', canSendAtLaunch: false, canLogin: false },
+  { email: 'bilal', displayName: 'Bilal (Talha team)', canSendAtLaunch: false, canLogin: false },
 ];
 
 const defaultAlertEmails = ['waseem@codistan.org', 'sales@codistan.org'];
@@ -31,8 +31,8 @@ export function getTeamMembers(existingOwners: string[] = []): TeamMemberOption[
   const extraOwners = splitOwnerValues(process.env.ADDITIONAL_LEAD_OWNERS);
   const allOwners = unique([
     ...defaultTeamMembers.map((member) => member.email),
-    ...existingOwners.map(canonicalOwnerValue),
-    ...extraOwners.map(canonicalOwnerValue),
+    ...existingOwners,
+    ...extraOwners,
   ]);
 
   return allOwners.map((owner) => {
@@ -71,7 +71,7 @@ export function getSendingMailboxes(): string[] {
 
 export function resolveLeadRouting(lead: Pick<Lead, 'id' | 'owner'>): LeadRouting {
   const senders = getSendingMailboxes();
-  const owner = normalizeEmail(canonicalOwnerValue(lead.owner));
+  const owner = normalizeEmail(lead.owner);
   const sendFrom = owner && senders.includes(owner)
     ? owner
     : senders[stableIndex(lead.id, senders.length)] ?? defaultSenders[0]!;
@@ -95,13 +95,6 @@ function splitEmails(value: string | undefined): string[] {
 function splitOwnerValues(value: string | undefined): string[] {
   if (!value?.trim()) return [];
   return value.split(/[\n,;]+/).map((item) => item.trim().toLowerCase()).filter(Boolean);
-}
-
-function canonicalOwnerValue(value: string | undefined): string {
-  const normalized = value?.trim().toLowerCase() ?? '';
-  if (['hiba', 'hiba sohail', 'hiba (talha team)'].includes(normalized)) return 'hibasohail@codistan.org';
-  if (['bilal', 'bilal ahmed', 'bilal (talha team)'].includes(normalized)) return 'bilalahmed@codistan.org';
-  return normalized;
 }
 
 function normalizeEmail(value: string | undefined): string | undefined {
