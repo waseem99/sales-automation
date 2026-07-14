@@ -4,10 +4,14 @@ import { matchPortfolio, type PortfolioMatch } from '@sales-automation/portfolio
 import { recommendProfile, type ProfileRecommendation } from '@sales-automation/routing';
 import { scoreLead } from '@sales-automation/scoring';
 import type { Lead, LeadScore, PortfolioItem, RedFlag } from '@sales-automation/shared';
+import { scoreCloseability, type CloseabilityScore } from './closeability.js';
+
+export * from './closeability.js';
 
 export interface LeadEvaluation {
   lead: Lead;
   score: LeadScore;
+  closeability: CloseabilityScore;
   profileRecommendation: ProfileRecommendation;
   portfolioMatches: PortfolioMatch[];
   recommendedNextAction: string;
@@ -40,9 +44,15 @@ export function evaluateLead(input: EvaluateLeadInput): LeadEvaluation {
     hasComplianceRisk: hasComplianceRisk(input.lead),
     redFlags,
   });
+  const closeability = scoreCloseability({
+    lead: input.lead,
+    portfolioMatches,
+    portfolioItems: input.portfolioItems,
+    generatedAt: input.generatedAt,
+  });
 
   const profileRecommendation = recommendProfile(input.lead, score);
-  const recommendedNextAction = getRecommendedNextAction(input.lead, score, profileRecommendation, portfolioMatches);
+  const recommendedNextAction = getRecommendedNextAction(input.lead, score, closeability, profileRecommendation, portfolioMatches);
   const drafts = generateDrafts({
     lead: input.lead,
     score,
@@ -62,6 +72,7 @@ export function evaluateLead(input: EvaluateLeadInput): LeadEvaluation {
   return {
     lead: input.lead,
     score,
+    closeability,
     profileRecommendation,
     portfolioMatches,
     recommendedNextAction,
@@ -140,8 +151,6 @@ function hasStrongBuyerSignal(lead: Lead): boolean {
     'enterprise',
     'funded',
     'recently funded',
-    'hiring',
-    'job opening',
     'sales navigator',
     'intent signal',
     'agency',
@@ -202,11 +211,12 @@ function hasProfileEligibilityLanguage(text: string): boolean {
 function getRecommendedNextAction(
   lead: Lead,
   score: LeadScore,
+  closeability: CloseabilityScore,
   profileRecommendation: ProfileRecommendation,
   portfolioMatches: PortfolioMatch[],
 ): string {
-  if (score.status === 'rejected') {
-    return 'Reject or archive. Do not spend BD time unless a founder manually overrides.';
+  if (score.status === 'rejected' || closeability.band === 'reject') {
+    return 'Reject or archive. Do not spend BD time unless a founder manually overrides with verified missing evidence.';
   }
 
   const routedProfile = profileRecommendation.upworkProfile;
@@ -217,25 +227,36 @@ function getRecommendedNextAction(
   const rateInstruction = rateRange
     ? ` Target hourly rate: $${rateRange.min}–$${rateRange.max}/hour; do not revert to the obsolete lower profile rate.`
     : '';
+  const gapInstruction = closeability.missingData.length > 0
+    ? ` First resolve: ${closeability.missingData.slice(0, 2).join(' ')}`
+    : '';
 
   if (profileRecommendation.primaryProfile === 'needs_human_review') {
     if (routedProfile) {
-      return `Human review required before bidding. Candidate profile: ${profileInstruction}. ${routedProfile.selectionReason} Verify profile ownership, eligibility, current public positioning, and the job restrictions first.${rateInstruction}`;
+      return `Human review required before bidding. Candidate profile: ${profileInstruction}. ${routedProfile.selectionReason} Verify profile ownership, eligibility, current public positioning, and the job restrictions first.${rateInstruction}${gapInstruction}`;
     }
-    return 'Send to human review before outreach/bidding because profile, scope, or compliance risk is unclear.';
+    return `Send to human review before outreach or bidding because profile, scope, or compliance risk is unclear.${gapInstruction}`;
   }
 
   if (lead.leadType === 'linkedin_cold_prospect' || lead.leadType === 'sales_navigator_cold_prospect') {
-    return `Research account/contact manually, verify business email/LinkedIn context, then prepare human-approved outreach using ${portfolioMatches[0]?.portfolioItem.projectName ?? 'the strongest matched proof'}. Do not auto-DM.`;
+    return `Research account/contact manually, verify business email/LinkedIn context, then prepare human-approved outreach using ${portfolioMatches[0]?.portfolioItem.projectName ?? 'the strongest matched proof'}. Do not auto-DM.${gapInstruction}`;
+  }
+
+  if (closeability.band === 'priority_a') {
+    return `Priority A: review within one business day and prepare human-approved outreach through ${profileInstruction}.${rateInstruction} Use ${portfolioMatches[0]?.portfolioItem.projectName ?? 'the strongest approved proof'}.${closeability.reasonToActNow ? ` ${closeability.reasonToActNow}` : ''}`;
+  }
+
+  if (closeability.band === 'priority_b') {
+    return `Priority B: keep in the owner action queue, resolve the identified evidence gaps, then prepare tailored outreach through ${profileInstruction}.${rateInstruction}${gapInstruction}`;
   }
 
   if (score.urgency === 'urgent') {
-    return `Review immediately and bid manually through ${profileInstruction}.${rateInstruction} Include ${portfolioMatches[0]?.portfolioItem.projectName ?? 'the strongest available proof'} if approved.`;
+    return `Review immediately and bid manually through ${profileInstruction}.${rateInstruction} Include ${portfolioMatches[0]?.portfolioItem.projectName ?? 'the strongest available proof'} if approved.${gapInstruction}`;
   }
 
   if (score.status === 'qualified') {
-    return `Add to the qualified queue, use ${profileInstruction}.${rateInstruction} Prepare a tailored draft with matched proof.`;
+    return `Keep in research until closeability reaches Priority B. Use ${profileInstruction}.${rateInstruction}${gapInstruction}`;
   }
 
-  return 'Add to nurture/watch queue. Do not prioritize unless a stronger buying signal appears.';
+  return `Add to nurture/watch queue. Do not prioritize unless a stronger buying signal appears.${gapInstruction}`;
 }
