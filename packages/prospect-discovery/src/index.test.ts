@@ -6,7 +6,12 @@ import {
   recommendProspectAssignment,
 } from './assignment.js';
 import { renderProspectCsv } from './digest.js';
-import { parseRssItems } from './sources.js';
+import {
+  classifyOpportunityStatus,
+  hasProjectOpportunityIntent,
+  isEmploymentVacancy,
+  parseRssItems,
+} from './sources.js';
 import { candidateToLead, runProspectDiscovery } from './runner.js';
 import { classifyTargeting, EXPANDED_TARGET_SEARCH_QUERIES } from './targeting.js';
 import { InMemoryProspectDiscoveryRunStore } from './run-store.js';
@@ -21,6 +26,17 @@ const parsed = parseRssItems(rss);
 assert.equal(parsed.length, 1);
 assert.equal(parsed[0]?.title, 'Looking for an AI development partner');
 assert.equal(parsed[0]?.link, 'https://example.com/opportunity');
+
+assert.equal(
+  classifyOpportunityStatus('Full-time Senior AI Engineer. Apply now with your resume and salary expectations.'),
+  'recent_demand_signal',
+);
+assert.equal(isEmploymentVacancy('Join our team in a full-time permanent role with benefits.'), true);
+assert.equal(hasProjectOpportunityIntent('Join our team in a full-time permanent role with benefits.'), false);
+assert.equal(
+  classifyOpportunityStatus('Request for proposal: fixed-scope RAG implementation project with defined deliverables.'),
+  'live_opportunity',
+);
 
 assert.ok(EXPANDED_TARGET_SEARCH_QUERIES.some((query) => query.includes('digital marketing agency')));
 assert.ok(EXPANDED_TARGET_SEARCH_QUERIES.some((query) => query.includes('cybersecurity consultancy')));
@@ -81,24 +97,34 @@ assert.equal(recommendProspectApproach(classifiedLead).channel, 'procurement_por
 const remoteOkPayload = [
   { legal: 'metadata' },
   {
-    id: 'job-1',
-    position: 'AI RAG Implementation Partner',
+    id: 'project-1',
+    position: 'AI RAG Fixed-Scope Implementation Project',
     company: 'Example AI',
     location: 'United States',
-    description: '<p>We are hiring a partner for a funded RAG and workflow automation product.</p>',
+    description: '<p>Contract project seeking an implementation partner for defined RAG and workflow automation deliverables.</p>',
     tags: ['ai', 'rag', 'python'],
     url: 'https://remoteok.com/remote-jobs/123-example-ai',
     date: now,
   },
   {
+    id: 'employee-role',
+    position: 'Senior AI Engineer',
+    company: 'Employee Only Inc',
+    location: 'United States only',
+    description: '<p>Full-time permanent role. Apply now with your resume. Salary, benefits and work authorization required.</p>',
+    tags: ['ai', 'python'],
+    url: 'https://remoteok.com/remote-jobs/employee-only',
+    date: now,
+  },
+  {
     id: 'job-stale',
-    position: 'Old AI Automation Contractor',
+    position: 'Old AI Automation Contract Project',
     company: 'Old Example',
     location: 'United States',
-    description: '<p>Old AI automation contractor requirement.</p>',
+    description: '<p>Fixed-scope automation project with defined deliverables.</p>',
     tags: ['ai', 'automation'],
     url: 'https://remoteok.com/remote-jobs/old-example',
-    date: '2026-07-06T10:00:00.000Z',
+    date: '2026-01-06T10:00:00.000Z',
   },
 ];
 
@@ -165,6 +191,7 @@ assert.equal(first.newLeads[0]?.reachMethod, 'Email');
 assert.ok(first.newLeads[0]?.recommendedNextAction?.includes('sales@codistan.org'));
 assert.ok(first.newLeads[0]?.draftMessage);
 assert.equal(runStore.listRuns().length, 1);
+assert.equal(first.sourceResults.find((result) => result.sourceName === 'remoteok')?.candidates.length, 1);
 
 const csv = renderProspectCsv(first.newLeads, samplePortfolioItems);
 assert.ok(csv.includes('partnerships@example-ai.com'));
@@ -184,4 +211,4 @@ const second = await runProspectDiscovery({
 assert.equal(second.run.newLeadCount, 0);
 assert.equal(second.run.duplicateCount, 1);
 
-console.log('prospect-discovery recent-window, assignment and approach tests passed');
+console.log('prospect-discovery project-intent, vacancy rejection, recent-window, assignment and approach tests passed');
