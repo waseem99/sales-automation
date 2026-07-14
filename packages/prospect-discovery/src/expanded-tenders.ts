@@ -1,5 +1,5 @@
-import type { TenderSector } from '@sales-automation/shared';
-import { collectBingRssCandidates } from './sources.js';
+import type { TenderOpportunityType, TenderSector } from '@sales-automation/shared';
+import { fetchWithTimeout, parseRssItems } from './sources.js';
 import { classifyTenderOpportunityType, isSoftwareTender } from './tenders.js';
 import type { DiscoveryCandidate, ProspectFetch, ProspectSourceResult } from './types.js';
 
@@ -82,7 +82,7 @@ export const EXPANDED_PUBLIC_TENDER_SOURCES: ExpandedTenderSource[] = [
     portal: 'SEAO Quebec',
     country: 'Canada',
     sector: 'public',
-    query: 'site:seao.ca (appel offres OR RFP) (logiciel OR plateforme numérique OR services informatiques)',
+    query: 'site:seao.ca (appel offres OR demande propositions) (logiciel OR plateforme numérique OR services informatiques)',
     trustedHosts: ['seao.ca'],
   },
   {
@@ -109,30 +109,42 @@ export async function collectExpandedPublicTenderCandidates(fetchImpl: ProspectF
   let checked = 0;
 
   for (const source of EXPANDED_PUBLIC_TENDER_SOURCES) {
-    const result = await collectBingRssCandidates(fetchImpl, [source.query], 1);
-    checked += result.checked;
-    if (result.error) errors.push(`${source.key}: ${result.error}`);
-    for (const candidate of result.candidates) {
-      const text = `${candidate.title} ${candidate.summary}`;
-      if (!isSoftwareTender(`${text} tender`)) continue;
-      if (!isTrustedSourceUrl(candidate.sourceUrl, source.trustedHosts)) continue;
-      candidates.push({
-        ...candidate,
-        sourceName: source.portal,
-        sourceType: 'procurement',
-        country: source.country,
-        companyName: candidate.companyName ?? `${source.portal} buyer`,
-        companyWebsite: candidate.companyWebsite ?? origin(candidate.sourceUrl),
-        opportunityStatus: 'live_opportunity',
-        evidenceSummary: `Formal software or digital-services procurement notice discovered from trusted ${source.portal} source.`,
-        tender: {
-          portal: source.portal,
-          sector: source.sector,
-          opportunityType: classifyTenderOpportunityType(text),
-          publishedAt: candidate.publishedAt,
-          submissionMethod: 'Confirm the official submission method in the retained buyer notice and documents.',
-        },
-      });
+    try {
+      const url = `https://www.bing.com/search?format=rss&q=${encodeURIComponent(source.query)}`;
+      const response = await fetchWithTimeout(fetchImpl, url, {}, 18_000);
+      checked += 1;
+      if (!response.ok) {
+        errors.push(`${source.key}: HTTP ${response.status}`);
+        continue;
+      }
+      for (const item of parseRssItems(await response.text()).slice(0, 12)) {
+        const text = `${item.title} ${item.description}`;
+        if (!isExpandedSoftwareTender(text)) continue;
+        if (!isTrustedSourceUrl(item.link, source.trustedHosts)) continue;
+        candidates.push({
+          sourceName: source.portal,
+          sourceType: 'procurement',
+          sourceUrl: item.link,
+          title: item.title,
+          summary: item.description || item.title,
+          publishedAt: item.publishedAt,
+          country: source.country,
+          companyName: `${source.portal} buyer`,
+          companyWebsite: origin(item.link),
+          opportunityStatus: 'live_opportunity',
+          tags: expandedTags(text),
+          evidenceSummary: `Formal software or digital-services procurement notice discovered from trusted ${source.portal} source.`,
+          tender: {
+            portal: source.portal,
+            sector: source.sector,
+            opportunityType: classifyExpandedOpportunityType(text),
+            publishedAt: item.publishedAt,
+            submissionMethod: 'Confirm the official submission method in the retained buyer notice and documents.',
+          },
+        });
+      }
+    } catch (error) {
+      errors.push(`${source.key}: ${error instanceof Error ? error.message : String(error)}`);
     }
   }
 
@@ -156,6 +168,28 @@ export function isTrustedSourceUrl(value: string, trustedHosts: string[]): boole
   } catch {
     return false;
   }
+}
+
+function isExpandedSoftwareTender(text: string): boolean {
+  if (isSoftwareTender(text)) return true;
+  const formalFrench = /appel d['’]offres?|demande de propositions?|avis d['’]appel|soumission/i.test(text);
+  const serviceFrench = /logiciel|plateforme numérique|application web|application mobile|services informatiques|cybersécurité|intelligence artificielle|intégration de systèmes/i.test(text);
+  return formalFrench && serviceFrench;
+}
+
+function classifyExpandedOpportunityType(text: string): TenderOpportunityType {
+  const existing = classifyTenderOpportunityType(text);
+  if (existing !== 'other') return existing;
+  if (/appel d['’]offres?|demande de propositions?/i.test(text)) return 'rfp';
+  return 'other';
+}
+
+function expandedTags(text: string): string[] {
+  const value = text.toLowerCase();
+  return [
+    'software', 'digital platform', 'web portal', 'application', 'cybersecurity', 'artificial intelligence',
+    'logiciel', 'plateforme numérique', 'services informatiques', 'cybersécurité',
+  ].filter((term) => value.includes(term)).slice(0, 10);
 }
 
 function dedupe(candidates: DiscoveryCandidate[]): DiscoveryCandidate[] {
