@@ -21,7 +21,7 @@
     "start": "node dist/dev.js",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "lint": "tsc -p tsconfig.json --noEmit",
-    "test": "tsx src/prospect-server.test.ts && tsx src/dashboard-access.test.ts && tsx src/auto-prospect-handler.test.ts"
+    "test": "tsx src/prospect-server.test.ts && tsx src/dashboard-access.test.ts && tsx src/auto-prospect-handler.test.ts && tsx src/legacy-boundary.test.ts"
   },
   "dependencies": {
     "@sales-automation/engagement-guidance": "workspace:*",
