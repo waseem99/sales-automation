@@ -79,14 +79,18 @@ export default {
         const payload = asObject(await parseRequestBody(request));
         const identifier = normalizeIdentifier(optionalString(payload.identifier) ?? optionalString(payload.email) ?? 'admin');
         const password = requireString(payload.password, 'password');
-        const address = request.headers.get('x-forwarded-for') ?? request.headers.get('x-real-ip') ?? 'vercel';
+        const address = clientAddress(request);
         const clientKey = `${address}:${identifier}`;
-        if (isRateLimited(clientKey)) return json({ error: 'Too many failed attempts. Try again later.' }, 429);
         const account = await authenticateAccount(identifier, password, accounts);
+
         if (!account) {
+          if (isRateLimited(clientKey)) {
+            return json({ error: 'Too many failed attempts. Try again later.' }, 429, { 'retry-after': String(rateLimitRetryAfterSeconds(clientKey)) });
+          }
           registerFailedAttempt(clientKey);
           return json({ error: 'Incorrect email or password.' }, 401);
         }
+
         loginAttempts.delete(clientKey);
         const expiresAt = Math.floor(Date.now() / 1_000) + SESSION_LIFETIME_SECONDS;
         const headers = new Headers({ ...securityHeaders(), 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store' });
@@ -234,7 +238,9 @@ function buildActorCookie(token: string): string { return `${ACTOR_COOKIE}=${tok
 function parseCookies(value: string | undefined): Record<string, string> { const cookies: Record<string,string> = {}; for (const part of value?.split(';') ?? []) { const [name,...rest]=part.trim().split('='); if(name) cookies[name]=rest.join('='); } return cookies; }
 function normalizeIdentifier(value: string): string { return value.trim().toLowerCase(); }
 function uniqueIdentifiers(values: string[]): string[] { return [...new Set(values.map(normalizeIdentifier).filter(Boolean))]; }
+function clientAddress(request: Request): string { return (request.headers.get('x-forwarded-for')?.split(',')[0] ?? request.headers.get('x-real-ip') ?? 'vercel').trim(); }
 function isRateLimited(key: string): boolean { const state=loginAttempts.get(key); if(!state)return false; if(Date.now()-state.firstAttemptAt>15*60*1_000){loginAttempts.delete(key);return false;} return state.count>=5; }
+function rateLimitRetryAfterSeconds(key: string): number { const state=loginAttempts.get(key); if(!state)return 0; return Math.max(1,Math.ceil((15*60*1_000-(Date.now()-state.firstAttemptAt))/1_000)); }
 function registerFailedAttempt(key: string): void { const current=loginAttempts.get(key); if(!current||Date.now()-current.firstAttemptAt>15*60*1_000)loginAttempts.set(key,{count:1,firstAttemptAt:Date.now()}); else current.count+=1; }
 function requireEnvironment(name: string): string { const value=process.env[name]; if(!value?.trim())throw new Error(`${name} is required.`); return value.trim(); }
 function requireString(value: unknown, field: string): string { if(typeof value!=='string'||!value.trim())throw new Error(`${field} is required.`); return value.trim(); }
@@ -242,7 +248,7 @@ function optionalString(value: unknown): string | undefined { return typeof valu
 function asObject(value: unknown): Record<string, unknown> { return value&&typeof value==='object'&&!Array.isArray(value)?value as Record<string,unknown>:{}; }
 function securityHeaders(): Record<string,string> { return {'x-content-type-options':'nosniff','x-frame-options':'DENY','referrer-policy':'same-origin','content-security-policy':"default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'"}; }
 function html(body: string,status=200): Response { return new Response(body,{status,headers:{...securityHeaders(),'content-type':'text/html; charset=utf-8','cache-control':'no-store'}}); }
-function json(value: unknown,status=200): Response { return new Response(JSON.stringify(value),{status,headers:{...securityHeaders(),'content-type':'application/json; charset=utf-8','cache-control':'no-store'}}); }
+function json(value: unknown,status=200,additionalHeaders: Record<string,string> = {}): Response { return new Response(JSON.stringify(value),{status,headers:{...securityHeaders(),...additionalHeaders,'content-type':'application/json; charset=utf-8','cache-control':'no-store'}}); }
 function runtimeErrorResponse(request: Request,phase:string,message:string): Response { const acceptsHtml=request.headers.get('accept')?.includes('text/html')??false; if(!acceptsHtml)return json({error:'Application runtime failed.',phase,detail:message},500); return html(`<!doctype html><html><body style="font-family:system-ui;background:#f8fafc;padding:40px"><main style="max-width:760px;margin:auto;background:#fff;padding:28px;border-radius:16px"><h1>Prospect Desk could not start</h1><p>Failure during <strong>${escapeHtml(phase)}</strong>.</p><code>${escapeHtml(message)}</code></main></body></html>`,500); }
 function normalizeError(error: unknown): {message:string;stack?:string} { return error instanceof Error?{message:error.message,stack:error.stack}:{message:String(error)}; }
 function escapeHtml(value: string): string { return value.replace(/[&<>"']/g,(character)=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'})[character]??character); }
