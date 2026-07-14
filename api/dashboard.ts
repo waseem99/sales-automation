@@ -129,6 +129,24 @@ export default {
         });
       }
 
+      const databaseUrl = requireEnvironment('DATABASE_URL');
+      const access = accountAccess(session.identifier);
+
+      if (pathname === '/portfolio' || pathname === '/api/portfolio-catalog') {
+        phase = 'load_portfolio_catalog_runtime';
+        const portfolioRuntime = await import('../vercel/portfolio-catalog-runtime.js');
+        return portfolioRuntime.handlePortfolioCatalogRuntime({
+          request,
+          databaseUrl,
+          actor: session.identifier,
+          canManage: access.role === 'admin',
+          pathname,
+        });
+      }
+
+      phase = 'load_managed_portfolio_catalog';
+      await loadApprovedPortfolioIntoRuntime(databaseUrl);
+
       phase = 'load_scoped_dashboard_runtime';
       const runtime = await import('./dashboard-runtime.js');
       return runtime.handleAuthenticatedDashboardRequest({ request, originalUrl, session, adminPassword, sessionSecret });
@@ -139,6 +157,17 @@ export default {
     }
   },
 };
+
+async function loadApprovedPortfolioIntoRuntime(databaseUrl: string): Promise<void> {
+  const [catalog, starters, fixtures] = await Promise.all([
+    import('@sales-automation/neon-state/portfolio-catalog'),
+    import('../vercel/approved-portfolio.js'),
+    import('@sales-automation/fixtures'),
+  ]);
+  await catalog.ensurePortfolioCatalogSeeded(databaseUrl, starters.approvedStarterPortfolioItems);
+  const approved = await catalog.loadApprovedPortfolioCatalog(databaseUrl);
+  catalog.replacePortfolioArray(fixtures.samplePortfolioItems, catalog.asPortfolioItems(approved));
+}
 
 function loadDashboardAccounts(adminPassword: string): DashboardAccount[] {
   const fixed = dashboardAccountSpecs.flatMap((spec) => {
