@@ -11,6 +11,9 @@
     "api/dashboard.ts": {
       "maxDuration": 300
     },
+    "api/tender-discovery.ts": {
+      "maxDuration": 300
+    },
     "api/cron/prospect-discovery.ts": {
       "maxDuration": 300
     },
@@ -19,6 +22,10 @@
     }
   },
   "crons": [
+    {
+      "path": "/api/tender-discovery",
+      "schedule": "15 */6 * * *"
+    },
     {
       "path": "/api/cron/prospect-discovery",
       "schedule": "0 4 * * *"
@@ -32,6 +39,11 @@
     {
       "source": "/",
       "destination": "/prospects",
+      "permanent": false
+    },
+    {
+      "source": "/tenders",
+      "destination": "/prospects?search=public_procurement",
       "permanent": false
     }
   ],
