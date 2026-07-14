@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import type { Lead } from '@sales-automation/shared';
 import { canAccessLead, resolveDashboardAccess } from './dashboard-access.js';
-import { repairEmbeddedClientScript } from './paginated-prospects-page.js';
+import { applyDashboardSummary, repairEmbeddedClientScript } from './paginated-prospects-page.js';
 
 const lead = (owner?: string): Pick<Lead, 'owner'> => ({ owner });
 
@@ -53,4 +53,12 @@ const repairedClientStatement = repairEmbeddedClientScript(brokenClientStatement
 assert.equal(repairedClientStatement, "payload.body='Team member: '+performedBy+'\\n'+String(payload.body||'');");
 assert.doesNotThrow(() => new Function(repairedClientStatement));
 
-console.log('dashboard access scope and embedded client script tests passed');
+const summaryHtml = applyDashboardSummary(
+  '<section><article><span>Total prospects</span><strong>25</strong></article><article><span>Live opportunities</span><strong>3</strong></article></section><div class="sidebar-card"><span>BD work queue</span><strong>25 unassigned</strong><small>0 follow-ups due · 25 feedback pending</small></div>',
+  { total: 142, live: 18, contacted: 11, replied: 6, followUpsDue: 4, unassigned: 97, won: 2, feedbackPending: 130 },
+);
+assert.match(summaryHtml, /Total prospects<\/span><strong>142<\/strong>/);
+assert.match(summaryHtml, /Live opportunities<\/span><strong>18<\/strong>/);
+assert.match(summaryHtml, /97 unassigned<\/strong><small>4 follow-ups due · 130 feedback pending/);
+
+console.log('dashboard access scope, aggregate summary and embedded client script tests passed');
