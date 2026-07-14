@@ -2,10 +2,10 @@ import assert from 'node:assert/strict';
 import type { Lead } from '@sales-automation/shared';
 import {
   findStoredAutomaticProspectFalsePositives,
+  hasResultLevelProjectOpportunityIntent,
   validateAutomaticProspectCandidate,
   validateStoredAutomaticProspectLead,
 } from './prospect-validation.js';
-import { classifyOpportunityStatus, hasProjectOpportunityIntent } from './sources.js';
 import type { DiscoveryCandidate } from './types.js';
 
 const imdb = candidate({
@@ -58,10 +58,10 @@ const companyHomepage = candidate({
 });
 assert.equal(validateAutomaticProspectCandidate(companyHomepage).qualified, true);
 
-assert.equal(hasProjectOpportunityIntent('Looking (TV series) - Wikipedia'), false);
-assert.equal(classifyOpportunityStatus('Looking (TV series) - Wikipedia'), 'partnership_target');
-assert.equal(hasProjectOpportunityIntent('How to choose a development partner: complete guide'), false);
-assert.equal(hasProjectOpportunityIntent('We are looking for a development partner to build our platform'), true);
+assert.equal(hasResultLevelProjectOpportunityIntent('Looking (TV series) - Wikipedia'), false);
+assert.equal(hasResultLevelProjectOpportunityIntent('How to choose a development partner: complete guide'), false);
+assert.equal(hasResultLevelProjectOpportunityIntent('We are looking for a development partner to build our platform'), true);
+assert.equal(hasResultLevelProjectOpportunityIntent('Request for Proposal for implementation of a CRM platform'), true);
 
 const storedLeads = [
   storedLead('imdb-lead', imdb),
