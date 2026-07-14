@@ -149,7 +149,15 @@ export function resolveDiscoveryCampaigns(ids?: string[]): DiscoveryCampaign[] {
 }
 
 export function buildCampaignSearchQueries(campaigns: DiscoveryCampaign[]): string[] {
-  return [...new Set(campaigns.flatMap((campaign) => campaign.queryPatterns.map((pattern) => appendNegativeTerms(pattern, campaign.negativeTerms))))];
+  const maximumDepth = Math.max(0, ...campaigns.map((campaign) => campaign.queryPatterns.length));
+  const queries: string[] = [];
+  for (let index = 0; index < maximumDepth; index += 1) {
+    for (const campaign of campaigns) {
+      const pattern = campaign.queryPatterns[index];
+      if (pattern) queries.push(appendNegativeTerms(pattern, campaign.negativeTerms));
+    }
+  }
+  return [...new Set(queries)];
 }
 
 export function campaignIdsFromEnvironment(value: string | undefined): string[] | undefined {
