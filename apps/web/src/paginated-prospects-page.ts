@@ -37,6 +37,7 @@ export interface PaginatedProspectDashboardInput extends ProspectDashboardPageIn
 
 export function renderPaginatedProspectDashboardPage(input: PaginatedProspectDashboardInput): string {
   let html = renderProspectDashboardPage(input);
+  html = repairEmbeddedClientScript(html);
   const { pagination, access } = input;
 
   const topActions = access.canRunGlobalOperations
@@ -72,6 +73,10 @@ export function renderPaginatedProspectDashboardPage(input: PaginatedProspectDas
   html = html.replace('</style>', `${paginationStyles()}</style>`);
   html = html.replace('</script></body>', `</script><script>${paginationScript()}</script></body>`);
   return html;
+}
+
+export function repairEmbeddedClientScript(html: string): string {
+  return html.replace("performedBy+'\n'+String", "performedBy+'\\n'+String");
 }
 
 function renderFilterForm(pagination: ProspectDashboardPagination): string {
