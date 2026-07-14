@@ -1,6 +1,5 @@
 import { neon } from '@neondatabase/serverless';
 import type { PortfolioItem } from '@sales-automation/shared';
-import { requireDatabaseUrl } from './index.js';
 
 export type PortfolioApprovalStatus = 'draft' | 'approved' | 'archived';
 export type PortfolioAssetHealth = 'unchecked' | 'available' | 'broken';
@@ -24,7 +23,7 @@ interface PortfolioRow {
 }
 
 export async function ensurePortfolioCatalogSchema(databaseUrl: string): Promise<void> {
-  const sql = neon(requireDatabaseUrl(databaseUrl));
+  const sql = neon(requirePortfolioDatabaseUrl(databaseUrl));
   await sql`
     CREATE TABLE IF NOT EXISTS portfolio_catalog (
       portfolio_id TEXT PRIMARY KEY,
@@ -41,7 +40,7 @@ export async function ensurePortfolioCatalogSchema(databaseUrl: string): Promise
 
 export async function loadPortfolioCatalog(databaseUrl: string): Promise<ManagedPortfolioItem[]> {
   await ensurePortfolioCatalogSchema(databaseUrl);
-  const sql = neon(requireDatabaseUrl(databaseUrl));
+  const sql = neon(requirePortfolioDatabaseUrl(databaseUrl));
   const rows = await sql`
     SELECT item
     FROM portfolio_catalog
@@ -65,7 +64,7 @@ export async function upsertPortfolioCatalogItem(
 ): Promise<ManagedPortfolioItem> {
   validateManagedPortfolioItem(item);
   await ensurePortfolioCatalogSchema(databaseUrl);
-  const sql = neon(requireDatabaseUrl(databaseUrl));
+  const sql = neon(requirePortfolioDatabaseUrl(databaseUrl));
   await sql`
     INSERT INTO portfolio_catalog (portfolio_id, item, approval_status, updated_at)
     VALUES (${item.id}, ${JSON.stringify(item)}::jsonb, ${item.approvalStatus}, NOW())
@@ -139,4 +138,9 @@ function validateManagedPortfolioItem(item: ManagedPortfolioItem): void {
   if (item.confidentiality === 'private' && item.approvalStatus === 'approved' && !item.doNotDisclose?.trim()) {
     throw new Error('Approved private items require a do-not-disclose instruction.');
   }
+}
+
+function requirePortfolioDatabaseUrl(value: string | undefined): string {
+  if (!value?.trim()) throw new Error('DATABASE_URL is required. Connect a Neon Postgres database to the Vercel project.');
+  return value.trim();
 }
