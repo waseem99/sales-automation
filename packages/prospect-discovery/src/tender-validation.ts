@@ -39,7 +39,18 @@ const BLOCKED_HOSTS = [
 
 const OFFICIAL_PORTAL_HOSTS: Array<{ portal: RegExp; hosts: string[] }> = [
   { portal: /Pakistan PPRA|EPADS/i, hosts: ['ppra.gov.pk', 'epms.ppra.gov.pk'] },
+  { portal: /Punjab PPRA/i, hosts: ['ppra.punjab.gov.pk'] },
+  { portal: /Khyber Pakhtunkhwa PPRA/i, hosts: ['kppra.gov.pk'] },
+  { portal: /Sindh PPRA/i, hosts: ['pprasindh.gov.pk'] },
+  { portal: /Balochistan PPRA/i, hosts: ['bppra.gob.pk'] },
+  { portal: /Pakistan education and health public buyers/i, hosts: ['.edu.pk', '.gov.pk'] },
   { portal: /CanadaBuys/i, hosts: ['canadabuys.canada.ca'] },
+  { portal: /BC Bid/i, hosts: ['bcbid.gov.bc.ca'] },
+  { portal: /Alberta Purchasing Connection/i, hosts: ['purchasing.alberta.ca'] },
+  { portal: /Ontario Tenders Portal/i, hosts: ['ontariotenders.app.jaggaer.com'] },
+  { portal: /SEAO Quebec/i, hosts: ['seao.ca'] },
+  { portal: /SaskTenders/i, hosts: ['sasktenders.ca'] },
+  { portal: /Canadian municipal, education and healthcare buyers/i, hosts: ['bidsandtenders.ca'] },
   { portal: /UNGM/i, hosts: ['ungm.org'] },
 ];
 
@@ -58,6 +69,8 @@ const FORMAL_PATTERNS = [
   /(?:^|[^a-z0-9])(rfp|rfq|eoi|itt|rfi)(?:[^a-z0-9]|$)/i,
   /\bprocurement notice\b/i,
   /\btender notice\b/i,
+  /\bappel d['’]offres?\b/i,
+  /\bdemande de propositions?\b/i,
 ];
 
 const STRONG_SERVICE_PATTERNS = [
@@ -87,6 +100,9 @@ const STRONG_SERVICE_PATTERNS = [
   /\binformation technology services\b/i,
   /\bmanaged it services\b/i,
   /(?:^|[^a-z0-9])(mis|erp|crm|lms|rag)(?:[^a-z0-9]|$)/i,
+  /\bdéveloppement (?:de )?logiciel\b/i,
+  /\bplateforme numérique\b/i,
+  /\bservices informatiques\b/i,
 ];
 
 const SUPPORTING_SERVICE_PATTERNS = [
@@ -102,6 +118,9 @@ const SUPPORTING_SERVICE_PATTERNS = [
   /\bdata (?:platform|analytics|warehouse|system)\b/i,
   /\bui\/?ux\b/i,
   /\bit services\b/i,
+  /\blogiciel\b/i,
+  /\bplateforme\b/i,
+  /\binformatique\b/i,
 ];
 
 const CONTENT_OR_LEARNING_PATTERNS = [
@@ -135,6 +154,10 @@ const PROCUREMENT_CONTEXT_PATTERNS = [
   /\bsealed bids?\b/i,
   /\bproposal submission\b/i,
   /\btender reference\b/i,
+  /\bprocurement notice\b/i,
+  /\btender notice\b/i,
+  /\bdate limite\b/i,
+  /\bsoumission\b/i,
 ];
 
 export function validateTenderCandidate(candidate: DiscoveryCandidate): TenderValidationResult {
@@ -193,7 +216,7 @@ function validateTenderLike(input: {
   }
 
   const portalRule = OFFICIAL_PORTAL_HOSTS.find((rule) => rule.portal.test(input.portal ?? ''));
-  if (portalRule && !portalRule.hosts.some((allowed) => host === allowed || host.endsWith(`.${allowed}`))) {
+  if (portalRule && !portalRule.hosts.some((allowed) => hostMatchesAllowed(host, allowed))) {
     return {
       qualified: false,
       hardReject: true,
@@ -226,6 +249,13 @@ function validateTenderLike(input: {
     host,
     reasons,
   };
+}
+
+function hostMatchesAllowed(host: string, allowed: string): boolean {
+  const normalized = allowed.toLowerCase().replace(/^www\./, '');
+  return normalized.startsWith('.')
+    ? host.endsWith(normalized)
+    : host === normalized || host.endsWith(`.${normalized}`);
 }
 
 function isBlockedHost(host: string): boolean {
