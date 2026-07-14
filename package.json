@@ -34,10 +34,12 @@
     "@sales-automation/prospect-discovery": "workspace:*",
     "@sales-automation/shared": "workspace:*",
     "@sales-automation/storage": "workspace:*",
-    "@sales-automation/web": "workspace:*"
+    "@sales-automation/web": "workspace:*",
+    "nodemailer": "^6.10.1"
   },
   "devDependencies": {
     "@types/node": "^22.0.0",
+    "@types/nodemailer": "^6.4.17",
     "tsx": "^4.19.2",
     "typescript": "^5.7.2"
   }
