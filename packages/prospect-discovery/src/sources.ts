@@ -23,9 +23,24 @@ const relevantTerms = [
   'cgi', 'vfx', 'software development', 'development partner', 'implementation partner',
 ];
 
-const directOpportunityTerms = [
-  'looking for', 'seeking', 'request for proposal', 'rfp', 'invitation to bid', 'tender',
-  'need a', 'needs a', 'hiring', 'job opening', 'apply now', 'contractor', 'freelance',
+const projectOpportunityTerms = [
+  'request for proposal', 'request for quotation', 'rfp', 'rfq', 'invitation to bid', 'invitation to tender',
+  'expression of interest', 'tender', 'procurement', 'statement of work', 'scope of work',
+  'development partner', 'implementation partner', 'technology partner', 'outsourcing partner',
+  'software vendor', 'vendor required', 'agency required', 'agency partner', 'white label', 'white-label',
+  'contract project', 'consultancy engagement', 'consulting project', 'fixed-price', 'fixed price',
+  'fixed-scope', 'fixed scope', 'project deliverables', 'software project', 'mobile app project',
+  'website project', 'integration project', 'migration project', 'build a platform', 'build an app',
+  'develop a platform', 'develop an app', 'implement a system',
+];
+
+const employmentVacancyTerms = [
+  'full-time', 'full time', 'part-time', 'part time', 'permanent role', 'permanent position',
+  'employee benefits', 'employment opportunity', 'salary range', 'annual salary', 'compensation package',
+  'stock options', 'equity package', 'submit your resume', 'send your resume', 'upload your resume',
+  'curriculum vitae', 'apply now', 'job opening', 'job description', 'ideal candidate', 'successful candidate',
+  'work authorization', 'visa sponsorship', 'years of experience', 'reporting to', 'join our team',
+  'we are hiring', "we're hiring", 'this role is', 'the position is', 'equal opportunity employer',
 ];
 
 const demandSignalTerms = [
@@ -50,6 +65,7 @@ export async function collectBingRssCandidates(
       for (const item of parseRssItems(xml).slice(0, 10)) {
         const combined = `${item.title} ${item.description}`;
         if (!isRelevant(combined) && !isPartnershipQuery(query)) continue;
+        if (isEmploymentVacancy(combined) && !hasProjectOpportunityIntent(combined)) continue;
         const opportunityStatus = classifyOpportunityStatus(`${query} ${combined}`);
         if (isClearlyStale(item.publishedAt, opportunityStatus)) continue;
         candidates.push({
@@ -100,6 +116,7 @@ export async function collectRemoteOkCandidates(fetchImpl: ProspectFetch): Promi
       const tags = Array.isArray(row.tags) ? row.tags.map(String) : [];
       const combined = `${row.position} ${summary} ${tags.join(' ')}`;
       if (!isRelevant(combined)) continue;
+      if (!hasProjectOpportunityIntent(combined) || isEmploymentVacancy(combined)) continue;
       const publishedAt = normalizeRemoteDate(row.date, row.epoch);
       if (isClearlyStale(publishedAt, 'live_opportunity')) continue;
       candidates.push({
@@ -113,7 +130,7 @@ export async function collectRemoteOkCandidates(fetchImpl: ProspectFetch): Promi
         country: typeof row.location === 'string' ? row.location : undefined,
         opportunityStatus: 'live_opportunity',
         tags,
-        evidenceSummary: 'Current public remote-job posting matching Codistan capabilities.',
+        evidenceSummary: 'Public contract-project posting with explicit project deliverables and no employee-only language.',
       });
     }
 
@@ -159,7 +176,7 @@ export async function collectGreenhouseCandidates(
           country: isRecord(row.location) && typeof row.location.name === 'string' ? row.location.name : undefined,
           opportunityStatus: 'recent_demand_signal',
           tags: extractMatchingTerms(combined),
-          evidenceSummary: 'Current public Greenhouse vacancy showing active delivery demand.',
+          evidenceSummary: 'Current public Greenhouse vacancy showing active delivery demand; research the company rather than applying as a candidate.',
         });
       }
     } catch (error) {
@@ -211,7 +228,7 @@ export async function collectLeverCandidates(
           country: isRecord(row.categories) && typeof row.categories.location === 'string' ? row.categories.location : undefined,
           opportunityStatus: 'recent_demand_signal',
           tags: extractMatchingTerms(combined),
-          evidenceSummary: 'Current public Lever vacancy showing active delivery demand.',
+          evidenceSummary: 'Current public Lever vacancy showing active delivery demand; research the company rather than applying as a candidate.',
         });
       }
     } catch (error) {
@@ -247,6 +264,7 @@ export async function collectGenericRssCandidates(
       for (const item of parseRssItems(xml).slice(0, 30)) {
         const combined = `${item.title} ${item.description}`;
         if (!isRelevant(combined)) continue;
+        if (isEmploymentVacancy(combined) && !hasProjectOpportunityIntent(combined)) continue;
         const opportunityStatus = classifyOpportunityStatus(combined);
         if (isClearlyStale(item.publishedAt, opportunityStatus)) continue;
         candidates.push({
@@ -275,10 +293,21 @@ export async function collectGenericRssCandidates(
 }
 
 export function classifyOpportunityStatus(text: string): OpportunitySignalStatus {
+  if (hasProjectOpportunityIntent(text)) return 'live_opportunity';
+  if (isEmploymentVacancy(text)) return 'recent_demand_signal';
   const normalized = text.toLowerCase();
-  if (directOpportunityTerms.some((term) => normalized.includes(term))) return 'live_opportunity';
   if (demandSignalTerms.some((term) => normalized.includes(term))) return 'recent_demand_signal';
   return 'partnership_target';
+}
+
+export function hasProjectOpportunityIntent(text: string): boolean {
+  const normalized = text.toLowerCase();
+  return projectOpportunityTerms.some((term) => normalized.includes(term));
+}
+
+export function isEmploymentVacancy(text: string): boolean {
+  const normalized = text.toLowerCase();
+  return employmentVacancyTerms.some((term) => normalized.includes(term));
 }
 
 export function isRelevant(text: string): boolean {
