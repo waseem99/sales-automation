@@ -37,6 +37,7 @@ export interface PaginatedProspectDashboardInput extends ProspectDashboardPageIn
 
 export function renderPaginatedProspectDashboardPage(input: PaginatedProspectDashboardInput): string {
   let html = renderProspectDashboardPage(input);
+  html = repairEmbeddedClientScript(html);
   const { pagination, access } = input;
 
   const topActions = access.canRunGlobalOperations
@@ -72,6 +73,10 @@ export function renderPaginatedProspectDashboardPage(input: PaginatedProspectDas
   html = html.replace('</style>', `${paginationStyles()}</style>`);
   html = html.replace('</script></body>', `</script><script>${paginationScript()}</script></body>`);
   return html;
+}
+
+export function repairEmbeddedClientScript(html: string): string {
+  return html.replace("performedBy+'\n'+String", "performedBy+'\\n'+String");
 }
 
 function renderFilterForm(pagination: ProspectDashboardPagination): string {
@@ -128,7 +133,8 @@ const serverFilterSelects=serverFilterForm?.querySelectorAll('select')||[];
 serverFilterSelects.forEach(element=>element.addEventListener('change',()=>{document.body.classList.add('is-loading');serverFilterForm.requestSubmit();}));
 serverFilterForm?.addEventListener('submit',()=>document.body.classList.add('is-loading'));
 document.querySelectorAll('.page-link:not(.disabled)').forEach(link=>link.addEventListener('click',()=>document.body.classList.add('is-loading')));
-document.getElementById('pseb-sync')?.addEventListener('click',()=>runAction('pseb-sync','/api/prospects/pseb-sync','Syncing PSEB…'));
+async function runPsebSync(){const button=document.getElementById('pseb-sync'),status=document.getElementById('run-status');if(!button)return;button.disabled=true;const original=button.textContent;button.textContent='Syncing PSEB…';try{const response=await fetch('/api/prospects/pseb-sync',{method:'POST',headers:{'content-type':'application/json'},body:'{}'});const data=await response.json();if(!response.ok)throw new Error(data.error||'PSEB synchronization failed');status.textContent=(data.imported+' imported; '+data.existing+' already present; '+data.checked+' checked.');setTimeout(()=>location.reload(),700);}catch(error){status.textContent=error.message;button.disabled=false;button.textContent=original;}}
+document.getElementById('pseb-sync')?.addEventListener('click',runPsebSync);
 document.querySelectorAll('.disabled').forEach(link=>link.addEventListener('click',event=>event.preventDefault()));
 `;
 }
