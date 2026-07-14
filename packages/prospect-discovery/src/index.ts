@@ -11,5 +11,6 @@ export * from './enrichment.js';
 export * from './run-store.js';
 export * from './digest.js';
 export * from './assignment.js';
-export * from './runner.js';
+export * from './prospect-validation.js';
+export * from './quality-runner.js';
 export * from './worker.js';
