@@ -98,6 +98,22 @@ export async function persistLeadRecords(
   }
 }
 
+export async function deleteLeadRecords(
+  databaseUrl: string,
+  leadIds: string[],
+): Promise<number> {
+  const uniqueIds = [...new Set(leadIds.map((leadId) => leadId.trim()).filter(Boolean))];
+  if (uniqueIds.length === 0) return 0;
+  await ensureNeonSchema(databaseUrl);
+  const sql = neon(requireDatabaseUrl(databaseUrl));
+  for (const batch of chunk(uniqueIds, 40)) {
+    await sql.transaction(batch.map((leadId) => sql`
+      DELETE FROM prospect_records WHERE lead_id = ${leadId}
+    `));
+  }
+  return uniqueIds.length;
+}
+
 export async function persistDiscoveryRuns(
   databaseUrl: string,
   runs: ProspectDiscoveryRun[],
