@@ -11,6 +11,8 @@ async function main(): Promise<void> {
   process.env.MOIZ_DASHBOARD_PASSWORD = 'dashboard-smoke-moiz-password';
   process.env.SUBAINA_DASHBOARD_PASSWORD = 'dashboard-smoke-subaina-password';
   process.env.DANISH_DASHBOARD_PASSWORD = 'dashboard-smoke-danish-password';
+  process.env.HIBA_DASHBOARD_PASSWORD = 'dashboard-smoke-hiba-password';
+  process.env.BILAL_DASHBOARD_PASSWORD = 'dashboard-smoke-bilal-password';
   process.env.SESSION_SECRET = 'dashboard-smoke-session-secret-123456789';
 
   const module = await import('../api/dashboard.ts');
@@ -21,7 +23,9 @@ async function main(): Promise<void> {
   const healthBody = await health.json() as Record<string, unknown>;
   assert.equal(healthBody.ok, true);
   assert.equal(healthBody.waseemAccountConfigured, true);
-  assert.equal(healthBody.configuredTeamAccountCount, 6);
+  assert.equal(healthBody.hibaAccountConfigured, true);
+  assert.equal(healthBody.bilalAccountConfigured, true);
+  assert.equal(healthBody.configuredTeamAccountCount, 8);
 
   const waseemLogin = await handler.fetch(new Request('https://example.test/api/dashboard?__path=/api/login', {
     method: 'POST',
