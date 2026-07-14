@@ -67,6 +67,8 @@ async function main(): Promise<void> {
 
   assert.equal(normalizeProspectPageQuery({ page: 3, pageSize: 50 }).pageSize, 50);
   assert.equal(normalizeProspectPageQuery({ page: 2, pageSize: 77 }).pageSize, 25);
+  assert.equal(normalizeProspectPageQuery({ followUp: 'due' }).filters.followUp, 'due');
+  assert.equal(normalizeProspectPageQuery({ followUp: 'invalid' }).filters.followUp, '');
 
   const repository = new InMemoryLeadRepository([
     storedLead(buildLead('rfp-lead', 'public_procurement', 'public_opportunity', 'Government RFP for software delivery')),
@@ -105,6 +107,7 @@ async function main(): Promise<void> {
       service: 'fullstack_web_app',
       owner: 'jawad.jutt@codistan.org',
       feedback: 'pending',
+      followUp: 'due',
     },
   };
   const linked = applyPersistentLeadLinks(
@@ -115,6 +118,7 @@ async function main(): Promise<void> {
   assert.match(linked, /page=2&amp;pageSize=50/);
   assert.match(linked, /search=government\+software/);
   assert.match(linked, /owner=jawad\.jutt%40codistan\.org/);
+  assert.match(linked, /followUp=due/);
   assert.match(linked, /leadId=rfp-lead/);
 
   const guidanceRepository = new InMemoryLeadRepository([
@@ -153,8 +157,11 @@ async function main(): Promise<void> {
   const runtimeSource = readFileSync(new URL('../api/dashboard-runtime.ts', import.meta.url), 'utf8');
   const pageSource = readFileSync(new URL('../apps/web/src/paginated-prospects-page.ts', import.meta.url), 'utf8');
   assert.match(runtimeSource, /\/api\/prospects\/auto-assign/);
+  assert.match(runtimeSource, /followUp: url\.searchParams\.get\('followUp'\)/);
   assert.match(pageSource, /id="assign-owners"/);
   assert.match(pageSource, /id="refresh-recent"/);
+  assert.match(pageSource, /id="followup-filter"/);
+  assert.match(pageSource, /class="metric-link"/);
   assert.match(pageSource, /applyPersistentLeadLinks/);
   assert.match(pageSource, /event\.stopImmediatePropagation\(\)/);
   assert.match(pageSource, /Lead audit completed/);
@@ -172,7 +179,7 @@ async function main(): Promise<void> {
   assert.ok(!config.rewrites?.some((item) => item.source.startsWith('/api/ingest')));
   assert.ok(!config.rewrites?.some((item) => item.source === '/lead-desk'));
 
-  console.log('Scoped dashboard access, filter persistence, guidance action, assignment backfill and single-runtime routing smoke tests passed');
+  console.log('Scoped dashboard access, follow-up queue persistence, guidance action, assignment backfill and single-runtime routing smoke tests passed');
 }
 
 function buildLead(id: string, source: Lead['source'], leadType: Lead['leadType'], title: string): Lead {
