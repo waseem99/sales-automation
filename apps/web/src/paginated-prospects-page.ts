@@ -31,6 +31,7 @@ export interface ProspectDashboardPagination {
     service: string;
     owner: string;
     feedback: string;
+    followUp: string;
   };
 }
 
@@ -53,6 +54,7 @@ export function renderPaginatedProspectDashboardPage(input: PaginatedProspectDas
   html = repairEmbeddedClientScript(html);
   const { pagination, access } = input;
   html = applyDashboardSummary(html, pagination.summary);
+  html = applyFollowUpMetricLink(html, pagination);
   html = applyApproachColumn(html, input.records, input.selected);
   html = applyPersistentLeadLinks(html, input.records, pagination);
   html = applyDiscoveryRunStatus(html, input.runs[0]);
@@ -119,6 +121,14 @@ export function applyDashboardSummary(html: string, summary: ProspectDashboardSu
   );
 }
 
+export function applyFollowUpMetricLink(html: string, pagination: ProspectDashboardPagination): string {
+  const href = escapeAttribute(followUpUrl(pagination, 'due'));
+  return html.replace(
+    /<article><span>Follow-ups due<\/span><strong>([^<]*)<\/strong><\/article>/,
+    `<a class="metric-link" href="${href}" aria-label="Open due follow-ups"><article><span>Follow-ups due</span><strong>$1</strong><small>Open queue</small></article></a>`,
+  );
+}
+
 export function applyApproachColumn(
   html: string,
   records: StoredLeadRecord[],
@@ -182,9 +192,12 @@ function applyDiscoveryRunStatus(
   html: string,
   run: PaginatedProspectDashboardInput['runs'][number] | undefined,
 ): string {
-  if (!run || !run.autoAssignedCount) return html;
+  if (!run) return html;
   const current = `${run.candidateCount} candidates checked · ${run.newLeadCount} saved · ${run.duplicateCount} duplicates`;
-  return html.replace(current, `${current} · ${run.autoAssignedCount} owners assigned`);
+  const additions: string[] = [];
+  if (run.autoAssignedCount) additions.push(`${run.autoAssignedCount} owners assigned`);
+  if (run.employmentRejectedCount) additions.push(`${run.employmentRejectedCount} employee vacancies rejected`);
+  return additions.length > 0 ? html.replace(current, `${current} · ${additions.join(' · ')}`) : html;
 }
 
 function renderFilterForm(pagination: ProspectDashboardPagination): string {
@@ -196,6 +209,7 @@ function renderFilterForm(pagination: ProspectDashboardPagination): string {
     ${select('service-filter', 'service', 'All services', query.service, ['ai_automation','rag_document_intelligence','ai_saas_mvp','fullstack_web_app','nextjs_python_app','voice_ai_agent','ar_3d_unity_unreal','cybersecurity_compliance','website_portal','enterprise_systems','unknown'])}
     ${select('owner-filter', 'owner', 'All owners', query.owner, ['unassigned', ...pagination.owners])}
     ${select('feedback-filter', 'feedback', 'All feedback', query.feedback, ['pending','complete'])}
+    ${select('followup-filter', 'followUp', 'All follow-ups', query.followUp, ['due','overdue','today','next_7_days','scheduled','not_scheduled'])}
     <label class="page-size-control">Per page<select id="page-size" name="pageSize">${[25,50,100].map((size) => `<option value="${size}" ${size === pagination.pageSize ? 'selected' : ''}>${size}</option>`).join('')}</select></label>
     <button type="submit" class="ghost filter-submit">Apply</button>
     <a class="clear-filters" href="/prospects?pageSize=${pagination.pageSize}">Clear</a>
@@ -229,6 +243,12 @@ function prospectUrl(pagination: ProspectDashboardPagination, leadId: string): s
   return `/prospects?${params.toString()}`;
 }
 
+function followUpUrl(pagination: ProspectDashboardPagination, value: string): string {
+  const params = prospectParams(pagination, 1);
+  params.set('followUp', value);
+  return `/prospects?${params.toString()}`;
+}
+
 function prospectParams(pagination: ProspectDashboardPagination, page: number): URLSearchParams {
   const params = new URLSearchParams();
   params.set('page', String(page));
@@ -251,7 +271,7 @@ const serverFilterForm=document.getElementById('prospect-filter-form');
 const serverFilterSelects=serverFilterForm?.querySelectorAll('select')||[];
 serverFilterSelects.forEach(element=>element.addEventListener('change',()=>{document.body.classList.add('is-loading');serverFilterForm.requestSubmit();}));
 serverFilterForm?.addEventListener('submit',()=>document.body.classList.add('is-loading'));
-document.querySelectorAll('.page-link:not(.disabled)').forEach(link=>link.addEventListener('click',()=>document.body.classList.add('is-loading')));
+document.querySelectorAll('.page-link:not(.disabled),.metric-link').forEach(link=>link.addEventListener('click',()=>document.body.classList.add('is-loading')));
 async function postDashboardAction(endpoint){const response=await fetch(endpoint,{method:'POST',headers:{'content-type':'application/json'},body:'{}'});const data=await response.json();if(!response.ok)throw new Error(data.error||'Action failed');return data;}
 async function runPsebSync(){const button=document.getElementById('pseb-sync'),status=document.getElementById('run-status');if(!button)return;button.disabled=true;const original=button.textContent;button.textContent='Syncing PSEB…';try{const data=await postDashboardAction('/api/prospects/pseb-sync');status.textContent=(data.imported+' imported; '+data.existing+' already present; '+data.checked+' checked.');setTimeout(()=>location.reload(),700);}catch(error){status.textContent=error.message;button.disabled=false;button.textContent=original;}}
 async function assignOwners(){const button=document.getElementById('assign-owners'),status=document.getElementById('run-status');if(!button)return;button.disabled=true;const original=button.textContent;button.textContent='Assigning owners…';try{const data=await postDashboardAction('/api/prospects/auto-assign');status.textContent=(data.assigned+' prospects assigned; '+data.alreadyAssigned+' already assigned.');setTimeout(()=>location.reload(),700);}catch(error){status.textContent=error.message;button.disabled=false;button.textContent=original;}}
@@ -267,7 +287,7 @@ document.querySelectorAll('.disabled').forEach(link=>link.addEventListener('clic
 
 function paginationStyles(): string {
   return `
-.access-line{display:flex;align-items:center;gap:9px;margin-bottom:8px;color:#667085;font-size:12px}.scope-badge{display:inline-flex;border-radius:999px;padding:5px 9px;font-weight:800;background:#ecfdf3;color:#027a48}.scope-team{background:#fff7ed;color:#c2410c}.scope-own{background:#eef2ff;color:#4338ca}.restricted-note{max-width:310px;color:#667085;font-size:12px;text-align:right}.server-toolbar{grid-template-columns:minmax(220px,1.5fr) repeat(5,minmax(125px,.55fr)) minmax(100px,.35fr) auto auto;align-items:end}.page-size-control{display:grid;gap:4px;color:#667085;font-size:10px}.page-size-control select{width:100%}.filter-submit{height:42px}.clear-filters{align-self:center;font-size:12px}.pagination-bar{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:14px 18px;border-top:1px solid #eaecf0;color:#667085;font-size:12px}.pagination-bar>div{display:flex;gap:5px;flex-wrap:wrap}.page-link{border:1px solid #d0d5dd;border-radius:8px;padding:6px 9px;color:#344054;background:#fff}.page-link.active{background:#3157d5;border-color:#3157d5;color:#fff}.page-link.disabled{opacity:.45;pointer-events:none}.access-no-assign form[data-endpoint$="/owner"]{display:none}.approach-cell{min-width:210px}.approach-cell strong,.approach-cell span{display:block}.approach-cell span{margin-top:4px;color:#667085;font-size:11px;line-height:1.35}.guidance-action-status{grid-column:1/-1;margin:0;color:#3157d5!important;font-size:11px!important;font-weight:700}.is-loading .main{opacity:.62;pointer-events:none}.is-loading:after{content:'Loading…';position:fixed;inset:auto 20px 20px auto;background:#111827;color:#fff;padding:10px 14px;border-radius:10px;z-index:9999}
+.access-line{display:flex;align-items:center;gap:9px;margin-bottom:8px;color:#667085;font-size:12px}.scope-badge{display:inline-flex;border-radius:999px;padding:5px 9px;font-weight:800;background:#ecfdf3;color:#027a48}.scope-team{background:#fff7ed;color:#c2410c}.scope-own{background:#eef2ff;color:#4338ca}.restricted-note{max-width:310px;color:#667085;font-size:12px;text-align:right}.server-toolbar{grid-template-columns:minmax(220px,1.5fr) repeat(6,minmax(125px,.55fr)) minmax(100px,.35fr) auto auto;align-items:end}.page-size-control{display:grid;gap:4px;color:#667085;font-size:10px}.page-size-control select{width:100%}.filter-submit{height:42px}.clear-filters{align-self:center;font-size:12px}.pagination-bar{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:14px 18px;border-top:1px solid #eaecf0;color:#667085;font-size:12px}.pagination-bar>div{display:flex;gap:5px;flex-wrap:wrap}.page-link{border:1px solid #d0d5dd;border-radius:8px;padding:6px 9px;color:#344054;background:#fff}.page-link.active{background:#3157d5;border-color:#3157d5;color:#fff}.page-link.disabled{opacity:.45;pointer-events:none}.metrics>.metric-link{color:inherit;text-decoration:none}.metrics>.metric-link article{height:100%;transition:transform .15s ease,box-shadow .15s ease}.metrics>.metric-link:hover article{transform:translateY(-1px);box-shadow:0 8px 20px rgba(49,87,213,.12)}.metrics>.metric-link small{display:block;margin-top:5px;color:#3157d5;font-size:10px;font-weight:800}.access-no-assign form[data-endpoint$="/owner"]{display:none}.approach-cell{min-width:210px}.approach-cell strong,.approach-cell span{display:block}.approach-cell span{margin-top:4px;color:#667085;font-size:11px;line-height:1.35}.guidance-action-status{grid-column:1/-1;margin:0;color:#3157d5!important;font-size:11px!important;font-weight:700}.is-loading .main{opacity:.62;pointer-events:none}.is-loading:after{content:'Loading…';position:fixed;inset:auto 20px 20px auto;background:#111827;color:#fff;padding:10px 14px;border-radius:10px;z-index:9999}
 @media(max-width:1550px){.server-toolbar{grid-template-columns:repeat(4,minmax(150px,1fr))}.restricted-note{text-align:left}}
 @media(max-width:800px){.server-toolbar{grid-template-columns:1fr}.pagination-bar{align-items:flex-start;flex-direction:column}.table-wrap{overflow:visible;max-height:none}table,thead,tbody,tr,th,td{display:block}thead{display:none}.prospect-row{margin:10px;border:1px solid #e4e7ec;border-radius:12px;padding:8px}.prospect-row td{display:grid;grid-template-columns:92px 1fr;gap:10px;border-top:1px solid #f0f1f3;padding:9px}.prospect-row td:first-child{border-top:0}.prospect-row td:before{font-size:10px;font-weight:800;color:#667085;text-transform:uppercase}.prospect-row td:nth-child(1):before{content:'Rank'}.prospect-row td:nth-child(2):before{content:'Company'}.prospect-row td:nth-child(3):before{content:'Service'}.prospect-row td:nth-child(4):before{content:'Owner'}.prospect-row td:nth-child(5):before{content:'Status'}.prospect-row td:nth-child(6):before{content:'Approach'}.prospect-row td:nth-child(7):before{content:'Follow-up'}}`;
 }

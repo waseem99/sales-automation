@@ -51,6 +51,28 @@ export async function ensureNeonSchema(databaseUrl: string): Promise<void> {
       updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
     )
   `;
+  await sql`
+    CREATE OR REPLACE FUNCTION follow_up_at(input_record JSONB)
+    RETURNS TIMESTAMPTZ
+    LANGUAGE SQL
+    STABLE
+    AS $$
+      SELECT CASE
+        WHEN COALESCE(input_record->'lead'->>'nextFollowUpAt', '') ~ '^\\d{4}-\\d{2}-\\d{2}T'
+          THEN (input_record->'lead'->>'nextFollowUpAt')::timestamptz
+        ELSE NULL
+      END
+    $$
+  `;
+  await sql`
+    CREATE OR REPLACE FUNCTION actionable_follow_up(input_record JSONB)
+    RETURNS BOOLEAN
+    LANGUAGE SQL
+    IMMUTABLE
+    AS $$
+      SELECT COALESCE(input_record->'lead'->>'pipelineStatus', '') NOT IN ('won','lost','rejected','archived')
+    $$
+  `;
 }
 
 export async function loadNeonAppState(databaseUrl: string): Promise<NeonAppState> {

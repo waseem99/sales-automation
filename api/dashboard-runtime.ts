@@ -301,6 +301,7 @@ function pageQuery(url: URL): ProspectPageQuery {
     service: url.searchParams.get('service') ?? '',
     owner: url.searchParams.get('owner') ?? '',
     feedback: url.searchParams.get('feedback') ?? '',
+    followUp: url.searchParams.get('followUp') ?? '',
   };
 }
 
