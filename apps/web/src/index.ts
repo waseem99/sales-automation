@@ -11,4 +11,11 @@ export {
   scopeRecords,
   type DashboardAccessScope,
 } from './dashboard-access.js';
+export {
+  applyFirstOutreachGuidance,
+  auditMissingFirstOutreachGuidance,
+  hasFirstOutreachGuidance,
+  type AppliedFirstOutreachGuidance,
+  type AutomaticAuditResult,
+} from './engagement-automation.js';
 export { createProspectDashboardHttpServer } from './prospect-server.js';
