@@ -45,6 +45,31 @@ const validPpra = candidate(
 );
 assert.equal(validateTenderCandidate(validPpra).qualified, true);
 
+const validPunjab = candidate(
+  'https://ppra.punjab.gov.pk/tenders/digital-services-platform',
+  'RFP for digital services platform implementation',
+  'Formal procurement notice for software development and system integration services.',
+  'Punjab PPRA',
+);
+assert.equal(validateTenderCandidate(validPunjab).qualified, true);
+
+const fakePunjab = candidate(
+  'https://ppra-punjab.example.com/copied-tender',
+  validPunjab.title,
+  validPunjab.summary,
+  'Punjab PPRA',
+);
+assert.equal(validateTenderCandidate(fakePunjab).qualified, false);
+assert.equal(validateTenderCandidate(fakePunjab).hardReject, true);
+
+const validEducation = candidate(
+  'https://procurement.exampleuniversity.edu.pk/rfp/digital-campus',
+  'Request for Proposal for a digital campus portal',
+  'Procurement notice for web portal and application development services.',
+  'Pakistan education and health public buyers',
+);
+assert.equal(validateTenderCandidate(validEducation).qualified, true);
+
 const validCanada = candidate(
   'https://canadabuys.canada.ca/en/tender-opportunities/tender-notice/pw-26-12345',
   'RFP for web portal and application development services',
@@ -54,6 +79,22 @@ const validCanada = candidate(
   '2026-08-20T20:00:00.000Z',
 );
 assert.equal(validateTenderCandidate(validCanada).qualified, true);
+
+const validBcBid = candidate(
+  'https://bcbid.gov.bc.ca/page.aspx/en/bpm/process_manage_extranet/204001',
+  'RFP for application modernization services',
+  'Formal procurement notice for software development, cloud migration and system integration.',
+  'BC Bid',
+);
+assert.equal(validateTenderCandidate(validBcBid).qualified, true);
+
+const validFrench = candidate(
+  'https://www.seao.ca/OpportunityPublication/avisConsultes/12345',
+  'Appel d’offres — plateforme numérique',
+  'Demande de propositions pour le développement de logiciel et des services informatiques. Date limite à confirmer.',
+  'SEAO Quebec',
+);
+assert.equal(validateTenderCandidate(validFrench).qualified, true);
 
 const fakeCanadaHost = candidate(
   'https://example-blog.com/canada-rfp-guide',
@@ -77,7 +118,7 @@ const validNonprofit = candidate(
 );
 assert.equal(validateTenderCandidate(validNonprofit).qualified, true);
 
-console.log('strict tender validation false-positive tests passed');
+console.log('strict and expanded tender validation false-positive tests passed');
 
 function candidate(
   sourceUrl: string,
@@ -98,7 +139,7 @@ function candidate(
       portal,
       reference,
       deadline,
-      sector: portal.includes('PPRA') || portal.includes('CanadaBuys') ? 'public' : 'nonprofit',
+      sector: portal.includes('PPRA') || portal.includes('Canada') || portal.includes('Bid') || portal.includes('SEAO') || portal.includes('education') ? 'public' : 'nonprofit',
       opportunityType: 'rfp',
     },
   };
