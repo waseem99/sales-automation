@@ -21,16 +21,11 @@
     "start": "node dist/dev.js",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "lint": "tsc -p tsconfig.json --noEmit",
-    "test": "tsx src/index.test.ts && tsx src/prospect-server.test.ts && tsx src/dashboard-access.test.ts && tsx src/auto-prospect-handler.test.ts"
+    "test": "tsx src/prospect-server.test.ts && tsx src/dashboard-access.test.ts && tsx src/auto-prospect-handler.test.ts"
   },
   "dependencies": {
-    "@sales-automation/access-control": "workspace:*",
-    "@sales-automation/api": "workspace:*",
-    "@sales-automation/auth": "workspace:*",
-    "@sales-automation/dashboard": "workspace:*",
     "@sales-automation/engagement-guidance": "workspace:*",
     "@sales-automation/evaluator": "workspace:*",
-    "@sales-automation/ingestion": "workspace:*",
     "@sales-automation/prospect-discovery": "workspace:*",
     "@sales-automation/shared": "workspace:*",
     "@sales-automation/storage": "workspace:*"

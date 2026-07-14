@@ -52,21 +52,27 @@ assert.equal(
   'Already-audited prospects must not receive duplicate guidance.',
 );
 
-const manualLead = buildLead('manual-lead');
-const ingestion = await handleProspectDashboardRequest({
+const forcedAudit = await handleProspectDashboardRequest({
   method: 'POST',
-  url: '/api/ingest/manual-leads',
+  url: '/api/prospects/guidance/backfill',
   headers: { cookie },
-  body: { leads: [manualLead] },
+  body: { force: true },
 }, context);
-assert.equal(ingestion.status, 201);
-assert.ok(repository.getLead(manualLead.id));
-assert.ok(
-  repository.getLead(manualLead.id)?.notes.some((note) => note.startsWith('guidance::first_outreach::')),
-  'A manually ingested lead must be audited in the same request.',
-);
+assert.equal(forcedAudit.status, 201);
+const forcedPayload = JSON.parse(forcedAudit.body) as { audited: number };
+assert.equal(forcedPayload.audited, 1);
 
-console.log('Automatic existing-lead and manual-ingestion engagement audits passed');
+const reply = await handleProspectDashboardRequest({
+  method: 'POST',
+  url: `/api/prospects/${existingLead.id}/guidance/reply`,
+  headers: { cookie },
+  body: { replyBody: 'Can you share pricing and a six-week implementation plan?', channel: 'email' },
+}, context);
+assert.equal(reply.status, 201);
+assert.equal(repository.getLead(existingLead.id)?.lead.pipelineStatus, 'replied');
+assert.ok(repository.getLead(existingLead.id)?.notes.some((note) => note.startsWith('guidance::reply::')));
+
+console.log('Automatic Prospect Desk engagement audits passed');
 
 function buildLead(id: string): Lead {
   return {
