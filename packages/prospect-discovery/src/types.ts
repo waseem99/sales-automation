@@ -67,6 +67,7 @@ export interface ProspectDiscoveryRun {
   lookbackHours?: number;
   tenderCandidateCount?: number;
   newTenderCount?: number;
+  rejectedCandidateCount?: number;
   emailStatus: 'sent' | 'skipped' | 'failed';
   emailMessage?: string;
   errors: string[];
