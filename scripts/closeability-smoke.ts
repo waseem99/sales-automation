@@ -22,12 +22,20 @@ assert.match(qualityRunner, /closeability-rescore/);
 const lead = sampleLeads.find((item) => item.id === 'lead-linkedin-ai-001');
 assert.ok(lead);
 const evaluation = evaluateLead({
-  lead: { ...lead, companyWebsite: 'https://examplecompany.co', contactEmail: 'founder@examplecompany.co' },
+  lead: {
+    ...lead,
+    companyName: 'Example Operations Company',
+    companyWebsite: 'https://examplecompany.co',
+    contactEmail: 'founder@examplecompany.co',
+    description: 'The founder is seeking an external implementation partner to automate customer support and internal operations with AI agents. The company wants to start immediately.',
+    opportunityStatus: 'live_opportunity',
+  },
   portfolioItems: samplePortfolioItems,
   generatedAt: '2026-07-08T18:30:00.000Z',
 });
-assert.ok(evaluation.closeability.total >= 75);
-assert.ok(['priority_a', 'priority_b'].includes(evaluation.closeability.band));
+assert.ok(evaluation.closeability.total >= 85);
+assert.equal(evaluation.closeability.band, 'priority_a');
+assert.equal(evaluation.closeability.breakdown.activeRequirement, 20);
 assert.equal(evaluation.closeability.breakdown.buyerIdentified, 10);
 assert.equal(evaluation.closeability.breakdown.verifiedContactRoute, 10);
 assert.ok(evaluation.closeability.explanation.includes('/100'));
