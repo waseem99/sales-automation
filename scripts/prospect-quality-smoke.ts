@@ -12,14 +12,20 @@ const config = JSON.parse(readFileSync(new URL('../vercel.json', import.meta.url
   crons?: Array<{ path: string; schedule: string }>;
 };
 assert.equal(config.functions?.['api/prospect-cleanup.ts']?.maxDuration, 300);
-assert.equal(config.crons?.find((cron) => cron.path === '/api/prospect-cleanup')?.schedule, '5 * * * *');
+assert.equal(config.crons?.some((cron) => cron.path === '/api/prospect-cleanup'), false);
+assert.equal(config.crons?.find((cron) => cron.path === '/api/cron/outreach')?.schedule, '0 * * * *');
 
 const cleanupApi = readFileSync(new URL('../api/prospect-cleanup.ts', import.meta.url), 'utf8');
+const outreachCron = readFileSync(new URL('../api/cron/outreach.ts', import.meta.url), 'utf8');
 const packageIndex = readFileSync(new URL('../packages/prospect-discovery/src/index.ts', import.meta.url), 'utf8');
 assert.match(cleanupApi, /findStoredAutomaticProspectFalsePositives/);
 assert.match(cleanupApi, /deleteLeadRecords/);
 assert.match(cleanupApi, /manualIntakeExcluded: true/);
 assert.match(cleanupApi, /tendersExcluded: true/);
+assert.match(outreachCron, /remove_invalid_automatic_prospects/);
+assert.match(outreachCron, /findStoredAutomaticProspectFalsePositives/);
+assert.match(outreachCron, /deleteLeadRecords/);
+assert.match(outreachCron, /prospectQualityCleanup/);
 assert.match(packageIndex, /quality-runner/);
 assert.match(packageIndex, /prospect-validation/);
 
@@ -61,4 +67,4 @@ const stored: Lead = {
 };
 assert.equal(findStoredAutomaticProspectFalsePositives([stored]).length, 1);
 
-console.log('Prospect quality gate, stored cleanup and Vercel schedule smoke tests passed');
+console.log('Prospect quality gate, protected cleanup and existing-cron integration smoke tests passed');
