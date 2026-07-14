@@ -1,10 +1,21 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
+import { samplePortfolioItems } from '@sales-automation/fixtures';
 import { normalizeProspectPageQuery } from '@sales-automation/neon-state';
-import { assignUnassignedProspects } from '@sales-automation/prospect-discovery';
+import {
+  assignUnassignedProspects,
+  InMemoryProspectDiscoveryRunStore,
+} from '@sales-automation/prospect-discovery';
 import type { Lead } from '@sales-automation/shared';
 import { InMemoryLeadRepository } from '@sales-automation/storage';
-import { resolveDashboardAccess } from '@sales-automation/web/prospect-handler';
+import {
+  handleProspectDashboardRequest,
+  resolveDashboardAccess,
+} from '@sales-automation/web/prospect-handler';
+import {
+  applyPersistentLeadLinks,
+  type ProspectDashboardPagination,
+} from '../apps/web/src/paginated-prospects-page.ts';
 
 async function main(): Promise<void> {
   process.env.ADMIN_PASSWORD = 'dashboard-smoke-admin-password';
@@ -67,11 +78,86 @@ async function main(): Promise<void> {
   assert.equal(repository.getLead('partner-lead')?.lead.owner, 'moiz.khalid@codistan.org');
   assert.ok(repository.listLeads().every((record) => Boolean(record.lead.recommendedNextAction)));
 
+  const pagination: ProspectDashboardPagination = {
+    records: repository.listLeads(),
+    page: 2,
+    pageSize: 50,
+    totalPages: 4,
+    filteredTotal: 2,
+    visibleTotal: 169,
+    start: 51,
+    end: 52,
+    owners: ['jawad.jutt@codistan.org'],
+    summary: {
+      total: 169,
+      live: 68,
+      contacted: 0,
+      replied: 0,
+      followUpsDue: 0,
+      unassigned: 0,
+      won: 0,
+      feedbackPending: 169,
+    },
+    query: {
+      search: 'government software',
+      status: 'needs_human_review',
+      signal: 'live_opportunity',
+      service: 'fullstack_web_app',
+      owner: 'jawad.jutt@codistan.org',
+      feedback: 'pending',
+    },
+  };
+  const linked = applyPersistentLeadLinks(
+    '<a href="/prospects?leadId=rfp-lead">Open</a>',
+    repository.listLeads(),
+    pagination,
+  );
+  assert.match(linked, /page=2&amp;pageSize=50/);
+  assert.match(linked, /search=government\+software/);
+  assert.match(linked, /owner=jawad\.jutt%40codistan\.org/);
+  assert.match(linked, /leadId=rfp-lead/);
+
+  const guidanceRepository = new InMemoryLeadRepository([
+    storedLead(buildLead('guidance-lead', 'public_web', 'public_opportunity', 'AI platform implementation partner required')),
+  ]);
+  const guidanceContext = {
+    repository: guidanceRepository,
+    portfolioItems: samplePortfolioItems,
+    runStore: new InMemoryProspectDiscoveryRunStore(),
+    adminPassword: 'guidance-smoke-password',
+    sessionSecret: 'guidance-smoke-session-secret-123456789',
+    secureCookies: false,
+    actor: 'admin',
+    now: () => '2026-07-14T12:00:00.000Z',
+  };
+  const guidanceLogin = await handleProspectDashboardRequest({
+    method: 'POST',
+    url: '/api/login',
+    body: { password: 'guidance-smoke-password' },
+  }, guidanceContext);
+  assert.equal(guidanceLogin.status, 200);
+  const guidanceCookie = guidanceLogin.headers['set-cookie']?.split(';')[0];
+  assert.ok(guidanceCookie);
+  const guidanceResponse = await handleProspectDashboardRequest({
+    method: 'POST',
+    url: '/api/prospects/guidance-lead/guidance/first-outreach',
+    headers: { cookie: guidanceCookie },
+    body: {},
+  }, guidanceContext);
+  assert.equal(guidanceResponse.status, 201);
+  const guidanceBody = JSON.parse(guidanceResponse.body) as { guidance?: { draft?: string; nextAction?: string } };
+  assert.ok(guidanceBody.guidance?.draft);
+  assert.ok(guidanceBody.guidance?.nextAction);
+  assert.ok(guidanceRepository.getLead('guidance-lead')?.notes.some((note) => note.startsWith('guidance::first_outreach::')));
+
   const runtimeSource = readFileSync(new URL('../api/dashboard-runtime.ts', import.meta.url), 'utf8');
   const pageSource = readFileSync(new URL('../apps/web/src/paginated-prospects-page.ts', import.meta.url), 'utf8');
   assert.match(runtimeSource, /\/api\/prospects\/auto-assign/);
   assert.match(pageSource, /id="assign-owners"/);
   assert.match(pageSource, /id="refresh-recent"/);
+  assert.match(pageSource, /applyPersistentLeadLinks/);
+  assert.match(pageSource, /event\.stopImmediatePropagation\(\)/);
+  assert.match(pageSource, /Lead audit completed/);
 
   const config = JSON.parse(readFileSync(new URL('../vercel.json', import.meta.url), 'utf8')) as {
     functions?: Record<string, { maxDuration?: number }>;
@@ -83,7 +169,7 @@ async function main(): Promise<void> {
     assert.ok(rewrite?.destination.startsWith('/api/dashboard?__path='), `${source} must use the scoped dashboard runtime.`);
   }
 
-  console.log('Scoped dashboard access, assignment backfill, pagination and Vercel routing smoke tests passed');
+  console.log('Scoped dashboard access, filter persistence, guidance action, assignment backfill and Vercel routing smoke tests passed');
 }
 
 function buildLead(id: string, source: Lead['source'], leadType: Lead['leadType'], title: string): Lead {
