@@ -1,3 +1,4 @@
+import { PROSPECT_TEAM } from '@sales-automation/prospect-discovery';
 import type { Lead } from '@sales-automation/shared';
 
 export interface TeamMemberOption {
@@ -11,21 +12,22 @@ export interface LeadRouting {
   owner?: string;
   sendFrom: string;
   replyTo: string;
+  ccEmails: string[];
   alertEmails: string[];
 }
 
-const defaultTeamMembers: TeamMemberOption[] = [
-  { email: 'talha.bashir@codistan.org', displayName: 'Talha Bashir', canSendAtLaunch: true, canLogin: true },
-  { email: 'jawad.jutt@codistan.org', displayName: 'Jawad Jutt', canSendAtLaunch: true, canLogin: true },
-  { email: 'moiz.khalid@codistan.org', displayName: 'Moiz Khalid', canSendAtLaunch: false, canLogin: true },
-  { email: 'subainaaamir@codistan.org', displayName: 'Subaina Aamir', canSendAtLaunch: false, canLogin: true },
-  { email: 'danishkhalid@codistan.org', displayName: 'Danish Khalid', canSendAtLaunch: false, canLogin: true },
-  { email: 'hiba', displayName: 'Hiba (Talha team)', canSendAtLaunch: false, canLogin: false },
-  { email: 'bilal', displayName: 'Bilal (Talha team)', canSendAtLaunch: false, canLogin: false },
-];
+const SALES_EMAIL = 'sales@codistan.org';
+const WASEEM_EMAIL = 'waseem@codistan.org';
 
-const defaultAlertEmails = ['waseem@codistan.org', 'sales@codistan.org'];
-const defaultSenders = defaultTeamMembers.filter((member) => member.canSendAtLaunch).map((member) => member.email);
+const defaultTeamMembers: TeamMemberOption[] = PROSPECT_TEAM.map((member) => ({
+  email: member.email,
+  displayName: member.displayName,
+  canSendAtLaunch: false,
+  canLogin: true,
+}));
+
+const defaultAlertEmails = [WASEEM_EMAIL, SALES_EMAIL];
+const defaultSenders = [SALES_EMAIL];
 
 export function getTeamMembers(existingOwners: string[] = []): TeamMemberOption[] {
   const extraOwners = splitOwnerValues(process.env.ADDITIONAL_LEAD_OWNERS);
@@ -66,20 +68,21 @@ export function getAlertEmails(): string[] {
 
 export function getSendingMailboxes(): string[] {
   const configured = splitEmails(process.env.OUTREACH_SENDER_EMAILS);
-  return configured.length ? configured : defaultSenders;
+  return unique([SALES_EMAIL, ...configured]);
 }
 
 export function resolveLeadRouting(lead: Pick<Lead, 'id' | 'owner'>): LeadRouting {
   const senders = getSendingMailboxes();
   const owner = normalizeEmail(lead.owner);
-  const sendFrom = owner && senders.includes(owner)
-    ? owner
-    : senders[stableIndex(lead.id, senders.length)] ?? defaultSenders[0]!;
+  const sendFrom = senders.includes(SALES_EMAIL) ? SALES_EMAIL : senders[0] ?? SALES_EMAIL;
   const replyTo = owner ?? sendFrom;
+  const ccEmails = unique([owner ?? '', WASEEM_EMAIL])
+    .filter((email) => email !== sendFrom);
   return {
     owner: lead.owner?.trim() || undefined,
     sendFrom,
     replyTo,
+    ccEmails,
     alertEmails: unique([...getAlertEmails(), replyTo]),
   };
 }
@@ -104,13 +107,6 @@ function normalizeEmail(value: string | undefined): string | undefined {
 
 function unique(values: string[]): string[] {
   return [...new Set(values.map((value) => value.trim().toLowerCase()).filter(Boolean))];
-}
-
-function stableIndex(value: string, length: number): number {
-  if (length <= 1) return 0;
-  let hash = 0;
-  for (const character of value) hash = ((hash * 31) + character.charCodeAt(0)) >>> 0;
-  return hash % length;
 }
 
 function displayNameFromOwner(owner: string): string {
