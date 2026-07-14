@@ -5,6 +5,7 @@ import {
   getLeadDedupeKey,
   ingestLinkedInSignal,
   ingestLeads,
+  ingestManualOpportunity,
   ingestSourceBatch,
   ingestUpworkEmail,
   parseSourceBatch,
@@ -50,6 +51,7 @@ assert.equal(upworkResult.captured[0].alertEligible, true);
 assert.equal(repository.listLeads().length, 1);
 assert.equal(repository.listHotLeads().length, 1);
 assert.equal(upworkResult.skippedDuplicates[0].reason, 'duplicate_source_url');
+assert.ok(upworkResult.captured[0].record.notes.some((note) => note.startsWith('ingestion::upwork_email::')));
 
 const secondUpworkResult = ingestUpworkEmail({
   email: {
@@ -83,6 +85,63 @@ assert.equal(linkedinResult.totalCaptured, 1);
 assert.equal(linkedinResult.captured[0].evaluation.lead.leadType, 'linkedin_warm_post');
 assert.equal(linkedinResult.captured[0].evaluation.score.urgency, 'urgent');
 assert.ok(repository.getLead(linkedinResult.captured[0].leadId)?.latestEvaluation);
+
+const manualOpportunity = {
+  kind: 'referral_note' as const,
+  content: 'Referral from a current client. A nonprofit needs a fixed-scope digital platform and CRM integration project this quarter.',
+  capturedAt: generatedAt,
+  companyName: 'Example Foundation',
+  contactName: 'Sarah Example',
+  contactRole: 'Operations Director',
+  country: 'Canada',
+};
+const manualOpportunityResult = ingestManualOpportunity({
+  opportunity: manualOpportunity,
+  repository,
+  portfolioItems: samplePortfolioItems,
+  generatedAt,
+  actor: 'manual-intake-test',
+});
+assert.equal(manualOpportunityResult.sourceKind, 'manual_opportunity');
+assert.equal(manualOpportunityResult.totalCaptured, 1);
+assert.equal(manualOpportunityResult.captured[0].evaluation.lead.companyName, 'Example Foundation');
+assert.ok(manualOpportunityResult.captured[0].record.notes.some((note) => note.startsWith('ingestion::manual_opportunity::')));
+
+const duplicateManualOpportunityResult = ingestManualOpportunity({
+  opportunity: manualOpportunity,
+  repository,
+  portfolioItems: samplePortfolioItems,
+  generatedAt,
+});
+assert.equal(duplicateManualOpportunityResult.totalCaptured, 0);
+assert.equal(duplicateManualOpportunityResult.totalSkipped, 1);
+assert.equal(duplicateManualOpportunityResult.skippedDuplicates[0].reason, 'duplicate_lead_id');
+
+const manualPublicUrl = ingestManualOpportunity({
+  opportunity: {
+    kind: 'public_url',
+    content: 'Request for proposal for a software development and digital platform implementation project.',
+    sourceUrl: 'https://buyer.example.org/rfp/platform?utm_source=one',
+    capturedAt: generatedAt,
+  },
+  repository,
+  portfolioItems: samplePortfolioItems,
+  generatedAt,
+});
+assert.equal(manualPublicUrl.totalCaptured, 1);
+const manualPublicUrlDuplicate = ingestManualOpportunity({
+  opportunity: {
+    kind: 'public_url',
+    content: 'Same opportunity copied again by another team member.',
+    sourceUrl: 'https://buyer.example.org/rfp/platform?utm_source=two',
+    capturedAt: generatedAt,
+  },
+  repository,
+  portfolioItems: samplePortfolioItems,
+  generatedAt,
+});
+assert.equal(manualPublicUrlDuplicate.totalCaptured, 0);
+assert.equal(manualPublicUrlDuplicate.skippedDuplicates[0].reason, 'duplicate_source_url');
 
 const batchText = `Job: Need AI automation dashboard
 https://www.upwork.com/jobs/batch-ai-dashboard-001
@@ -170,4 +229,4 @@ assert.equal(manualResult.totalSkipped, 1);
 assert.equal(manualResult.skippedDuplicates[0].reason, 'duplicate_lead_id');
 assert.equal(getLeadDedupeKey(manualLead), 'lead_id:manual-enterprise-ai-001');
 
-console.log('Ingestion orchestrator and bulk source intake tests passed.');
+console.log('Ingestion orchestrator, approved manual intake and bulk source intake tests passed.');
