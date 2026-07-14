@@ -7,6 +7,7 @@ import type {
   OpportunitySignalStatus,
   ServiceCategory,
 } from '@sales-automation/shared';
+import type { LeadRepository } from '@sales-automation/storage';
 import {
   applyAutomaticAssignment,
   assignUnassignedProspects,
@@ -20,6 +21,8 @@ import {
   collectGreenhouseCandidates,
   collectLeverCandidates,
   collectRemoteOkCandidates,
+  hasProjectOpportunityIntent,
+  isEmploymentVacancy,
 } from './sources.js';
 import { classifyTargeting, EXPANDED_TARGET_SEARCH_QUERIES } from './targeting.js';
 import type {
@@ -31,6 +34,7 @@ import type {
 } from './types.js';
 
 const DEFAULT_RECENT_LOOKBACK_HOURS = 78;
+const EMPLOYMENT_REJECTION_REASON = 'employment_role_not_project_opportunity';
 
 export async function runProspectDiscovery(options: ProspectDiscoveryOptions): Promise<ProspectDiscoveryResult> {
   const now = options.now ?? (() => new Date().toISOString());
@@ -38,6 +42,7 @@ export async function runProspectDiscovery(options: ProspectDiscoveryOptions): P
   const fetchImpl = options.fetchImpl ?? globalThis.fetch;
   if (!fetchImpl) throw new Error('Global fetch is unavailable. Supply fetchImpl.');
 
+  const employmentRejectedCount = rejectStoredEmploymentVacancies(options.repository, startedAt);
   const assignmentBackfill = assignUnassignedProspects(options.repository, startedAt);
   const sourceResults: ProspectSourceResult[] = [];
   if (options.bingRssEnabled !== false) {
@@ -107,6 +112,7 @@ export async function runProspectDiscovery(options: ProspectDiscoveryOptions): P
     newLeadCount: newLeads.length,
     duplicateCount,
     autoAssignedCount: assignmentBackfill.assigned + newLeads.length,
+    employmentRejectedCount,
     lookbackHours,
     emailStatus: 'skipped',
     errors,
@@ -119,6 +125,44 @@ export async function runProspectDiscovery(options: ProspectDiscoveryOptions): P
   options.runStore?.saveRun(run);
 
   return { run, newLeads, sourceResults };
+}
+
+export function rejectStoredEmploymentVacancies(
+  repository: LeadRepository,
+  recordedAt: string,
+  actor = 'prospect-discovery',
+): number {
+  let rejected = 0;
+  for (const record of repository.listLeads()) {
+    const lead = record.lead;
+    if (!shouldRejectStoredEmploymentVacancy(lead)) continue;
+    if (lead.pipelineStatus === 'rejected' && lead.outcomeReason === EMPLOYMENT_REJECTION_REASON) continue;
+
+    repository.recordOutcome(lead.id, {
+      outcomeStatus: 'not_fit',
+      outcomeReason: EMPLOYMENT_REJECTION_REASON,
+      outcomeRecordedAt: recordedAt,
+    }, actor);
+    repository.updateStatus(lead.id, 'rejected', actor);
+    const updated = repository.getLead(lead.id)?.lead ?? lead;
+    repository.upsertLead({
+      ...updated,
+      opportunityStatus: 'recent_demand_signal',
+      nextFollowUpAt: undefined,
+      followUpNote: undefined,
+      recommendedNextAction: 'Do not apply through the candidate route. Research the company separately only if a buyer-side project signal emerges.',
+      updatedAt: recordedAt,
+    }, actor);
+    if (!record.notes.some((note) => note.includes(EMPLOYMENT_REJECTION_REASON))) {
+      repository.addNote(
+        lead.id,
+        `quality_gate::${EMPLOYMENT_REJECTION_REASON}::Employee vacancy rejected; candidate application and resume outreach are outside the sales pipeline.`,
+        actor,
+      );
+    }
+    rejected += 1;
+  }
+  return rejected;
 }
 
 export function candidateToLead(candidate: DiscoveryCandidate, capturedAt: string): Lead {
@@ -229,6 +273,16 @@ function passesMinimumQuality(candidate: DiscoveryCandidate): boolean {
 
 function hasUsefulEnrichment(candidate: DiscoveryCandidate): boolean {
   return Boolean(candidate.companyWebsite || candidate.contactEmail || candidate.contactName || candidate.contactFormUrl);
+}
+
+function shouldRejectStoredEmploymentVacancy(lead: Lead): boolean {
+  if (lead.tender) return false;
+  if (['won', 'lost', 'rejected', 'archived'].includes(lead.pipelineStatus)) return false;
+  const text = `${lead.title} ${lead.description} ${lead.evidenceSummary ?? ''}`;
+  const explicitProjectIntent = hasProjectOpportunityIntent(text);
+  const remoteOk = (lead.discoverySource ?? '').toLowerCase() === 'remoteok'
+    || (lead.sourceUrl ?? '').toLowerCase().includes('remoteok.com/');
+  return (!explicitProjectIntent && isEmploymentVacancy(text)) || (remoteOk && !explicitProjectIntent);
 }
 
 function buildExistingKeys(leads: Lead[]): Set<string> {
