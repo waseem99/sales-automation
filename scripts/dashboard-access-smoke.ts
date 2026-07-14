@@ -160,7 +160,7 @@ async function main(): Promise<void> {
   assert.match(runtimeSource, /followUp: url\.searchParams\.get\('followUp'\)/);
   assert.match(pageSource, /id="assign-owners"/);
   assert.match(pageSource, /id="refresh-recent"/);
-  assert.match(pageSource, /id="followup-filter"/);
+  assert.match(pageSource, /select\('followup-filter', 'followUp'/);
   assert.match(pageSource, /class="metric-link"/);
   assert.match(pageSource, /applyPersistentLeadLinks/);
   assert.match(pageSource, /event\.stopImmediatePropagation\(\)/);
