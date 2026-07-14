@@ -55,7 +55,7 @@ export async function ensureNeonSchema(databaseUrl: string): Promise<void> {
     CREATE OR REPLACE FUNCTION follow_up_at(input_record JSONB)
     RETURNS TIMESTAMPTZ
     LANGUAGE SQL
-    IMMUTABLE
+    STABLE
     AS $$
       SELECT CASE
         WHEN COALESCE(input_record->'lead'->>'nextFollowUpAt', '') ~ '^\\d{4}-\\d{2}-\\d{2}T'
