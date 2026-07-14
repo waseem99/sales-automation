@@ -1,88 +1,61 @@
 # Vercel Deployment Handbook
 
-## 1. Import the repository
+## 1. Project setup
 
-1. Open Vercel.
-2. Choose **Add New → Project**.
-3. Import `waseem99/sales-automation`.
-4. Keep the project root as the repository root.
-5. Vercel will use `vercel.json` and the root `package.json`.
+1. Import `waseem99/sales-automation` into Vercel.
+2. Keep the repository root as the project root.
+3. Connect the project to Neon Postgres.
+4. Confirm `DATABASE_URL` is available in every environment that will be used.
+5. Add the variables listed in `.env.example`.
+6. Deploy from `main`.
 
-Do not deploy until the database and required variables are configured.
+Vercel uses `vercel.json` and the root `package.json`. Node.js 22 and pnpm 9.15.9 are fixed by the repository.
 
-## 2. Connect Neon Postgres
-
-1. Open the Vercel project.
-2. Go to **Storage** or **Marketplace**.
-3. Add a Neon Postgres database.
-4. Connect it to this project and all required environments.
-5. Confirm that `DATABASE_URL` appears under **Settings → Environment Variables**.
-
-The application creates its initial tables automatically on the first database-backed request:
+## 2. Required secrets
 
 ```text
-prospect_records
-prospect_discovery_runs
-prospect_run_locks
-```
-
-No SQL needs to be pasted manually for the first release.
-
-## 3. Add dashboard and cron secrets
-
-Add these in **Vercel → Project → Settings → Environment Variables**:
-
-```text
+DATABASE_URL
 ADMIN_PASSWORD
 SESSION_SECRET
 CRON_SECRET
-DASHBOARD_ACTOR
 ```
 
-Guidance:
+Use separate long random values for `SESSION_SECRET` and `CRON_SECRET`. Do not reuse a dashboard password.
 
-- `ADMIN_PASSWORD`: the fixed password used by the internal BD team.
-- `SESSION_SECRET`: a separate long random value, at least 32 characters.
-- `CRON_SECRET`: another separate long random value.
-- `DASHBOARD_ACTOR`: an internal identifier such as `bd-team@codistan.org`.
+## 3. Dashboard accounts
 
-Do not reuse the admin password as either secret.
-
-## 4. Configure the existing-domain mailbox
-
-A new subdomain is not required. Create or choose one mailbox on the current domain, then obtain its outgoing SMTP settings from the email provider.
-
-Add:
+An account is enabled only when its corresponding variable is set:
 
 ```text
-PROSPECT_DIGEST_TO
-PROSPECT_DIGEST_FROM
-SMTP_HOST
-SMTP_PORT
-SMTP_SECURE
-SMTP_USER
-SMTP_PASSWORD
+WASEEM_DASHBOARD_PASSWORD
+TALHA_DASHBOARD_PASSWORD
+JAWAD_DASHBOARD_PASSWORD
+MOIZ_DASHBOARD_PASSWORD
+SUBAINA_DASHBOARD_PASSWORD
+DANISH_DASHBOARD_PASSWORD
+HIBA_DASHBOARD_PASSWORD
+BILAL_DASHBOARD_PASSWORD
 ```
 
-Example format only:
+Access model:
+
+- Admin and Waseem: all company leads and global operations.
+- Talha: Talha-team scope.
+- Other configured BD accounts: assigned scope.
+
+Use `/health` to verify account-configuration booleans without exposing passwords.
+
+## 4. Portfolio library
+
+Set:
 
 ```text
-PROSPECT_DIGEST_FROM=Codistan Prospect Desk <prospects@your-current-domain>
-PROSPECT_DIGEST_TO=bdlead@your-current-domain,manager@your-current-domain
-SMTP_PORT=587
-SMTP_SECURE=false
+PORTFOLIO_LIBRARY_URL
 ```
 
-Use the real SMTP host, username, and password only inside Vercel. Do not add them to GitHub or share them in chat.
+The URL must point to the approved read-only portfolio/case-study library. Do not place private file contents or credentials in environment variables.
 
-Typical settings:
-
-- Port `587` with `SMTP_SECURE=false` for STARTTLS.
-- Port `465` with `SMTP_SECURE=true` for implicit TLS.
-
-Use the exact settings supplied by the mailbox provider. Port 25 should not be used.
-
-## 5. Configure discovery limits
+## 5. Prospect discovery
 
 Recommended initial values:
 
@@ -93,7 +66,7 @@ PROSPECT_BING_RSS_ENABLED=true
 PROSPECT_REMOTEOK_ENABLED=true
 ```
 
-Optional lists:
+Optional configured lists:
 
 ```text
 PROSPECT_SEARCH_QUERIES
@@ -102,86 +75,129 @@ PROSPECT_LEVER_SITES
 PROSPECT_RSS_FEEDS
 ```
 
-Lists can be comma, semicolon, or newline separated.
-
-## 6. Deploy
-
-1. Trigger a production deployment from Vercel.
-2. Wait for the build to complete.
-3. Open the production URL.
-4. Confirm that `/login` loads.
-5. Log in with `ADMIN_PASSWORD`.
-
-## 7. Run the first discovery pass
-
-1. Open the dashboard.
-2. Select **Run discovery now**.
-3. Wait for the result message.
-4. Confirm that new prospects appear.
-5. Open one prospect and verify the evidence link, company website, contact route, service match, and draft.
-6. Confirm that the internal digest arrives with the CSV attachment.
-
-A failed email does not remove prospects from the dashboard. The discovery run records the email error for review.
-
-## 8. Verify the daily cron
-
-The repository schedules:
+The daily cron route is:
 
 ```text
-0 4 * * *
+/api/cron/prospect-discovery
 ```
 
-This requests one run during the 04:00 UTC hour each day. Vercel sends `CRON_SECRET` automatically as a bearer token.
+## 6. Tender and RFP discovery
 
-Check **Vercel → Project → Cron Jobs** after deployment and confirm `/api/cron/prospect-discovery` is listed.
+Recommended values:
 
-The cron route uses a Neon database lock so overlapping runs are skipped instead of creating duplicate work.
+```text
+TENDER_MAX_CANDIDATES=80
+TENDER_PPRA_ENABLED=true
+TENDER_CANADABUYS_ENABLED=true
+TENDER_UNGM_ENABLED=true
+TENDER_PRIVATE_NONPROFIT_ENABLED=true
+```
 
-## 9. BD operating rules
+The protected manual/cron route is:
 
-For every prospect:
+```text
+/api/tender-discovery
+```
 
-1. Assign an owner.
-2. Record outreach and channel used.
-3. Record the actual reply, objection, or meeting outcome.
-4. Complete the required feedback:
-   - Relevance 1–5.
-   - Contact accuracy.
-   - Source quality.
-   - Increase, keep, reduce, or stop using the source.
-   - Correct service category where needed.
-   - Explanation.
-5. Update the pipeline status.
+It runs every six hours. Open `/tenders` as Admin or Waseem to trigger a manual refresh.
 
-Won, lost, and rejected statuses are blocked until the required feedback is completed.
+## 7. Internal prospect digest
 
-## 10. What the system learns
+Configure the shared sales mailbox:
 
-Future discovery runs use completed feedback and outcomes to adjust source priority:
+```text
+PROSPECT_DIGEST_TO
+PROSPECT_DIGEST_FROM
+PROSPECT_DIGEST_SUBJECT_PREFIX
+SMTP_HOST
+SMTP_PORT
+SMTP_SECURE
+SMTP_USER
+SMTP_PASSWORD
+```
 
-- High relevance, replies, meetings, wins, and **increase** recommendations raise priority.
-- Low relevance, rejection, poor contact accuracy, and **reduce/stop** recommendations lower priority.
+Recommended identity:
 
-This first release learns at source/query level. More advanced model training can be added after enough real BD feedback exists.
+```text
+SMTP_USER=sales@codistan.org
+PROSPECT_DIGEST_FROM=Codistan Prospect Desk <sales@codistan.org>
+```
 
-## Troubleshooting
+A digest is skipped when no new prospects are found.
 
-### Dashboard says `DATABASE_URL is required`
+## 8. Guarded outreach mailbox
 
-Reconnect Neon to the Vercel project or add the Neon connection string as `DATABASE_URL`.
+Configure:
 
-### Login works but dashboard actions fail
+```text
+SALES_MAILBOX_PASSWORD
+SALES_OUTREACH_SIGNATURE
+OUTREACH_SENDER_EMAILS=sales@codistan.org
+OUTREACH_ALERT_EMAILS=waseem@codistan.org,sales@codistan.org
+OUTREACH_SMTP_HOST
+OUTREACH_SMTP_PORT=465
+OUTREACH_IMAP_HOST
+OUTREACH_IMAP_PORT=993
+```
 
-Confirm the Neon integration is available to the Production environment and redeploy after changing variables.
+Outbound routing is:
 
-### Cron returns unauthorized
+- From: `sales@codistan.org`
+- Reply-To: assigned owner
+- CC: assigned owner and `waseem@codistan.org`
 
-Confirm `CRON_SECRET` exists in Vercel and redeploy. Do not call the route manually without the bearer header.
+## 9. Deliverability gates
 
-### Email fails
+Keep these values until SPF, DKIM, DMARC, sender alignment and Gmail/Microsoft inbox-placement tests pass:
 
-Check the mailbox provider's SMTP host, port, encryption mode, username, password, and whether SMTP access is enabled. Try port 465 with secure mode when the provider does not support STARTTLS on 587.
+```text
+OUTREACH_SENDING_ENABLED=false
+OUTREACH_DNS_READY=false
+OUTREACH_DRY_RUN=true
+OUTREACH_RAMP_STARTED_AT=
+```
 
-### No email arrives
+Do not enable live sending merely because SMTP authentication succeeds. A message reaching spam is not a successful deliverability test.
 
-No digest is sent when a run finds no new prospects. Check the dashboard's latest discovery record and email status.
+When all checks pass, set a valid ramp start and begin with the policy-defined low daily volume. Monitor bounces, deferrals, complaints and replies before increasing volume.
+
+## 10. Production verification
+
+After each deployment:
+
+1. Open `/health` and verify database, account and session configuration.
+2. Open `/login` and test Admin/Waseem access.
+3. Verify one own-scope team account.
+4. Open `/prospects` and confirm scoped totals, filtering and pagination.
+5. Open a prospect and run the lead audit.
+6. Open `/tenders` and confirm strict source validation and Jawad routing.
+7. Confirm Cron Jobs are visible in Vercel.
+8. Keep outreach gates disabled unless the deliverability checklist has been completed.
+
+The build runs TypeScript plus production smoke suites before Vercel creates the deployment.
+
+## 11. Troubleshooting
+
+### `DATABASE_URL is required`
+
+Reconnect Neon or add the correct production connection string, then redeploy.
+
+### A dashboard account cannot log in
+
+Confirm the exact `*_DASHBOARD_PASSWORD` variable exists in the same Vercel environment as the URL being tested. Redeploy after changing variables.
+
+### Dashboard actions return 403
+
+The account lacks permission for a global operation or another owner's lead. Test with Admin/Waseem only when the action is intentionally global.
+
+### Discovery or tender refresh returns 500
+
+Inspect the Vercel function log for the reported phase and source error. Do not weaken validation to make a noisy source pass.
+
+### Email reaches spam
+
+Keep live outreach disabled. Verify SPF, DKIM, DMARC, return-path/from alignment and provider reputation before further sending.
+
+### GitHub Actions fails with no steps
+
+This repository has experienced runner failures before checkout. An empty job is not a code result. Use the Vercel build or a local `pnpm deploy:check` while the GitHub runner issue is investigated.
