@@ -1,4 +1,5 @@
 export * from './types.js';
+export * from './campaigns.js';
 export * from './sources.js';
 export * from './tenders.js';
 export * from './expanded-tenders.js';
