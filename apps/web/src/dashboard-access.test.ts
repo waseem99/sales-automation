@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import type { Lead } from '@sales-automation/shared';
 import { canAccessLead, resolveDashboardAccess } from './dashboard-access.js';
+import { repairEmbeddedClientScript } from './paginated-prospects-page.js';
 
 const lead = (owner?: string): Pick<Lead, 'owner'> => ({ owner });
 
@@ -46,4 +47,10 @@ assert.equal(canAccessLead(bilal, lead('bilalahmed@codistan.org')), true);
 assert.equal(canAccessLead(bilal, lead('Bilal — Talha team')), true);
 assert.equal(canAccessLead(bilal, lead('hibasohail@codistan.org')), false);
 
-console.log('dashboard access scope tests passed');
+const brokenClientStatement = "payload.body='Team member: '+performedBy+'\n'+String(payload.body||'');";
+assert.throws(() => new Function(brokenClientStatement), SyntaxError);
+const repairedClientStatement = repairEmbeddedClientScript(brokenClientStatement);
+assert.equal(repairedClientStatement, "payload.body='Team member: '+performedBy+'\\n'+String(payload.body||'');");
+assert.doesNotThrow(() => new Function(repairedClientStatement));
+
+console.log('dashboard access scope and embedded client script tests passed');
