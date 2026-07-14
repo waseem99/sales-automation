@@ -1,3 +1,4 @@
+import { evaluateLead } from '@sales-automation/evaluator';
 import type { OpportunitySignalStatus } from '@sales-automation/shared';
 import {
   candidateToLead,
@@ -21,10 +22,23 @@ export { candidateToLead, classifyServiceCategory, rejectStoredEmploymentVacanci
 export async function runProspectDiscovery(options: ProspectDiscoveryOptions): Promise<ProspectDiscoveryResult> {
   const fetchImpl = options.fetchImpl ?? globalThis.fetch;
   if (!fetchImpl) throw new Error('Global fetch is unavailable. Supply fetchImpl.');
-  return runProspectDiscoveryBase({
+  const result = await runProspectDiscoveryBase({
     ...options,
     fetchImpl: createProspectQualityFetch(fetchImpl),
   });
+  const generatedAt = options.now?.() ?? result.run.completedAt ?? new Date().toISOString();
+  let closeabilityRescoredCount = 0;
+  for (const record of options.repository.listLeads()) {
+    const evaluation = evaluateLead({
+      lead: record.lead,
+      portfolioItems: options.portfolioItems,
+      generatedAt,
+    });
+    options.repository.saveEvaluation(evaluation, 'closeability-rescore');
+    closeabilityRescoredCount += 1;
+  }
+  result.run.closeabilityRescoredCount = closeabilityRescoredCount;
+  return result;
 }
 
 export function createProspectQualityFetch(fetchImpl: ProspectFetch): ProspectFetch {
