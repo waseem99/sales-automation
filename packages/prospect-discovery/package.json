@@ -9,7 +9,7 @@
     "build": "tsc -p tsconfig.json",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "lint": "tsc -p tsconfig.json --noEmit",
-    "test": "tsx src/index.test.ts && tsx src/pseb.test.ts",
+    "test": "tsx src/index.test.ts && tsx src/pseb.test.ts && tsx src/tenders.test.ts",
     "run": "node dist/cli.js run",
     "worker": "node dist/cli.js worker"
   },
