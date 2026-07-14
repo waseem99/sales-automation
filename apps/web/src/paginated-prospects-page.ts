@@ -54,10 +54,11 @@ export function renderPaginatedProspectDashboardPage(input: PaginatedProspectDas
   const { pagination, access } = input;
   html = applyDashboardSummary(html, pagination.summary);
   html = applyApproachColumn(html, input.records, input.selected);
+  html = applyDiscoveryRunStatus(html, input.runs[0]);
 
   const topActions = access.canRunGlobalOperations
-    ? `<div class="top-actions"><button id="pseb-sync" class="ghost">Sync PSEB collection</button><button id="import-starter" class="ghost">Load verified prospects</button><button id="run-discovery" class="primary">Refresh last 78 hours</button></div>`
-    : '<div class="top-actions"><span class="restricted-note">Global discovery and imports are restricted to Admin and Waseem.</span></div>';
+    ? `<div class="top-actions"><button id="pseb-sync" class="ghost">Sync PSEB collection</button><button id="import-starter" class="ghost">Load verified prospects</button><button id="assign-owners" class="ghost">Assign unassigned</button><button id="refresh-recent" class="primary">Refresh last 78 hours</button></div>`
+    : '<div class="top-actions"><span class="restricted-note">Global discovery, assignment and imports are restricted to Admin and Waseem.</span></div>';
 
   html = html.replace(/<div class="top-actions">[\s\S]*?<\/div><\/header>/, `${topActions}</header>`);
   html = html.replace(
@@ -163,6 +164,15 @@ export function applyApproachColumn(
   return html;
 }
 
+function applyDiscoveryRunStatus(
+  html: string,
+  run: PaginatedProspectDashboardInput['runs'][number] | undefined,
+): string {
+  if (!run || !run.autoAssignedCount) return html;
+  const current = `${run.candidateCount} candidates checked · ${run.newLeadCount} saved · ${run.duplicateCount} duplicates`;
+  return html.replace(current, `${current} · ${run.autoAssignedCount} owners assigned`);
+}
+
 function renderFilterForm(pagination: ProspectDashboardPagination): string {
   const query = pagination.query;
   return `<form class="toolbar server-toolbar" id="prospect-filter-form" method="get" action="/prospects">
@@ -217,8 +227,13 @@ const serverFilterSelects=serverFilterForm?.querySelectorAll('select')||[];
 serverFilterSelects.forEach(element=>element.addEventListener('change',()=>{document.body.classList.add('is-loading');serverFilterForm.requestSubmit();}));
 serverFilterForm?.addEventListener('submit',()=>document.body.classList.add('is-loading'));
 document.querySelectorAll('.page-link:not(.disabled)').forEach(link=>link.addEventListener('click',()=>document.body.classList.add('is-loading')));
-async function runPsebSync(){const button=document.getElementById('pseb-sync'),status=document.getElementById('run-status');if(!button)return;button.disabled=true;const original=button.textContent;button.textContent='Syncing PSEB…';try{const response=await fetch('/api/prospects/pseb-sync',{method:'POST',headers:{'content-type':'application/json'},body:'{}'});const data=await response.json();if(!response.ok)throw new Error(data.error||'PSEB synchronization failed');status.textContent=(data.imported+' imported; '+data.existing+' already present; '+data.checked+' checked.');setTimeout(()=>location.reload(),700);}catch(error){status.textContent=error.message;button.disabled=false;button.textContent=original;}}
+async function postDashboardAction(endpoint){const response=await fetch(endpoint,{method:'POST',headers:{'content-type':'application/json'},body:'{}'});const data=await response.json();if(!response.ok)throw new Error(data.error||'Action failed');return data;}
+async function runPsebSync(){const button=document.getElementById('pseb-sync'),status=document.getElementById('run-status');if(!button)return;button.disabled=true;const original=button.textContent;button.textContent='Syncing PSEB…';try{const data=await postDashboardAction('/api/prospects/pseb-sync');status.textContent=(data.imported+' imported; '+data.existing+' already present; '+data.checked+' checked.');setTimeout(()=>location.reload(),700);}catch(error){status.textContent=error.message;button.disabled=false;button.textContent=original;}}
+async function assignOwners(){const button=document.getElementById('assign-owners'),status=document.getElementById('run-status');if(!button)return;button.disabled=true;const original=button.textContent;button.textContent='Assigning owners…';try{const data=await postDashboardAction('/api/prospects/auto-assign');status.textContent=(data.assigned+' prospects assigned; '+data.alreadyAssigned+' already assigned.');setTimeout(()=>location.reload(),700);}catch(error){status.textContent=error.message;button.disabled=false;button.textContent=original;}}
+async function refreshRecent(){const button=document.getElementById('refresh-recent'),status=document.getElementById('run-status');if(!button)return;button.disabled=true;const original=button.textContent;button.textContent='Assigning owners…';try{const assignment=await postDashboardAction('/api/prospects/auto-assign');button.textContent='Searching last 78 hours…';const discovery=await postDashboardAction('/api/prospects/run');status.textContent=(assignment.assigned+' assigned; '+discovery.run.newLeadCount+' new prospects; '+discovery.run.duplicateCount+' duplicates.');setTimeout(()=>location.reload(),900);}catch(error){status.textContent=error.message;button.disabled=false;button.textContent=original;}}
 document.getElementById('pseb-sync')?.addEventListener('click',runPsebSync);
+document.getElementById('assign-owners')?.addEventListener('click',assignOwners);
+document.getElementById('refresh-recent')?.addEventListener('click',refreshRecent);
 document.querySelectorAll('.disabled').forEach(link=>link.addEventListener('click',event=>event.preventDefault()));
 `;
 }
