@@ -17,7 +17,9 @@ const talha = resolveDashboardAccess('talha.bashir@codistan.org');
 assert.equal(talha.scopeKind, 'team');
 assert.equal(canAccessLead(talha, lead('talha.bashir@codistan.org')), true);
 assert.equal(canAccessLead(talha, lead('danishkhalid@codistan.org')), true);
+assert.equal(canAccessLead(talha, lead('hibasohail@codistan.org')), true);
 assert.equal(canAccessLead(talha, lead('Hiba')), true);
+assert.equal(canAccessLead(talha, lead('bilalahmed@codistan.org')), true);
 assert.equal(canAccessLead(talha, lead('Bilal — Talha team')), true);
 assert.equal(canAccessLead(talha, lead('jawad.jutt@codistan.org')), false);
 assert.equal(canAccessLead(talha, lead(undefined)), false);
@@ -29,5 +31,19 @@ assert.equal(canAccessLead(jawad, lead('Jawad Jutt')), true);
 assert.equal(canAccessLead(jawad, lead('moiz.khalid@codistan.org')), false);
 assert.equal(jawad.canRunGlobalOperations, false);
 assert.equal(jawad.canAssignOwners, false);
+
+const hiba = resolveDashboardAccess('hibasohail@codistan.org');
+assert.equal(hiba.displayName, 'Hiba Sohail');
+assert.equal(hiba.scopeKind, 'own');
+assert.equal(canAccessLead(hiba, lead('hibasohail@codistan.org')), true);
+assert.equal(canAccessLead(hiba, lead('Hiba')), true);
+assert.equal(canAccessLead(hiba, lead('bilalahmed@codistan.org')), false);
+
+const bilal = resolveDashboardAccess('bilalahmed@codistan.org');
+assert.equal(bilal.displayName, 'Bilal Ahmed');
+assert.equal(bilal.scopeKind, 'own');
+assert.equal(canAccessLead(bilal, lead('bilalahmed@codistan.org')), true);
+assert.equal(canAccessLead(bilal, lead('Bilal — Talha team')), true);
+assert.equal(canAccessLead(bilal, lead('hibasohail@codistan.org')), false);
 
 console.log('dashboard access scope tests passed');
