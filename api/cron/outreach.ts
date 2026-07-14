@@ -47,10 +47,11 @@ export default {
       }
 
       phase = 'load_runtime_modules';
-      const [{ randomUUID }, loadedNeonModule, nodemailerModule] = await Promise.all([
+      const [{ randomUUID }, loadedNeonModule, nodemailerModule, prospectModule] = await Promise.all([
         import('node:crypto'),
         loadNeonModule(),
         import('nodemailer'),
+        import('@sales-automation/prospect-discovery'),
       ]);
       installMandatoryCc(nodemailerModule.default as unknown as { createTransport: (...args: unknown[]) => unknown });
       const outreachModule = await import('@sales-automation/outreach-email');
@@ -65,7 +66,20 @@ export default {
       }
 
       phase = 'load_application_state';
-      const state = await neonModule.loadNeonAppState(databaseUrl);
+      let state = await neonModule.loadNeonAppState(databaseUrl);
+
+      phase = 'remove_invalid_automatic_prospects';
+      const invalidAutomaticProspects = prospectModule.findStoredAutomaticProspectFalsePositives(
+        state.repository.listLeads().map((record) => record.lead),
+      );
+      const removedInvalidProspectCount = await neonModule.deleteLeadRecords(
+        databaseUrl,
+        invalidAutomaticProspects.map((item) => item.leadId),
+      );
+      if (invalidAutomaticProspects.length > 0) {
+        state = await neonModule.loadNeonAppState(databaseUrl);
+      }
+
       const config = configureSalesRouting(
         outreachModule.loadOutreachEmailConfig(process.env) as unknown as OutreachConfigLike,
         process.env,
@@ -83,6 +97,14 @@ export default {
       return Response.json({
         ok: true,
         report,
+        prospectQualityCleanup: {
+          checked: state.repository.listLeads().length + removedInvalidProspectCount,
+          matched: invalidAutomaticProspects.length,
+          removed: removedInvalidProspectCount,
+          reasonCounts: summarizeReasonCodes(invalidAutomaticProspects),
+          manualIntakeExcluded: true,
+          tendersExcluded: true,
+        },
         configuration: {
           smtpHost: config.smtpHost,
           smtpPort: config.smtpPort,
@@ -123,6 +145,14 @@ export default {
 
 async function loadNeonModule() {
   return import('@sales-automation/neon-state');
+}
+
+function summarizeReasonCodes(items: Array<{ reasonCodes: string[] }>): Record<string, number> {
+  const counts: Record<string, number> = {};
+  for (const item of items) {
+    for (const code of item.reasonCodes) counts[code] = (counts[code] ?? 0) + 1;
+  }
+  return counts;
 }
 
 function configureSalesRouting(config: OutreachConfigLike, environment: NodeJS.ProcessEnv): OutreachConfigLike {
