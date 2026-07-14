@@ -1,5 +1,5 @@
 {
-  "version": 2,
+  "version": 3,
   "approvalModel": "fully_automatic_after_qualification_and_compliance_gates",
   "emailProvider": "cpanel",
   "businessAddress": "Codistan Ventures Building, Plot No. 15, I-11/3, Islamabad 44000, Pakistan",
@@ -8,19 +8,16 @@
     "jawad.jutt@codistan.org",
     "moiz.khalid@codistan.org",
     "subainaaamir@codistan.org",
-    "danishkhalid@codistan.org"
+    "danishkhalid@codistan.org",
+    "hibasohail@codistan.org",
+    "bilalahmed@codistan.org"
   ],
   "senderStrategy": {
     "primarySenders": [
-      "talha.bashir@codistan.org",
-      "jawad.jutt@codistan.org"
+      "sales@codistan.org"
     ],
-    "secondarySendersAfterWarmup": [
-      "moiz.khalid@codistan.org",
-      "subainaaamir@codistan.org",
-      "danishkhalid@codistan.org"
-    ],
-    "notes": "Talha and Jawad are the initial sending mailboxes. Leads may be owned by any configured team member. A non-sender owner receives Reply-To routing while the sending mailbox is selected deterministically from the active sender pool."
+    "secondarySendersAfterWarmup": [],
+    "notes": "Prospect outreach is sent from the shared sales mailbox. Reply-To is the assigned owner. The assigned owner and waseem@codistan.org are copied on outbound prospect messages. Individual team mailboxes remain available only for reply monitoring where configured."
   },
   "portfolioLibrary": {
     "environmentVariable": "PORTFOLIO_LIBRARY_URL",
@@ -34,12 +31,12 @@
     ],
     "fixedAlertEnvironmentVariable": "OUTREACH_ALERT_EMAILS",
     "additionalOwnerEnvironmentVariable": "ADDITIONAL_LEAD_OWNERS",
-    "activeSenderEnvironmentVariable": "OUTREACH_SENDER_EMAILS",
+    "activeSenderEnvironmentVariable": "SALES_MAILBOX_PASSWORD",
     "rules": [
+      "Send prospect outreach from sales@codistan.org only when the shared mailbox is configured and all live-send gates pass.",
       "Set Reply-To to the assigned lead owner when the owner is a valid email address.",
-      "Always notify the fixed alert emails.",
-      "Also notify the assigned lead owner.",
-      "Use Talha or Jawad as the sending mailbox during launch unless OUTREACH_SENDER_EMAILS overrides the sender pool."
+      "CC the assigned owner and waseem@codistan.org on every outbound prospect message.",
+      "Always notify the fixed alert emails for qualified replies and delivery exceptions."
     ]
   },
   "targeting": {

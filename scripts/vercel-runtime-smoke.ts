@@ -79,19 +79,18 @@ async function main(): Promise<void> {
   const outreachPolicy = JSON.parse(
     readFileSync(new URL('../config/outreach-policy.json', import.meta.url), 'utf8'),
   ) as OutreachPolicy;
-  assert.equal(outreachPolicy.version, 2);
+  assert.equal(outreachPolicy.version, 3);
   assert.equal(outreachPolicy.businessAddress, 'Codistan Ventures Building, Plot No. 15, I-11/3, Islamabad 44000, Pakistan');
-  assert.deepEqual(outreachPolicy.senderStrategy.primarySenders, [
-    'talha.bashir@codistan.org',
-    'jawad.jutt@codistan.org',
-  ]);
-  assert.equal(outreachPolicy.senderStrategy.secondarySendersAfterWarmup.length, 3);
-  assert.equal(outreachPolicy.teamMembers.length, 5);
+  assert.deepEqual(outreachPolicy.senderStrategy.primarySenders, ['sales@codistan.org']);
+  assert.equal(outreachPolicy.senderStrategy.secondarySendersAfterWarmup.length, 0);
+  assert.equal(outreachPolicy.teamMembers.length, 7);
+  assert.ok(outreachPolicy.teamMembers.includes('hibasohail@codistan.org'));
+  assert.ok(outreachPolicy.teamMembers.includes('bilalahmed@codistan.org'));
   assert.equal(outreachPolicy.portfolioLibrary.environmentVariable, 'PORTFOLIO_LIBRARY_URL');
   assert.deepEqual(outreachPolicy.replyRouting.fixedAlertEmails, ['waseem@codistan.org', 'sales@codistan.org']);
   assert.equal(outreachPolicy.replyRouting.fixedAlertEnvironmentVariable, 'OUTREACH_ALERT_EMAILS');
   assert.equal(outreachPolicy.replyRouting.additionalOwnerEnvironmentVariable, 'ADDITIONAL_LEAD_OWNERS');
-  assert.equal(outreachPolicy.replyRouting.activeSenderEnvironmentVariable, 'OUTREACH_SENDER_EMAILS');
+  assert.equal(outreachPolicy.replyRouting.activeSenderEnvironmentVariable, 'SALES_MAILBOX_PASSWORD');
   assert.ok(outreachPolicy.targeting.preferredCountries.includes('United States'));
   assert.ok(outreachPolicy.targeting.preferredCountries.includes('Pakistan'));
   assert.ok(outreachPolicy.targeting.excludedCompanyHeadquartersOrPrimaryOperations.includes('Israel'));
@@ -106,23 +105,30 @@ async function main(): Promise<void> {
   const routingModule = await import('../apps/web/src/outreach-routing.ts');
   const teamMembers = routingModule.getTeamMembers();
   assert.equal(teamMembers.length, 7);
-  assert.deepEqual(teamMembers.filter((member) => member.canSendAtLaunch).map((member) => member.email), [
-    'talha.bashir@codistan.org',
-    'jawad.jutt@codistan.org',
-  ]);
-  assert.deepEqual(teamMembers.filter((member) => member.canLogin === false).map((member) => member.email), ['hiba', 'bilal']);
+  assert.deepEqual(teamMembers.filter((member) => member.canSendAtLaunch).map((member) => member.email), []);
+  assert.deepEqual(teamMembers.filter((member) => member.canLogin === false).map((member) => member.email), []);
+  assert.ok(teamMembers.some((member) => member.email === 'hibasohail@codistan.org'));
+  assert.ok(teamMembers.some((member) => member.email === 'bilalahmed@codistan.org'));
   assert.equal(routingModule.getPortfolioLibraryUrl(), process.env.PORTFOLIO_LIBRARY_URL);
   const moizRouting = routingModule.resolveLeadRouting({ id: 'qualified-26', owner: 'moiz.khalid@codistan.org' });
+  assert.equal(moizRouting.sendFrom, 'sales@codistan.org');
   assert.equal(moizRouting.replyTo, 'moiz.khalid@codistan.org');
-  assert.ok(['talha.bashir@codistan.org', 'jawad.jutt@codistan.org'].includes(moizRouting.sendFrom));
+  assert.deepEqual(moizRouting.ccEmails.sort(), [
+    'moiz.khalid@codistan.org',
+    'waseem@codistan.org',
+  ].sort());
   assert.deepEqual(moizRouting.alertEmails.sort(), [
     'moiz.khalid@codistan.org',
     'sales@codistan.org',
     'waseem@codistan.org',
   ].sort());
   const talhaRouting = routingModule.resolveLeadRouting({ id: 'qualified-27', owner: 'talha.bashir@codistan.org' });
-  assert.equal(talhaRouting.sendFrom, 'talha.bashir@codistan.org');
+  assert.equal(talhaRouting.sendFrom, 'sales@codistan.org');
   assert.equal(talhaRouting.replyTo, 'talha.bashir@codistan.org');
+  assert.deepEqual(talhaRouting.ccEmails.sort(), [
+    'talha.bashir@codistan.org',
+    'waseem@codistan.org',
+  ].sort());
 
   const outreachModule = await import('@sales-automation/outreach-email');
   const safeOutreachConfig = outreachModule.loadOutreachEmailConfig({
@@ -192,7 +198,7 @@ async function main(): Promise<void> {
   assert.equal(invalidLogin.status, 401);
   assert.deepEqual(await invalidLogin.json(), { error: 'Incorrect email or password.' });
 
-  console.log('Vercel runtime, guarded outreach cron, owner routing, policy and 75-prospect smoke tests passed');
+  console.log('Vercel runtime, guarded sales outreach routing, policy and 75-prospect smoke tests passed');
 }
 
 async function assertSuccessfulLogin(

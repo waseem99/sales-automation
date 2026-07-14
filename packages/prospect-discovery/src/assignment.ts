@@ -223,15 +223,16 @@ export function applyAutomaticAssignment(
   workload: Map<string, number>,
   generatedAt = new Date().toISOString(),
 ): { lead: Lead; assignment: ProspectAssignmentRecommendation; approach: ProspectApproachRecommendation } {
+  const existingOwner = normalizeEmail(lead.owner);
   const assignment = recommendProspectAssignment(lead, workload);
   const approach = recommendProspectApproach(lead);
-  workload.set(assignment.owner, (workload.get(assignment.owner) ?? 0) + (lead.owner ? 0 : 1));
+  if (!existingOwner) workload.set(assignment.owner, (workload.get(assignment.owner) ?? 0) + 1);
   return {
     assignment,
     approach,
     lead: {
       ...lead,
-      owner: lead.owner ?? assignment.owner,
+      owner: existingOwner ?? assignment.owner,
       reachMethod: approach.channelLabel,
       recommendedNextAction: approach.nextAction,
       updatedAt: generatedAt,
