@@ -18,6 +18,7 @@ import {
   collectPsebTechHubLeads,
   InMemoryProspectDiscoveryRunStore,
   runProspectDiscovery,
+  type DiscoveryRuntimeSourceControls,
 } from '@sales-automation/prospect-discovery';
 import { InMemoryLeadRepository, type StoredLeadRecord } from '@sales-automation/storage';
 import {
@@ -55,6 +56,18 @@ export async function handleAuthenticatedDashboardRequest(input: AuthenticatedDa
   const method = input.request.method.toUpperCase();
   const access = resolveDashboardAccess(input.session.identifier, input.session.displayName);
   const visibility = toVisibility(access);
+
+  if ((method === 'GET' && pathname === '/operations') || (method === 'POST' && pathname === '/api/source-controls')) {
+    const operations = await import('../vercel/operations-runtime.js');
+    return operations.handleOperationsRuntime({
+      request: input.request,
+      databaseUrl,
+      pathname,
+      actor: access.identifier,
+      canManage: access.canRunGlobalOperations,
+    });
+  }
+
   const body = await parseRequestBody(input.request);
 
   if (method !== 'GET' && (GLOBAL_ROUTES.has(pathname) || pathname.startsWith('/api/ingest/') || pathname === '/api/dev/reset-local-data')) {
@@ -178,11 +191,7 @@ async function handleGlobalRequest(input: AuthenticatedDashboardRuntimeInput & {
   }
 
   if (input.pathname === '/api/prospects/auto-assign') {
-    const assignment = assignUnassignedProspects(
-      state.repository,
-      new Date().toISOString(),
-      input.access.identifier,
-    );
+    const assignment = assignUnassignedProspects(state.repository, new Date().toISOString(), input.access.identifier);
     await persistAssignmentRecords(input.databaseUrl, state.repository, assignment.assignments.map((item) => item.leadId));
     return responseJson({
       ok: true,
@@ -194,11 +203,7 @@ async function handleGlobalRequest(input: AuthenticatedDashboardRuntimeInput & {
   }
 
   if (input.pathname === '/api/prospects/run') {
-    const assignment = assignUnassignedProspects(
-      state.repository,
-      new Date().toISOString(),
-      input.access.identifier,
-    );
+    const assignment = assignUnassignedProspects(state.repository, new Date().toISOString(), input.access.identifier);
     await persistAssignmentRecords(input.databaseUrl, state.repository, assignment.assignments.map((item) => item.leadId));
   }
 
@@ -214,6 +219,11 @@ async function handleGlobalRequest(input: AuthenticatedDashboardRuntimeInput & {
     return { imported, existing, checked: collection.leads.length, skippedLinks: collection.skippedLinks };
   };
 
+  const sourceControlModule = await import('@sales-automation/neon-state/source-controls');
+  const sourceControls = sourceControlModule.sourceControlMap(
+    await sourceControlModule.loadDiscoverySourceControls(input.databaseUrl),
+  );
+
   const result = await handleProspectDashboardRequest({
     method: input.request.method,
     url: input.originalUrl,
@@ -224,7 +234,7 @@ async function handleGlobalRequest(input: AuthenticatedDashboardRuntimeInput & {
     repository: state.repository,
     runStore: state.runStore,
     portfolioItems: samplePortfolioItems,
-    runDiscovery: () => runProspectDiscovery(buildDiscoveryOptions(state.repository, state.runStore)),
+    runDiscovery: () => runProspectDiscovery(buildDiscoveryOptions(state.repository, state.runStore, sourceControls)),
     syncPseb,
     adminPassword: input.adminPassword,
     sessionSecret: input.sessionSecret,
@@ -272,15 +282,21 @@ async function handleWithRecords(input: AuthenticatedDashboardRuntimeInput & {
   return toResponse(result);
 }
 
-function buildDiscoveryOptions(repository: InMemoryLeadRepository, runStore: InMemoryProspectDiscoveryRunStore) {
+function buildDiscoveryOptions(
+  repository: InMemoryLeadRepository,
+  runStore: InMemoryProspectDiscoveryRunStore,
+  sourceControls: DiscoveryRuntimeSourceControls,
+) {
   return {
     repository,
     runStore,
     portfolioItems: samplePortfolioItems,
+    sourceControls,
     maxCandidates: positiveInteger(process.env.PROSPECT_MAX_CANDIDATES, 15),
-    maxSearchQueries: positiveInteger(process.env.PROSPECT_MAX_SEARCH_QUERIES, 10),
+    maxSearchQueries: positiveInteger(process.env.PROSPECT_MAX_SEARCH_QUERIES, 12),
     searchQueries: splitList(process.env.PROSPECT_SEARCH_QUERIES),
-    remoteOkEnabled: process.env.PROSPECT_REMOTEOK_ENABLED !== 'false',
+    campaignIds: splitList(process.env.PROSPECT_CAMPAIGN_IDS),
+    remoteOkEnabled: process.env.PROSPECT_REMOTEOK_ENABLED === 'true',
     bingRssEnabled: process.env.PROSPECT_BING_RSS_ENABLED !== 'false',
     greenhouseBoards: splitList(process.env.PROSPECT_GREENHOUSE_BOARDS),
     leverSites: splitList(process.env.PROSPECT_LEVER_SITES),
@@ -330,23 +346,15 @@ async function persistChangedRecords(databaseUrl: string, records: StoredLeadRec
   if (changed.length > 0) await persistLeadRecords(databaseUrl, changed);
 }
 
-async function persistAssignmentRecords(
-  databaseUrl: string,
-  repository: InMemoryLeadRepository,
-  leadIds: string[],
-): Promise<void> {
+async function persistAssignmentRecords(databaseUrl: string, repository: InMemoryLeadRepository, leadIds: string[]): Promise<void> {
   if (leadIds.length === 0) return;
-  const records = leadIds
-    .map((leadId) => repository.getLead(leadId))
-    .filter((record): record is StoredLeadRecord => Boolean(record));
+  const records = leadIds.map((leadId) => repository.getLead(leadId)).filter((record): record is StoredLeadRecord => Boolean(record));
   await persistLeadRecords(databaseUrl, records);
 }
 
 function assignmentDistribution(assignments: Array<{ owner: string }>): Record<string, number> {
   const distribution: Record<string, number> = {};
-  for (const assignment of assignments) {
-    distribution[assignment.owner] = (distribution[assignment.owner] ?? 0) + 1;
-  }
+  for (const assignment of assignments) distribution[assignment.owner] = (distribution[assignment.owner] ?? 0) + 1;
   return distribution;
 }
 
@@ -359,10 +367,7 @@ function toResponse(result: { status: number; headers: Record<string, string>; b
 }
 
 function responseJson(value: unknown, status = 200): Response {
-  return new Response(JSON.stringify(value), {
-    status,
-    headers: { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store' },
-  });
+  return new Response(JSON.stringify(value), { status, headers: { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store' } });
 }
 
 async function parseRequestBody(request: Request): Promise<unknown> {
@@ -375,37 +380,11 @@ async function parseRequestBody(request: Request): Promise<unknown> {
   try { return JSON.parse(raw); } catch { return { value: raw }; }
 }
 
-function requestHeaders(request: Request): Record<string, string> {
-  return Object.fromEntries(request.headers.entries());
-}
-
-function clientKey(request: Request): string {
-  return request.headers.get('x-forwarded-for') ?? request.headers.get('x-real-ip') ?? 'vercel';
-}
-
-function asObject(value: unknown): Record<string, unknown> {
-  return value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : {};
-}
-
-function requiredString(value: unknown, field: string): string {
-  if (typeof value !== 'string' || !value.trim()) throw new Error(`${field} is required.`);
-  return value.trim();
-}
-
-function optionalString(value: unknown): string | undefined {
-  return typeof value === 'string' && value.trim() ? value.trim() : undefined;
-}
-
-function splitList(value: string | undefined): string[] | undefined {
-  if (!value?.trim()) return undefined;
-  return value.split(/[\n,;]+/).map((item) => item.trim()).filter(Boolean);
-}
-
-function positiveInteger(value: unknown, fallback: number): number {
-  const parsed = Number.parseInt(String(value ?? ''), 10);
-  return Number.isInteger(parsed) && parsed > 0 ? parsed : fallback;
-}
-
-function trimTrailingSlash(value: string): string {
-  return value.length > 1 ? value.replace(/\/+$/, '') : value;
-}
+function requestHeaders(request: Request): Record<string, string> { return Object.fromEntries(request.headers.entries()); }
+function clientKey(request: Request): string { return request.headers.get('x-forwarded-for') ?? request.headers.get('x-real-ip') ?? 'vercel'; }
+function asObject(value: unknown): Record<string, unknown> { return value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : {}; }
+function requiredString(value: unknown, field: string): string { if (typeof value !== 'string' || !value.trim()) throw new Error(`${field} is required.`); return value.trim(); }
+function optionalString(value: unknown): string | undefined { return typeof value === 'string' && value.trim() ? value.trim() : undefined; }
+function splitList(value: string | undefined): string[] | undefined { if (!value?.trim()) return undefined; return value.split(/[\n,;]+/).map((item) => item.trim()).filter(Boolean); }
+function positiveInteger(value: unknown, fallback: number): number { const parsed = Number.parseInt(String(value ?? ''), 10); return Number.isInteger(parsed) && parsed > 0 ? parsed : fallback; }
+function trimTrailingSlash(value: string): string { return value.length > 1 ? value.replace(/\/+$/, '') : value; }
