@@ -42,6 +42,9 @@ export default {
         canadaBuysEnabled: process.env.TENDER_CANADABUYS_ENABLED !== 'false',
         ungmEnabled: process.env.TENDER_UNGM_ENABLED !== 'false',
         privateNonprofitTendersEnabled: process.env.TENDER_PRIVATE_NONPROFIT_ENABLED !== 'false',
+        expandedPublicTendersEnabled: process.env.TENDER_EXPANDED_PUBLIC_SOURCES_ENABLED !== 'false',
+        tenderDocumentIntelligenceEnabled: process.env.TENDER_DOCUMENT_INTELLIGENCE_ENABLED !== 'false',
+        tenderDocumentMaxBytes: positiveInteger(process.env.TENDER_DOCUMENT_MAX_BYTES, 4_000_000),
         digest: {
           to: process.env.PROSPECT_DIGEST_TO,
           from: process.env.PROSPECT_DIGEST_FROM ?? process.env.SMTP_FROM,
@@ -68,6 +71,9 @@ export default {
         newTenderIds: result.newLeads.map((lead) => lead.id),
         removedFalsePositiveCount,
         rejectedCandidateCount: result.run.rejectedCandidateCount ?? 0,
+        documentIntelligenceCount: result.run.tenderDocumentIntelligenceCount ?? 0,
+        amendmentCount: result.run.tenderAmendmentCount ?? 0,
+        existingTenderEnrichedCount: result.run.tenderExistingEnrichedCount ?? 0,
         sourceSummary: result.sourceResults.map((source) => ({
           source: source.sourceName,
           checked: source.checked,
