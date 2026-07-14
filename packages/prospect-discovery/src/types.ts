@@ -67,6 +67,7 @@ export interface ProspectDiscoveryRun {
   duplicateCount: number;
   autoAssignedCount?: number;
   employmentRejectedCount?: number;
+  closeabilityRescoredCount?: number;
   lookbackHours?: number;
   tenderCandidateCount?: number;
   newTenderCount?: number;
