@@ -44,12 +44,21 @@ export function evaluateLead(input: EvaluateLeadInput): LeadEvaluation {
     hasComplianceRisk: hasComplianceRisk(input.lead),
     redFlags,
   });
-  const closeability = scoreCloseability({
+  const scoredCloseability = scoreCloseability({
     lead: input.lead,
     portfolioMatches,
     portfolioItems: input.portfolioItems,
     generatedAt: input.generatedAt,
   });
+  const closeability: CloseabilityScore = score.status === 'rejected'
+    ? {
+        ...scoredCloseability,
+        total: Math.min(scoredCloseability.total, 45),
+        band: 'reject',
+        explanation: `Rejected by the existing qualification and safety gate. ${scoredCloseability.explanation}`,
+        evidence: [...scoredCloseability.evidence, ...score.redFlags.map((flag) => `${flag.severity}: ${flag.reason}`)],
+      }
+    : scoredCloseability;
 
   const profileRecommendation = recommendProfile(input.lead, score);
   const recommendedNextAction = getRecommendedNextAction(input.lead, score, closeability, profileRecommendation, portfolioMatches);
@@ -86,51 +95,27 @@ export function detectRedFlags(lead: Lead): RedFlag[] {
   const redFlags: RedFlag[] = [];
 
   if (text.includes('free sample') || text.includes('unpaid sample')) {
-    redFlags.push({
-      code: 'free_work_request',
-      severity: 'high',
-      reason: 'Lead appears to request free or unpaid sample work.',
-    });
+    redFlags.push({ code: 'free_work_request', severity: 'high', reason: 'Lead appears to request free or unpaid sample work.' });
   }
 
   if (text.includes('$100') || text.includes('$200') || text.includes('cheap') || text.includes('low budget')) {
-    redFlags.push({
-      code: 'low_budget_signal',
-      severity: 'high',
-      reason: 'Budget signal appears too low for Codistan target opportunities.',
-    });
+    redFlags.push({ code: 'low_budget_signal', severity: 'high', reason: 'Budget signal appears too low for Codistan target opportunities.' });
   }
 
   if (text.includes('clone') && (text.includes('2 days') || text.includes('24 hours') || text.includes('48 hours'))) {
-    redFlags.push({
-      code: 'unrealistic_scope_timeline',
-      severity: 'high',
-      reason: 'Scope and timeline appear unrealistic.',
-    });
+    redFlags.push({ code: 'unrealistic_scope_timeline', severity: 'high', reason: 'Scope and timeline appear unrealistic.' });
   }
 
   if (hasProfileEligibilityLanguage(text)) {
-    redFlags.push({
-      code: 'profile_compliance_review_required',
-      severity: 'medium',
-      reason: 'Location, citizenship, clearance, onsite, or employment language requires human verification before selecting a profile.',
-    });
+    redFlags.push({ code: 'profile_compliance_review_required', severity: 'medium', reason: 'Location, citizenship, clearance, onsite, or employment language requires human verification before selecting a profile.' });
   }
 
   if (text.includes('scrape linkedin') || text.includes('linkedin scraper') || text.includes('auto dm') || text.includes('automated dm')) {
-    redFlags.push({
-      code: 'unsafe_outreach_or_scraping_request',
-      severity: 'critical',
-      reason: 'Lead appears to request unsafe scraping or automated LinkedIn outreach.',
-    });
+    redFlags.push({ code: 'unsafe_outreach_or_scraping_request', severity: 'critical', reason: 'Lead appears to request unsafe scraping or automated LinkedIn outreach.' });
   }
 
   if (text.includes('adult') || text.includes('gambling') || text.includes('crypto scam')) {
-    redFlags.push({
-      code: 'restricted_or_sensitive_industry',
-      severity: 'critical',
-      reason: 'Lead may involve a restricted or high-risk industry for outbound pursuit.',
-    });
+    redFlags.push({ code: 'restricted_or_sensitive_industry', severity: 'critical', reason: 'Lead may involve a restricted or high-risk industry for outbound pursuit.' });
   }
 
   return redFlags;
@@ -138,43 +123,12 @@ export function detectRedFlags(lead: Lead): RedFlag[] {
 
 function hasStrongBuyerSignal(lead: Lead): boolean {
   const text = `${lead.title} ${lead.description} ${lead.contactRole ?? ''} ${lead.industry ?? ''} ${lead.rawPayload ? JSON.stringify(lead.rawPayload) : ''}`.toLowerCase();
-  return [
-    'founder',
-    'ceo',
-    'cto',
-    'coo',
-    'director',
-    'head of',
-    'vp',
-    'owner',
-    'verified',
-    'enterprise',
-    'funded',
-    'recently funded',
-    'sales navigator',
-    'intent signal',
-    'agency',
-  ].some((keyword) => text.includes(keyword));
+  return ['founder','ceo','cto','coo','director','head of','vp','owner','verified','enterprise','funded','recently funded','sales navigator','intent signal','agency'].some((keyword) => text.includes(keyword));
 }
 
 function hasStrongBudgetSignal(lead: Lead): boolean {
   const text = `${lead.description} ${lead.budgetSignal ?? ''} ${lead.timelineSignal ?? ''}`.toLowerCase();
-  return [
-    '$5k',
-    '$10k',
-    '$15k',
-    '$20k',
-    'expert',
-    'long-term',
-    'ongoing',
-    'enterprise',
-    'recurring',
-    'retainer',
-    'funded',
-    'budget approved',
-    'paid pilot',
-    'implementation partner',
-  ].some((keyword) => text.includes(keyword));
+  return ['$5k','$10k','$15k','$20k','expert','long-term','ongoing','enterprise','recurring','retainer','funded','budget approved','paid pilot','implementation partner'].some((keyword) => text.includes(keyword));
 }
 
 function hasHighCompetitionSignal(lead: Lead): boolean {
@@ -184,28 +138,11 @@ function hasHighCompetitionSignal(lead: Lead): boolean {
 
 function hasComplianceRisk(lead: Lead): boolean {
   const text = `${lead.title} ${lead.description} ${lead.country ?? ''} ${lead.region ?? ''}`.toLowerCase();
-  return hasProfileEligibilityLanguage(text)
-    || text.includes('account sharing')
-    || text.includes('scrape linkedin')
-    || text.includes('auto dm');
+  return hasProfileEligibilityLanguage(text) || text.includes('account sharing') || text.includes('scrape linkedin') || text.includes('auto dm');
 }
 
 function hasProfileEligibilityLanguage(text: string): boolean {
-  return [
-    'us only',
-    'u.s. only',
-    'united states only',
-    'us-based only',
-    'us based only',
-    'must be in the us',
-    'us citizen',
-    'u.s. citizen',
-    'security clearance',
-    'onsite only',
-    'on-site only',
-    'w2 only',
-    'w-2 only',
-  ].some((phrase) => text.includes(phrase));
+  return ['us only','u.s. only','united states only','us-based only','us based only','must be in the us','us citizen','u.s. citizen','security clearance','onsite only','on-site only','w2 only','w-2 only'].some((phrase) => text.includes(phrase));
 }
 
 function getRecommendedNextAction(
@@ -220,16 +157,10 @@ function getRecommendedNextAction(
   }
 
   const routedProfile = profileRecommendation.upworkProfile;
-  const profileInstruction = routedProfile
-    ? `${routedProfile.label} (${routedProfile.url})`
-    : profileRecommendation.primaryProfile;
+  const profileInstruction = routedProfile ? `${routedProfile.label} (${routedProfile.url})` : profileRecommendation.primaryProfile;
   const rateRange = routedProfile?.targetHourlyRateRangeUsd;
-  const rateInstruction = rateRange
-    ? ` Target hourly rate: $${rateRange.min}–$${rateRange.max}/hour; do not revert to the obsolete lower profile rate.`
-    : '';
-  const gapInstruction = closeability.missingData.length > 0
-    ? ` First resolve: ${closeability.missingData.slice(0, 2).join(' ')}`
-    : '';
+  const rateInstruction = rateRange ? ` Target hourly rate: $${rateRange.min}–$${rateRange.max}/hour; do not revert to the obsolete lower profile rate.` : '';
+  const gapInstruction = closeability.missingData.length > 0 ? ` First resolve: ${closeability.missingData.slice(0, 2).join(' ')}` : '';
 
   if (profileRecommendation.primaryProfile === 'needs_human_review') {
     if (routedProfile) {
