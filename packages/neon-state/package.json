@@ -5,15 +5,26 @@
   "type": "module",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./portfolio-catalog": {
+      "types": "./dist/portfolio-catalog.d.ts",
+      "default": "./dist/portfolio-catalog.js"
+    }
+  },
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "lint": "tsc -p tsconfig.json --noEmit",
-    "test": "tsx src/index.test.ts"
+    "test": "tsx src/index.test.ts && tsx src/portfolio-catalog.test.ts"
   },
   "dependencies": {
     "@neondatabase/serverless": "^1.0.2",
     "@sales-automation/prospect-discovery": "workspace:*",
+    "@sales-automation/shared": "workspace:*",
     "@sales-automation/storage": "workspace:*"
   },
   "devDependencies": {

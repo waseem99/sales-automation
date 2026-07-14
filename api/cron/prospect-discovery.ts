@@ -19,11 +19,13 @@ export default {
       }
 
       phase = 'load_runtime_modules';
-      const [{ randomUUID }, loadedNeonModule, prospectModule, fixturesModule] = await Promise.all([
+      const [{ randomUUID }, loadedNeonModule, prospectModule, fixturesModule, catalogModule, starterModule] = await Promise.all([
         import('node:crypto'),
         loadNeonModule(),
         import('@sales-automation/prospect-discovery'),
         import('@sales-automation/fixtures'),
+        import('@sales-automation/neon-state/portfolio-catalog'),
+        import('../../vercel/approved-portfolio.js'),
       ]);
       neonModule = loadedNeonModule;
 
@@ -34,6 +36,11 @@ export default {
       if (!locked) {
         return Response.json({ ok: true, skipped: true, reason: 'Another discovery run is active.' });
       }
+
+      phase = 'load_portfolio_catalog';
+      await catalogModule.ensurePortfolioCatalogSeeded(databaseUrl, starterModule.approvedStarterPortfolioItems);
+      const approvedPortfolio = await catalogModule.loadApprovedPortfolioCatalog(databaseUrl);
+      catalogModule.replacePortfolioArray(fixturesModule.samplePortfolioItems, catalogModule.asPortfolioItems(approvedPortfolio));
 
       phase = 'load_application_state';
       const state = await neonModule.loadNeonAppState(databaseUrl);
@@ -51,6 +58,7 @@ export default {
       return Response.json({
         ok: true,
         run: result.run,
+        approvedPortfolioCount: approvedPortfolio.length,
         newLeadIds: result.newLeads.map((lead) => lead.id),
       });
     } catch (error) {

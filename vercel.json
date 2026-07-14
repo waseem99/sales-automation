@@ -5,86 +5,33 @@
   "installCommand": "npm install --global --prefix \"$PWD/.pnpm-cli\" --force @pnpm/exe@9.15.9 && PATH=\"$PWD/.pnpm-cli/bin:$PATH\" pnpm --version && PATH=\"$PWD/.pnpm-cli/bin:$PATH\" pnpm install --no-frozen-lockfile",
   "buildCommand": "PATH=\"$PWD/.pnpm-cli/bin:$PATH\" pnpm build:vercel",
   "functions": {
-    "api/dashboard.ts": {
-      "maxDuration": 300
-    },
-    "api/tenders.ts": {
-      "maxDuration": 300
-    },
-    "api/tender-discovery.ts": {
-      "maxDuration": 300
-    },
-    "api/prospect-cleanup.ts": {
-      "maxDuration": 300
-    },
-    "api/cron/prospect-discovery.ts": {
-      "maxDuration": 300
-    },
-    "api/cron/outreach.ts": {
-      "maxDuration": 300
-    }
+    "api/dashboard.ts": { "maxDuration": 300 },
+    "api/tenders.ts": { "maxDuration": 300 },
+    "api/tender-discovery.ts": { "maxDuration": 300 },
+    "api/prospect-cleanup.ts": { "maxDuration": 300 },
+    "api/cron/prospect-discovery.ts": { "maxDuration": 300 },
+    "api/cron/outreach.ts": { "maxDuration": 300 }
   },
   "crons": [
-    {
-      "path": "/api/tender-discovery",
-      "schedule": "15 */6 * * *"
-    },
-    {
-      "path": "/api/cron/prospect-discovery",
-      "schedule": "0 4 * * *"
-    },
-    {
-      "path": "/api/cron/outreach",
-      "schedule": "0 * * * *"
-    }
+    { "path": "/api/tender-discovery", "schedule": "15 */6 * * *" },
+    { "path": "/api/cron/prospect-discovery", "schedule": "0 4 * * *" },
+    { "path": "/api/cron/outreach", "schedule": "0 * * * *" }
   ],
   "redirects": [
-    {
-      "source": "/",
-      "destination": "/prospects",
-      "permanent": false
-    }
+    { "source": "/", "destination": "/prospects", "permanent": false }
   ],
   "rewrites": [
-    {
-      "source": "/health",
-      "destination": "/api/dashboard?__path=/health"
-    },
-    {
-      "source": "/login",
-      "destination": "/api/dashboard?__path=/login"
-    },
-    {
-      "source": "/prospects",
-      "destination": "/api/dashboard?__path=/prospects"
-    },
-    {
-      "source": "/tenders",
-      "destination": "/api/tenders"
-    },
-    {
-      "source": "/api/login",
-      "destination": "/api/dashboard?__path=/api/login"
-    },
-    {
-      "source": "/api/logout",
-      "destination": "/api/dashboard?__path=/api/logout"
-    },
-    {
-      "source": "/api/session",
-      "destination": "/api/dashboard?__path=/api/session"
-    },
-    {
-      "source": "/api/prospects",
-      "destination": "/api/dashboard?__path=/api/prospects"
-    },
-    {
-      "source": "/api/prospect-runs",
-      "destination": "/api/dashboard?__path=/api/prospect-runs"
-    },
-    {
-      "source": "/api/prospects/:path*",
-      "destination": "/api/dashboard?__path=/api/prospects/:path*"
-    }
+    { "source": "/health", "destination": "/api/dashboard?__path=/health" },
+    { "source": "/login", "destination": "/api/dashboard?__path=/login" },
+    { "source": "/prospects", "destination": "/api/dashboard?__path=/prospects" },
+    { "source": "/portfolio", "destination": "/api/dashboard?__path=/portfolio" },
+    { "source": "/tenders", "destination": "/api/tenders" },
+    { "source": "/api/login", "destination": "/api/dashboard?__path=/api/login" },
+    { "source": "/api/logout", "destination": "/api/dashboard?__path=/api/logout" },
+    { "source": "/api/session", "destination": "/api/dashboard?__path=/api/session" },
+    { "source": "/api/portfolio-catalog", "destination": "/api/dashboard?__path=/api/portfolio-catalog" },
+    { "source": "/api/prospects", "destination": "/api/dashboard?__path=/api/prospects" },
+    { "source": "/api/prospect-runs", "destination": "/api/dashboard?__path=/api/prospect-runs" },
+    { "source": "/api/prospects/:path*", "destination": "/api/dashboard?__path=/api/prospects/:path*" }
   ]
 }
