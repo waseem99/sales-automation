@@ -50,12 +50,13 @@ export function getTeamMembers(existingOwners: string[] = []): TeamMemberOption[
 
 export function getPortfolioLibraryUrl(): string | undefined {
   const value = process.env.PORTFOLIO_LIBRARY_URL?.trim();
-  if (!value) return undefined;
+  if (!value) return '/portfolio';
+  if (value.startsWith('/')) return value;
   try {
     const parsed = new URL(value);
-    return ['http:', 'https:'].includes(parsed.protocol) ? parsed.toString() : undefined;
+    return ['http:', 'https:'].includes(parsed.protocol) ? parsed.toString() : '/portfolio';
   } catch {
-    return undefined;
+    return '/portfolio';
   }
 }
 
