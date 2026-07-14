@@ -30,6 +30,8 @@ const dashboardAccountSpecs: DashboardAccountSpec[] = [
   { identifier: 'moiz.khalid@codistan.org', displayName: 'Moiz Khalid', passwordEnvironmentName: 'MOIZ_DASHBOARD_PASSWORD' },
   { identifier: 'subainaaamir@codistan.org', displayName: 'Subaina Aamir', passwordEnvironmentName: 'SUBAINA_DASHBOARD_PASSWORD' },
   { identifier: 'danishkhalid@codistan.org', displayName: 'Danish Khalid', passwordEnvironmentName: 'DANISH_DASHBOARD_PASSWORD' },
+  { identifier: 'hibasohail@codistan.org', displayName: 'Hiba Sohail', passwordEnvironmentName: 'HIBA_DASHBOARD_PASSWORD' },
+  { identifier: 'bilalahmed@codistan.org', displayName: 'Bilal Ahmed', passwordEnvironmentName: 'BILAL_DASHBOARD_PASSWORD' },
 ];
 
 export default {
@@ -54,6 +56,8 @@ export default {
           moizAccountConfigured: Boolean(process.env.MOIZ_DASHBOARD_PASSWORD?.trim()),
           subainaAccountConfigured: Boolean(process.env.SUBAINA_DASHBOARD_PASSWORD?.trim()),
           danishAccountConfigured: Boolean(process.env.DANISH_DASHBOARD_PASSWORD?.trim()),
+          hibaAccountConfigured: Boolean(process.env.HIBA_DASHBOARD_PASSWORD?.trim()),
+          bilalAccountConfigured: Boolean(process.env.BILAL_DASHBOARD_PASSWORD?.trim()),
           configuredTeamAccountCount: configuredAccounts.length,
           sessionSecretConfigured: Boolean(process.env.SESSION_SECRET?.trim()),
           deploymentCommit: process.env.VERCEL_GIT_COMMIT_SHA ?? null,
@@ -239,6 +243,6 @@ function asObject(value: unknown): Record<string, unknown> { return value&&typeo
 function securityHeaders(): Record<string,string> { return {'x-content-type-options':'nosniff','x-frame-options':'DENY','referrer-policy':'same-origin','content-security-policy':"default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'"}; }
 function html(body: string,status=200): Response { return new Response(body,{status,headers:{...securityHeaders(),'content-type':'text/html; charset=utf-8','cache-control':'no-store'}}); }
 function json(value: unknown,status=200): Response { return new Response(JSON.stringify(value),{status,headers:{...securityHeaders(),'content-type':'application/json; charset=utf-8','cache-control':'no-store'}}); }
-function runtimeErrorResponse(request: Request,phase: string,message: string): Response { const acceptsHtml=request.headers.get('accept')?.includes('text/html')??false; if(!acceptsHtml)return json({error:'Application runtime failed.',phase,detail:message},500); return html(`<!doctype html><html><body style="font-family:system-ui;background:#f8fafc;padding:40px"><main style="max-width:760px;margin:auto;background:#fff;padding:28px;border-radius:16px"><h1>Prospect Desk could not start</h1><p>Failure during <strong>${escapeHtml(phase)}</strong>.</p><code>${escapeHtml(message)}</code></main></body></html>`,500); }
+function runtimeErrorResponse(request: Request,phase:string,message:string): Response { const acceptsHtml=request.headers.get('accept')?.includes('text/html')??false; if(!acceptsHtml)return json({error:'Application runtime failed.',phase,detail:message},500); return html(`<!doctype html><html><body style="font-family:system-ui;background:#f8fafc;padding:40px"><main style="max-width:760px;margin:auto;background:#fff;padding:28px;border-radius:16px"><h1>Prospect Desk could not start</h1><p>Failure during <strong>${escapeHtml(phase)}</strong>.</p><code>${escapeHtml(message)}</code></main></body></html>`,500); }
 function normalizeError(error: unknown): {message:string;stack?:string} { return error instanceof Error?{message:error.message,stack:error.stack}:{message:String(error)}; }
 function escapeHtml(value: string): string { return value.replace(/[&<>"']/g,(character)=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'})[character]??character); }

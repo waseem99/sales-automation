@@ -28,7 +28,20 @@ const identityDirectory: Record<string, Omit<DashboardAccessScope, 'identifier'>
     displayName: 'Talha Bashir',
     scopeKind: 'team',
     scopeLabel: 'Talha team leads',
-    visibleOwnerTokens: ['talha.bashir@codistan.org', 'talha bashir', 'talha', 'danishkhalid@codistan.org', 'danish khalid', 'danish', 'hiba', 'bilal'],
+    visibleOwnerTokens: [
+      'talha.bashir@codistan.org',
+      'talha bashir',
+      'talha',
+      'danishkhalid@codistan.org',
+      'danish khalid',
+      'danish',
+      'hibasohail@codistan.org',
+      'hiba sohail',
+      'hiba',
+      'bilalahmed@codistan.org',
+      'bilal ahmed',
+      'bilal',
+    ],
     canRunGlobalOperations: false,
     canAssignOwners: true,
   },
@@ -36,6 +49,8 @@ const identityDirectory: Record<string, Omit<DashboardAccessScope, 'identifier'>
   'moiz.khalid@codistan.org': ownScope('Moiz Khalid', ['moiz.khalid@codistan.org', 'moiz khalid', 'moiz']),
   'subainaaamir@codistan.org': ownScope('Subaina Aamir', ['subainaaamir@codistan.org', 'subaina aamir', 'subaina']),
   'danishkhalid@codistan.org': ownScope('Danish Khalid', ['danishkhalid@codistan.org', 'danish khalid', 'danish']),
+  'hibasohail@codistan.org': ownScope('Hiba Sohail', ['hibasohail@codistan.org', 'hiba sohail', 'hiba']),
+  'bilalahmed@codistan.org': ownScope('Bilal Ahmed', ['bilalahmed@codistan.org', 'bilal ahmed', 'bilal']),
 };
 
 export function resolveDashboardAccess(identifier: string, displayName?: string): DashboardAccessScope {
