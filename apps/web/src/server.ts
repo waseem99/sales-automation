@@ -16,12 +16,13 @@ export interface SalesAutomationHttpResponse {
  *
  * The production application is the Prospect Desk. Legacy opportunity and
  * ingestion routes are intentionally not exposed by Vercel. This small handler
- * remains temporarily so stale bookmarks receive a deterministic response
- * while the rest of the application no longer depends on the old dashboard,
- * auth, controller, or ingestion packages.
+ * remains temporarily so stale internal calls receive a deterministic response
+ * while the application no longer depends on the old dashboard, auth,
+ * controller, or worker packages.
  */
 export function handleSalesAutomationRequest(
   request: SalesAutomationHttpRequest,
+  _retiredContext?: unknown,
 ): SalesAutomationHttpResponse {
   return {
     status: 410,
