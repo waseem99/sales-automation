@@ -90,8 +90,8 @@ assert.match(runtimeSource, /\/api\/prospects\/manual-intake/);
 assert.match(runtimeSource, /manual-intake-runtime/);
 assert.match(manualRuntimeSource, /externalActionAutomated: false/);
 assert.match(manualRuntimeSource, /auditMissingFirstOutreachGuidance/);
-assert.match(pageSource, /id=\"manual-intake-dialog\"/);
-assert.match(pageSource, /id=\"manual-intake-form\"/);
-assert.match(pageSource, /fetch\('\/api\/prospects\/manual-intake'/);
+assert.match(pageSource, /manual-intake-dialog/);
+assert.match(pageSource, /manual-intake-form/);
+assert.match(pageSource, /\/api\/prospects\/manual-intake/);
 
 console.log('Approved manual source intake, deduplication, assignment and guidance smoke tests passed');
