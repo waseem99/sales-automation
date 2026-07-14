@@ -2,13 +2,20 @@ import { evaluateLead, type LeadEvaluation } from '@sales-automation/evaluator';
 import {
   parseLinkedInSignal,
   type ParseLinkedInSignalInput,
+  parseManualOpportunity,
+  type ParseManualOpportunityInput,
   parseUpworkEmail,
   type ParseUpworkEmailInput,
 } from '@sales-automation/parsers';
 import type { Lead, PortfolioItem } from '@sales-automation/shared';
 import type { LeadRepository, StoredLeadRecord } from '@sales-automation/storage';
 
-export type IngestionSourceKind = 'upwork_email' | 'linkedin_signal' | 'manual_leads' | 'source_batch';
+export type IngestionSourceKind =
+  | 'upwork_email'
+  | 'linkedin_signal'
+  | 'manual_opportunity'
+  | 'manual_leads'
+  | 'source_batch';
 
 export interface IngestLeadsInput {
   sourceKind: IngestionSourceKind;
@@ -26,6 +33,10 @@ export interface IngestUpworkEmailInput extends Omit<IngestLeadsInput, 'sourceKi
 
 export interface IngestLinkedInSignalInput extends Omit<IngestLeadsInput, 'sourceKind' | 'leads'> {
   signal: ParseLinkedInSignalInput;
+}
+
+export interface IngestManualOpportunityInput extends Omit<IngestLeadsInput, 'sourceKind' | 'leads'> {
+  opportunity: ParseManualOpportunityInput;
 }
 
 export interface IngestSourceBatchInput extends Omit<IngestLeadsInput, 'sourceKind' | 'leads'> {
@@ -85,7 +96,12 @@ export function ingestLeads(input: IngestLeadsInput): IngestionResult {
       includePrivatePortfolio: input.includePrivatePortfolio,
       generatedAt: input.generatedAt,
     });
-    const record = input.repository.saveEvaluation(evaluation, actor);
+    input.repository.saveEvaluation(evaluation, actor);
+    const record = input.repository.addNote(
+      lead.id,
+      `ingestion::${input.sourceKind}::${lead.discoverySource ?? lead.source}::${lead.sourceUrl ?? lead.id}`,
+      actor,
+    );
     existingIndex.set(dedupeKey, record);
     existingIndex.set(getLeadDedupeKey(record.lead), record);
 
@@ -126,6 +142,19 @@ export function ingestLinkedInSignal(input: IngestLinkedInSignalInput): Ingestio
   const lead = parseLinkedInSignal(input.signal);
   return ingestLeads({
     sourceKind: 'linkedin_signal',
+    leads: [lead],
+    repository: input.repository,
+    portfolioItems: input.portfolioItems,
+    actor: input.actor,
+    generatedAt: input.generatedAt,
+    includePrivatePortfolio: input.includePrivatePortfolio,
+  });
+}
+
+export function ingestManualOpportunity(input: IngestManualOpportunityInput): IngestionResult {
+  const lead = parseManualOpportunity(input.opportunity);
+  return ingestLeads({
+    sourceKind: 'manual_opportunity',
     leads: [lead],
     repository: input.repository,
     portfolioItems: input.portfolioItems,
@@ -187,6 +216,15 @@ function buildExistingLeadIndex(records: StoredLeadRecord[]): Map<string, Stored
   return index;
 }
 
-function normalizeUrl(url: string): string {
-  return url.trim().replace(/\/$/, '').toLowerCase();
+function normalizeUrl(value: string): string {
+  try {
+    const url = new URL(value.trim());
+    url.hash = '';
+    for (const key of [...url.searchParams.keys()]) {
+      if (key.toLowerCase().startsWith('utm_')) url.searchParams.delete(key);
+    }
+    return url.toString().replace(/\/$/, '').toLowerCase();
+  } catch {
+    return value.trim().replace(/\/$/, '').toLowerCase();
+  }
 }
