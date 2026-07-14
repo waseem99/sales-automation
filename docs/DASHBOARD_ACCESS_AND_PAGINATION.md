@@ -18,7 +18,7 @@ The Prospect Desk uses identity-based lead visibility and server-side Neon queri
 | Hiba Sohail (`hibasohail@codistan.org`) | Own assigned leads | Not allowed |
 | Bilal Ahmed (`bilalahmed@codistan.org`) | Own assigned leads | Not allowed |
 
-Talha continues to see Hiba and Bilal assignments. Hiba and Bilal can sign in after their dashboard password variables are configured in Vercel. Legacy owner values such as `hiba` and `bilal` remain recognized and are mapped to their approved Codistan email accounts.
+Talha continues to see Hiba and Bilal assignments. Hiba and Bilal can sign in after their dashboard password variables are configured in Vercel. Legacy owner values such as `hiba` and `bilal` remain recognized for access control, so existing assignments continue working.
 
 ## Global operations
 
