@@ -1,6 +1,17 @@
 import type { StoredLeadRecord } from '@sales-automation/storage';
 import { renderProspectDashboardPage, type ProspectDashboardPageInput } from './prospects-page.js';
 
+export interface ProspectDashboardSummary {
+  total: number;
+  live: number;
+  contacted: number;
+  replied: number;
+  followUpsDue: number;
+  unassigned: number;
+  won: number;
+  feedbackPending: number;
+}
+
 export interface ProspectDashboardPagination {
   records: StoredLeadRecord[];
   page: number;
@@ -11,6 +22,7 @@ export interface ProspectDashboardPagination {
   start: number;
   end: number;
   owners: string[];
+  summary: ProspectDashboardSummary;
   query: {
     search: string;
     status: string;
@@ -39,6 +51,7 @@ export function renderPaginatedProspectDashboardPage(input: PaginatedProspectDas
   let html = renderProspectDashboardPage(input);
   html = repairEmbeddedClientScript(html);
   const { pagination, access } = input;
+  html = applyDashboardSummary(html, pagination.summary);
 
   const topActions = access.canRunGlobalOperations
     ? `<div class="top-actions"><button id="pseb-sync" class="ghost">Sync PSEB collection</button><button id="import-starter" class="ghost">Load verified prospects</button><button id="run-discovery" class="primary">Run discovery now</button></div>`
@@ -77,6 +90,29 @@ export function renderPaginatedProspectDashboardPage(input: PaginatedProspectDas
 
 export function repairEmbeddedClientScript(html: string): string {
   return html.replace("performedBy+'\n'+String", "performedBy+'\\n'+String");
+}
+
+export function applyDashboardSummary(html: string, summary: ProspectDashboardSummary): string {
+  const metrics: Array<[string, number]> = [
+    ['Total prospects', summary.total],
+    ['Live opportunities', summary.live],
+    ['Contacted', summary.contacted],
+    ['Replies', summary.replied],
+    ['Follow-ups due', summary.followUpsDue],
+    ['Unassigned', summary.unassigned],
+    ['Won', summary.won],
+    ['Feedback pending', summary.feedbackPending],
+  ];
+
+  for (const [labelText, value] of metrics) {
+    const pattern = new RegExp(`(<span>${escapeRegExp(labelText)}<\\/span><strong>)[^<]*(<\\/strong>)`);
+    html = html.replace(pattern, `$1${value}$2`);
+  }
+
+  return html.replace(
+    /(<div class="sidebar-card"><span>BD work queue<\/span><strong>)[^<]*(<\/strong><small>)[^<]*(<\/small>)/,
+    `$1${summary.unassigned} unassigned$2${summary.followUpsDue} follow-ups due · ${summary.feedbackPending} feedback pending$3`,
+  );
 }
 
 function renderFilterForm(pagination: ProspectDashboardPagination): string {
@@ -148,6 +184,10 @@ function paginationStyles(): string {
 
 function label(value: string): string {
   return value.replace(/_/g, ' ').replace(/\b\w/g, (letter) => letter.toUpperCase());
+}
+
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
 function escapeHtml(value: string): string {
