@@ -1,7 +1,29 @@
-import type { Lead, OpportunitySignalStatus, PortfolioItem } from '@sales-automation/shared';
+import type {
+  Lead,
+  OpportunitySignalStatus,
+  PortfolioItem,
+  TenderOpportunityType,
+  TenderSector,
+  TenderTriState,
+} from '@sales-automation/shared';
 import type { LeadRepository } from '@sales-automation/storage';
 
 export type ProspectFetch = typeof fetch;
+
+export interface TenderCandidateMetadata {
+  portal: string;
+  reference?: string;
+  sector: TenderSector;
+  opportunityType: TenderOpportunityType;
+  publishedAt?: string;
+  deadline?: string;
+  estimatedValue?: string;
+  submissionMethod?: string;
+  localPresenceRequired?: TenderTriState;
+  consortiumAllowed?: TenderTriState;
+  eligibilitySignals?: string[];
+  riskFlags?: string[];
+}
 
 export interface DiscoveryCandidate {
   sourceName: string;
@@ -22,6 +44,7 @@ export interface DiscoveryCandidate {
   contactFormUrl?: string;
   linkedinUrl?: string;
   evidenceSummary?: string;
+  tender?: TenderCandidateMetadata;
 }
 
 export interface ProspectSourceResult {
@@ -42,6 +65,8 @@ export interface ProspectDiscoveryRun {
   duplicateCount: number;
   autoAssignedCount?: number;
   lookbackHours?: number;
+  tenderCandidateCount?: number;
+  newTenderCount?: number;
   emailStatus: 'sent' | 'skipped' | 'failed';
   emailMessage?: string;
   errors: string[];
@@ -78,6 +103,12 @@ export interface ProspectDiscoveryOptions {
   greenhouseBoards?: string[];
   leverSites?: string[];
   rssFeeds?: string[];
+  tenderSourcesEnabled?: boolean;
+  tenderOnly?: boolean;
+  ppraEnabled?: boolean;
+  canadaBuysEnabled?: boolean;
+  ungmEnabled?: boolean;
+  privateNonprofitTendersEnabled?: boolean;
   digest?: ProspectDigestOptions;
   runStore?: ProspectDiscoveryRunStore;
 }
