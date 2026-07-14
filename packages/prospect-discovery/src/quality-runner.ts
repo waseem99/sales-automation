@@ -1,6 +1,11 @@
 import { evaluateLead } from '@sales-automation/evaluator';
 import type { OpportunitySignalStatus } from '@sales-automation/shared';
 import {
+  buildCampaignSearchQueries,
+  campaignIdsFromEnvironment,
+  resolveDiscoveryCampaigns,
+} from './campaigns.js';
+import {
   candidateToLead,
   classifyServiceCategory,
   rejectStoredEmploymentVacancies,
@@ -22,10 +27,22 @@ export { candidateToLead, classifyServiceCategory, rejectStoredEmploymentVacanci
 export async function runProspectDiscovery(options: ProspectDiscoveryOptions): Promise<ProspectDiscoveryResult> {
   const fetchImpl = options.fetchImpl ?? globalThis.fetch;
   if (!fetchImpl) throw new Error('Global fetch is unavailable. Supply fetchImpl.');
+
+  const configuredCampaignIds = options.campaignIds?.length
+    ? options.campaignIds
+    : campaignIdsFromEnvironment(process.env.PROSPECT_CAMPAIGN_IDS);
+  const campaigns = resolveDiscoveryCampaigns(configuredCampaignIds);
+  const campaignQueries = buildCampaignSearchQueries(campaigns);
+  const searchQueries = options.searchQueries?.length ? options.searchQueries : campaignQueries;
+
   const result = await runProspectDiscoveryBase({
     ...options,
+    searchQueries,
     fetchImpl: createProspectQualityFetch(fetchImpl),
   });
+  result.run.activeCampaignIds = campaigns.map((campaign) => campaign.id);
+  result.run.searchQueryCount = searchQueries.length;
+
   const generatedAt = options.now?.() ?? result.run.completedAt ?? new Date().toISOString();
   let closeabilityRescoredCount = 0;
   for (const record of options.repository.listLeads()) {
