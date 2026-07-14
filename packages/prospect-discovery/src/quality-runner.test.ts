@@ -1,5 +1,7 @@
 import assert from 'node:assert/strict';
-import { filterRssItems } from './quality-runner.js';
+import { sampleLeads, samplePortfolioItems } from '@sales-automation/fixtures';
+import { InMemoryLeadRepository } from '@sales-automation/storage';
+import { filterRssItems, runProspectDiscovery } from './quality-runner.js';
 
 const rss = `<?xml version="1.0"?><rss><channel>
 <item><title>Looking (TV Movie 2016) - IMDb</title><link>https://www.imdb.com/title/tt4552118/</link><description>Cast, plot and release information.</description></item>
@@ -32,4 +34,21 @@ assert.equal(partnership.rejected, 1);
 assert.match(partnership.xml, /credibleagency\.example\/<\/link>/i);
 assert.doesNotMatch(partnership.xml, /how-to-select-a-partner/i);
 
-console.log('RSS automatic prospect quality guard tests passed');
+const existingLead = sampleLeads.find((lead) => lead.id === 'lead-upwork-rag-001');
+assert.ok(existingLead);
+const repository = new InMemoryLeadRepository();
+repository.upsertLead(existingLead, 'test');
+const beforeCount = repository.listLeads().length;
+const result = await runProspectDiscovery({
+  repository,
+  portfolioItems: samplePortfolioItems,
+  bingRssEnabled: false,
+  remoteOkEnabled: false,
+  now: () => '2026-07-08T18:30:00.000Z',
+  fetchImpl: globalThis.fetch,
+});
+assert.equal(result.run.closeabilityRescoredCount, 1);
+assert.equal(repository.listLeads().length, beforeCount, 'Rescoring must not create duplicates');
+assert.ok(repository.getLead(existingLead.id)?.latestEvaluation?.closeability);
+
+console.log('RSS quality guard and duplicate-free closeability rescoring tests passed');
