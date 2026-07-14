@@ -28,8 +28,9 @@ export async function runProspectDiscovery(options: ProspectDiscoveryOptions): P
 }
 
 export function createProspectQualityFetch(fetchImpl: ProspectFetch): ProspectFetch {
-  return async (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
-    const response = await fetchImpl(input, init);
+  const guardedFetch: ProspectFetch = async (...args: Parameters<ProspectFetch>): Promise<Response> => {
+    const [input] = args;
+    const response = await fetchImpl(...args);
     const requestUrl = requestUrlString(input);
     if (!shouldInspectResponse(requestUrl, response)) return response;
 
@@ -46,6 +47,7 @@ export function createProspectQualityFetch(fetchImpl: ProspectFetch): ProspectFe
       headers,
     });
   };
+  return guardedFetch;
 }
 
 export function filterRssItems(xml: string, requestUrl: string): { xml: string; checked: number; rejected: number } {
@@ -101,7 +103,7 @@ function searchQuery(requestUrl: string): string {
   try { return new URL(requestUrl).searchParams.get('q') ?? ''; } catch { return ''; }
 }
 
-function requestUrlString(input: RequestInfo | URL): string {
+function requestUrlString(input: Parameters<ProspectFetch>[0]): string {
   if (typeof input === 'string') return input;
   if (input instanceof URL) return input.toString();
   return input.url;
