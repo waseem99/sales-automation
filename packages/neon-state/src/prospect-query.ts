@@ -20,6 +20,7 @@ export interface ProspectPageQuery {
   service?: string;
   owner?: string;
   feedback?: string;
+  followUp?: string;
 }
 
 export interface ProspectDashboardSummary {
@@ -82,6 +83,7 @@ export function normalizeProspectPageQuery(query: ProspectPageQuery): {
       service: clean(query.service),
       owner: clean(query.owner),
       feedback: clean(query.feedback),
+      followUp: normalizeFollowUpFilter(query.followUp),
     },
   };
 }
@@ -149,6 +151,29 @@ export async function loadNeonProspectPage(
         AND (${filters.service} = '' OR COALESCE(record->'lead'->>'serviceCategory', '') = ${filters.service})
         AND (${filters.owner} = '' OR (${filters.owner} = 'unassigned' AND COALESCE(record->'lead'->>'owner', '') = '') OR LOWER(COALESCE(record->'lead'->>'owner', '')) = LOWER(${filters.owner}))
         AND (${filters.feedback} = '' OR COALESCE(record->'lead'->'feedback'->>'status', 'pending') = ${filters.feedback})
+        AND (
+          ${filters.followUp} = ''
+          OR (${filters.followUp} = 'due'
+            AND follow_up_at(record) <= NOW()
+            AND actionable_follow_up(record))
+          OR (${filters.followUp} = 'overdue'
+            AND follow_up_at(record) < DATE_TRUNC('day', NOW())
+            AND actionable_follow_up(record))
+          OR (${filters.followUp} = 'today'
+            AND follow_up_at(record) >= DATE_TRUNC('day', NOW())
+            AND follow_up_at(record) < DATE_TRUNC('day', NOW()) + INTERVAL '1 day'
+            AND actionable_follow_up(record))
+          OR (${filters.followUp} = 'next_7_days'
+            AND follow_up_at(record) > NOW()
+            AND follow_up_at(record) <= NOW() + INTERVAL '7 days'
+            AND actionable_follow_up(record))
+          OR (${filters.followUp} = 'scheduled'
+            AND follow_up_at(record) IS NOT NULL
+            AND actionable_follow_up(record))
+          OR (${filters.followUp} = 'not_scheduled'
+            AND follow_up_at(record) IS NULL
+            AND actionable_follow_up(record))
+        )
     `,
     sql`
       SELECT DISTINCT NULLIF(record->'lead'->>'owner', '') AS owner
@@ -184,7 +209,31 @@ export async function loadNeonProspectPage(
       AND (${filters.service} = '' OR COALESCE(record->'lead'->>'serviceCategory', '') = ${filters.service})
       AND (${filters.owner} = '' OR (${filters.owner} = 'unassigned' AND COALESCE(record->'lead'->>'owner', '') = '') OR LOWER(COALESCE(record->'lead'->>'owner', '')) = LOWER(${filters.owner}))
       AND (${filters.feedback} = '' OR COALESCE(record->'lead'->'feedback'->>'status', 'pending') = ${filters.feedback})
+      AND (
+        ${filters.followUp} = ''
+        OR (${filters.followUp} = 'due'
+          AND follow_up_at(record) <= NOW()
+          AND actionable_follow_up(record))
+        OR (${filters.followUp} = 'overdue'
+          AND follow_up_at(record) < DATE_TRUNC('day', NOW())
+          AND actionable_follow_up(record))
+        OR (${filters.followUp} = 'today'
+          AND follow_up_at(record) >= DATE_TRUNC('day', NOW())
+          AND follow_up_at(record) < DATE_TRUNC('day', NOW()) + INTERVAL '1 day'
+          AND actionable_follow_up(record))
+        OR (${filters.followUp} = 'next_7_days'
+          AND follow_up_at(record) > NOW()
+          AND follow_up_at(record) <= NOW() + INTERVAL '7 days'
+          AND actionable_follow_up(record))
+        OR (${filters.followUp} = 'scheduled'
+          AND follow_up_at(record) IS NOT NULL
+          AND actionable_follow_up(record))
+        OR (${filters.followUp} = 'not_scheduled'
+          AND follow_up_at(record) IS NULL
+          AND actionable_follow_up(record))
+      )
     ORDER BY
+      CASE WHEN ${filters.followUp} IN ('due','overdue','today','next_7_days','scheduled') THEN follow_up_at(record) END ASC NULLS LAST,
       CASE WHEN COALESCE(record->'lead'->>'rank', '') ~ '^\\d+$' THEN (record->'lead'->>'rank')::int ELSE 999999 END ASC,
       COALESCE(record->'lead'->>'updatedAt', record->'lead'->>'createdAt', '') DESC
     LIMIT ${normalized.pageSize}
@@ -281,6 +330,13 @@ function summaryFromRow(row: SummaryRow | undefined): ProspectDashboardSummary {
 
 function normalizeTokens(tokens: string[]): string[] {
   return [...new Set(tokens.map((token) => token.trim().toLowerCase()).filter(Boolean))];
+}
+
+function normalizeFollowUpFilter(value: unknown): string {
+  const normalized = clean(value);
+  return ['due', 'overdue', 'today', 'next_7_days', 'scheduled', 'not_scheduled'].includes(normalized)
+    ? normalized
+    : '';
 }
 
 function clean(value: unknown): string {
