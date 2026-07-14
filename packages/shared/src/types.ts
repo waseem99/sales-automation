@@ -129,6 +129,39 @@ export interface LeadScore {
   redFlags: RedFlag[];
 }
 
+export type TenderSector = 'public' | 'private' | 'nonprofit' | 'development';
+export type TenderOpportunityType =
+  | 'rfp'
+  | 'rfq'
+  | 'eoi'
+  | 'itt'
+  | 'prequalification'
+  | 'rfi'
+  | 'grant_call'
+  | 'implementing_partner'
+  | 'other';
+export type TenderRecommendation = 'priority_bid' | 'review_now' | 'partner_or_consortium' | 'reject';
+export type TenderTriState = 'yes' | 'no' | 'unclear';
+
+export interface TenderMetadata {
+  portal: string;
+  reference?: string;
+  sector: TenderSector;
+  opportunityType: TenderOpportunityType;
+  publishedAt?: string;
+  deadline?: string;
+  daysRemaining?: number;
+  estimatedValue?: string;
+  submissionMethod?: string;
+  localPresenceRequired: TenderTriState;
+  consortiumAllowed: TenderTriState;
+  closeabilityScore: number;
+  recommendation: TenderRecommendation;
+  recommendationReason: string;
+  eligibilitySignals: string[];
+  riskFlags: string[];
+}
+
 export interface Lead {
   id: string;
   source: LeadSource;
@@ -164,6 +197,7 @@ export interface Lead {
   postedAt?: string;
   capturedAt: string;
   freshnessMinutes?: number;
+  tender?: TenderMetadata;
   rawPayload?: unknown;
   score?: LeadScore;
   recommendedProfile?: CodistanProfile;
