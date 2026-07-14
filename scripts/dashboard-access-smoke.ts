@@ -164,12 +164,15 @@ async function main(): Promise<void> {
     rewrites?: Array<{ source: string; destination: string }>;
   };
   assert.equal(config.functions?.['api/dashboard.ts']?.maxDuration, 300);
-  for (const source of ['/login', '/prospects', '/api/login', '/api/prospects', '/api/opportunities/:path*']) {
+  for (const source of ['/login', '/prospects', '/api/login', '/api/prospects', '/api/prospects/:path*']) {
     const rewrite = config.rewrites?.find((item) => item.source === source);
     assert.ok(rewrite?.destination.startsWith('/api/dashboard?__path='), `${source} must use the scoped dashboard runtime.`);
   }
+  assert.ok(!config.rewrites?.some((item) => item.source.startsWith('/api/opportunities')));
+  assert.ok(!config.rewrites?.some((item) => item.source.startsWith('/api/ingest')));
+  assert.ok(!config.rewrites?.some((item) => item.source === '/lead-desk'));
 
-  console.log('Scoped dashboard access, filter persistence, guidance action, assignment backfill and Vercel routing smoke tests passed');
+  console.log('Scoped dashboard access, filter persistence, guidance action, assignment backfill and single-runtime routing smoke tests passed');
 }
 
 function buildLead(id: string, source: Lead['source'], leadType: Lead['leadType'], title: string): Lead {
