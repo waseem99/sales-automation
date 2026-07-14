@@ -23,6 +23,7 @@ The following are the authoritative product capabilities and were retained:
 
 - Duplicate `api/index.ts` Vercel runtime.
 - Retired `/lead-desk` and legacy opportunity/ingestion/dev rewrites.
+- Final local Lead Desk compatibility handler and fallback delegation.
 - Old Local MVP dashboard renderer and tests.
 - Alternate auth, access-control, API and dashboard packages.
 - Local Gmail OAuth/worker and Slack-notification runtime.
@@ -46,7 +47,6 @@ The following are the authoritative product capabilities and were retained:
 4. Source health and delivery observability should become first-class dashboard data.
 5. GitHub Actions intermittently fails before checkout; runner/account reliability remains unresolved.
 6. Large server-rendered page files can be split after functional priorities stabilize.
-7. The compatibility stub in `apps/web/src/server.ts` can be removed once the final internal call site is refactored; no production route exposes it.
 
 ## Developer decision rules
 
