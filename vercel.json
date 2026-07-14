@@ -11,6 +11,9 @@
     "api/dashboard.ts": {
       "maxDuration": 300
     },
+    "api/tenders.ts": {
+      "maxDuration": 300
+    },
     "api/tender-discovery.ts": {
       "maxDuration": 300
     },
@@ -40,11 +43,6 @@
       "source": "/",
       "destination": "/prospects",
       "permanent": false
-    },
-    {
-      "source": "/tenders",
-      "destination": "/prospects?search=public_procurement",
-      "permanent": false
     }
   ],
   "rewrites": [
@@ -59,6 +57,10 @@
     {
       "source": "/prospects",
       "destination": "/api/dashboard?__path=/prospects"
+    },
+    {
+      "source": "/tenders",
+      "destination": "/api/tenders"
     },
     {
       "source": "/lead-desk",
