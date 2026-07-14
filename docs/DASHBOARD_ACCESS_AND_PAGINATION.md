@@ -15,8 +15,10 @@ The Prospect Desk uses identity-based lead visibility and server-side Neon queri
 | Moiz Khalid | Own assigned leads | Not allowed |
 | Subaina Aamir | Own assigned leads | Not allowed |
 | Danish Khalid | Own assigned leads | Not allowed |
+| Hiba Sohail (`hibasohail@codistan.org`) | Own assigned leads | Not allowed |
+| Bilal Ahmed (`bilalahmed@codistan.org`) | Own assigned leads | Not allowed |
 
-Hiba and Bilal remain available as assignment values under Talha's team. They do not have login accounts until real email addresses and account credentials are approved and configured.
+Talha continues to see Hiba and Bilal assignments. Hiba and Bilal can sign in after their dashboard password variables are configured in Vercel. Legacy owner values such as `hiba` and `bilal` remain recognized and are mapped to their approved Codistan email accounts.
 
 ## Global operations
 
@@ -67,7 +69,7 @@ After the deployment, Admin or Waseem should run **Sync PSEB collection** once f
 
 ## Environment variables
 
-No new variables are introduced. The implementation uses the existing values:
+The dashboard account variables are:
 
 - `ADMIN_PASSWORD`
 - `WASEEM_DASHBOARD_PASSWORD`
@@ -76,15 +78,19 @@ No new variables are introduced. The implementation uses the existing values:
 - `MOIZ_DASHBOARD_PASSWORD`
 - `SUBAINA_DASHBOARD_PASSWORD`
 - `DANISH_DASHBOARD_PASSWORD`
+- `HIBA_DASHBOARD_PASSWORD`
+- `BILAL_DASHBOARD_PASSWORD`
 - `SESSION_SECRET`
 - `DATABASE_URL`
+
+Add dashboard password variables to the same Vercel environments used by the team, then redeploy so the new deployment receives the updated values.
 
 ## Verification checklist
 
 1. Sign in as Admin and confirm all leads and all global buttons are visible.
 2. Sign in as Waseem and confirm the same full scope.
 3. Sign in as Talha and confirm only Talha/Danish/Hiba/Bilal assignments are returned.
-4. Sign in as each individual BD user and confirm only their own assignments are returned.
+4. Sign in as Jawad, Moiz, Subaina, Danish, Hiba and Bilal and confirm each account sees only its own assignments.
 5. Attempt a global route as a non-admin account and confirm `403`.
 6. Confirm page size options 25, 50 and 100 preserve active filters.
 7. Confirm direct access to an out-of-scope lead returns `404`.
