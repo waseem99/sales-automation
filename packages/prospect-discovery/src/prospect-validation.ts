@@ -109,7 +109,6 @@ export function validateAutomaticProspectCandidate(candidate: DiscoveryCandidate
     sourceUrl: candidate.sourceUrl,
     title: candidate.title,
     description: candidate.summary,
-    evidenceSummary: candidate.evidenceSummary,
     opportunityStatus: candidate.opportunityStatus,
     sourceType: candidate.sourceType,
   });
@@ -121,7 +120,6 @@ export function validateStoredAutomaticProspectLead(lead: Lead): ProspectValidat
     sourceUrl: lead.evidenceUrl ?? lead.sourceUrl ?? '',
     title: lead.title,
     description: lead.description,
-    evidenceSummary: lead.evidenceSummary,
     opportunityStatus: lead.opportunityStatus,
     sourceType: automaticSourceType(lead),
   });
@@ -152,7 +150,6 @@ function validateProspectLike(input: {
   sourceUrl: string;
   title: string;
   description: string;
-  evidenceSummary?: string;
   opportunityStatus?: OpportunitySignalStatus;
   sourceType?: string;
 }): ProspectValidationResult {
@@ -166,7 +163,8 @@ function validateProspectLike(input: {
     return rejected('blocked_reference_or_content_host', `${host} is a reference, entertainment, social-content or developer-content host rather than a buyer source.`, host);
   }
 
-  const text = `${input.title} ${input.description} ${input.evidenceSummary ?? ''}`.replace(/\s+/g, ' ').trim();
+  // Deliberately exclude discovery/evidence metadata here: it contains the search query and must never create buyer intent.
+  const text = `${input.title} ${input.description}`.replace(/\s+/g, ' ').trim();
   const explicitProjectIntent = hasResultLevelProjectOpportunityIntent(text);
   const referenceContent = REFERENCE_OR_ENTERTAINMENT_PATTERNS.some((pattern) => pattern.test(text));
   const editorialContent = EDITORIAL_OR_LEARNING_PATTERNS.some((pattern) => pattern.test(text));
