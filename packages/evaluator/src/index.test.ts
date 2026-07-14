@@ -47,12 +47,21 @@ assert.equal(lowBudgetEvaluation.closeability.estimatedValueBand, 'under_5k');
 const founderLead = sampleLeads.find((lead) => lead.id === 'lead-linkedin-ai-001');
 assert.ok(founderLead, 'Founder sample lead should exist');
 const founderEvaluation = evaluateLead({
-  lead: { ...founderLead, contactEmail: 'founder@examplecompany.co', companyWebsite: 'https://examplecompany.co' },
+  lead: {
+    ...founderLead,
+    companyName: 'Example Operations Company',
+    companyWebsite: 'https://examplecompany.co',
+    contactEmail: 'founder@examplecompany.co',
+    description: 'The founder is seeking an external implementation partner to automate customer support and internal operations with AI agents. The company wants to start immediately.',
+    opportunityStatus: 'live_opportunity',
+  },
   portfolioItems: samplePortfolioItems,
   generatedAt: '2026-07-08T18:30:00.000Z',
 });
+assert.equal(founderEvaluation.closeability.breakdown.activeRequirement, 20);
 assert.equal(founderEvaluation.closeability.breakdown.buyerIdentified, 10);
 assert.equal(founderEvaluation.closeability.breakdown.verifiedContactRoute, 10);
-assert.ok(founderEvaluation.closeability.total > ragEvaluation.closeability.total);
+assert.ok(founderEvaluation.closeability.total >= 85);
+assert.equal(founderEvaluation.closeability.band, 'priority_a');
 
 console.log('Evaluator relevance and closeability integration tests passed.');
