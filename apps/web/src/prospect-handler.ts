@@ -15,7 +15,6 @@ import {
   auditMissingFirstOutreachGuidance,
 } from './engagement-automation.js';
 import { renderLoginPage, renderProspectDashboardPage } from './prospects-page.js';
-import { handleSalesAutomationRequest } from './server.js';
 
 const SESSION_COOKIE = 'codistan_admin_session';
 const SESSION_LIFETIME_SECONDS = 12 * 60 * 60;
@@ -273,22 +272,6 @@ export async function handleProspectDashboardRequest(
       const nextStatus = activityStatus(type);
       if (nextStatus && record.lead.pipelineStatus !== nextStatus) record = context.repository.updateStatus(leadId, nextStatus, actor);
       return json(serializeProspect(record));
-    }
-
-    if (pathname === '/lead-desk' || pathname.startsWith('/api/')) {
-      const delegated = handleSalesAutomationRequest({
-        method,
-        path: pathname === '/lead-desk' ? `/${url.search}` : request.url,
-        body: request.body,
-        headers: request.headers,
-      }, {
-        repository: context.repository,
-        portfolioItems: context.portfolioItems,
-        actor,
-        role: 'admin',
-        now: context.now,
-      });
-      return delegated;
     }
 
     return json({ error: 'Not found.' }, 404);
