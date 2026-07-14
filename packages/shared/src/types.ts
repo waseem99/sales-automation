@@ -142,6 +142,37 @@ export type TenderOpportunityType =
   | 'other';
 export type TenderRecommendation = 'priority_bid' | 'review_now' | 'partner_or_consortium' | 'reject';
 export type TenderTriState = 'yes' | 'no' | 'unclear';
+export type TenderDocumentFormat = 'html' | 'pdf_text' | 'notice_summary' | 'unavailable';
+export type TenderAmendmentStatus = 'new' | 'unchanged' | 'changed' | 'unavailable';
+
+export interface TenderSourceCitation {
+  label: string;
+  url: string;
+  excerpt?: string;
+}
+
+export interface TenderDocumentIntelligence {
+  checkedAt: string;
+  format: TenderDocumentFormat;
+  contentHash?: string;
+  documentUrls: string[];
+  citations: TenderSourceCitation[];
+  scopeSummary?: string;
+  deliverables: string[];
+  eligibilityRequirements: string[];
+  evaluationCriteria: string[];
+  requiredTeamRoles: string[];
+  requiredCvCount?: number;
+  bidSecurity?: string;
+  clarificationDeadline?: string;
+  submissionMethod?: string;
+  localPresenceEvidence?: string;
+  consortiumEvidence?: string;
+  amendmentStatus: TenderAmendmentStatus;
+  amendmentSummary?: string;
+  missingInformation: string[];
+  bidNoBidBrief: string;
+}
 
 export interface TenderMetadata {
   portal: string;
@@ -160,6 +191,7 @@ export interface TenderMetadata {
   recommendationReason: string;
   eligibilitySignals: string[];
   riskFlags: string[];
+  documentIntelligence?: TenderDocumentIntelligence;
 }
 
 export interface Lead {
