@@ -40,6 +40,8 @@ export interface ProspectDiscoveryRun {
   enrichedCount: number;
   newLeadCount: number;
   duplicateCount: number;
+  autoAssignedCount?: number;
+  lookbackHours?: number;
   emailStatus: 'sent' | 'skipped' | 'failed';
   emailMessage?: string;
   errors: string[];
@@ -69,6 +71,7 @@ export interface ProspectDiscoveryOptions {
   now?: () => string;
   maxCandidates?: number;
   maxSearchQueries?: number;
+  lookbackHours?: number;
   searchQueries?: string[];
   remoteOkEnabled?: boolean;
   bingRssEnabled?: boolean;

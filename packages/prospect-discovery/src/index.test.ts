@@ -1,6 +1,10 @@
 import assert from 'node:assert/strict';
 import { samplePortfolioItems } from '@sales-automation/fixtures';
 import { InMemoryLeadRepository } from '@sales-automation/storage';
+import {
+  recommendProspectApproach,
+  recommendProspectAssignment,
+} from './assignment.js';
 import { renderProspectCsv } from './digest.js';
 import { parseRssItems } from './sources.js';
 import { candidateToLead, runProspectDiscovery } from './runner.js';
@@ -71,6 +75,8 @@ assert.equal(classifiedLead.serviceCategory, 'cybersecurity_compliance');
 assert.equal(classifiedLead.serviceOffer, 'Cybersecurity, cloud security and compliance services');
 assert.ok(classifiedLead.materialsToShare?.includes('Cytas'));
 assert.ok(classifiedLead.reachMethod?.includes('Remote-first'));
+assert.equal(recommendProspectAssignment(classifiedLead).owner, 'jawad.jutt@codistan.org');
+assert.equal(recommendProspectApproach(classifiedLead).channel, 'procurement_portal');
 
 const remoteOkPayload = [
   { legal: 'metadata' },
@@ -83,6 +89,16 @@ const remoteOkPayload = [
     tags: ['ai', 'rag', 'python'],
     url: 'https://remoteok.com/remote-jobs/123-example-ai',
     date: now,
+  },
+  {
+    id: 'job-stale',
+    position: 'Old AI Automation Contractor',
+    company: 'Old Example',
+    location: 'United States',
+    description: '<p>Old AI automation contractor requirement.</p>',
+    tags: ['ai', 'automation'],
+    url: 'https://remoteok.com/remote-jobs/old-example',
+    date: '2026-07-06T10:00:00.000Z',
   },
 ];
 
@@ -130,9 +146,11 @@ const first = await runProspectDiscovery({
   bingRssEnabled: false,
   remoteOkEnabled: true,
   maxCandidates: 10,
+  lookbackHours: 78,
 });
 
 assert.equal(first.run.newLeadCount, 1);
+assert.equal(first.run.lookbackHours, 78);
 assert.equal(first.run.emailStatus, 'skipped');
 assert.equal(first.newLeads[0]?.companyName, 'Example AI');
 assert.equal(first.newLeads[0]?.companyWebsite, 'https://example-ai.com');
@@ -142,7 +160,9 @@ assert.equal(first.newLeads[0]?.contactEmail, 'partnerships@example-ai.com');
 assert.equal(first.newLeads[0]?.opportunityStatus, 'live_opportunity');
 assert.equal(first.newLeads[0]?.serviceCategory, 'rag_document_intelligence');
 assert.equal(first.newLeads[0]?.serviceOffer, 'AI solutions, RAG, agents and workflow automation');
-assert.ok(first.newLeads[0]?.recommendedNextAction);
+assert.ok(first.newLeads[0]?.owner?.endsWith('@codistan.org'));
+assert.equal(first.newLeads[0]?.reachMethod, 'Email');
+assert.ok(first.newLeads[0]?.recommendedNextAction?.includes('sales@codistan.org'));
 assert.ok(first.newLeads[0]?.draftMessage);
 assert.equal(runStore.listRuns().length, 1);
 
@@ -159,8 +179,9 @@ const second = await runProspectDiscovery({
   bingRssEnabled: false,
   remoteOkEnabled: true,
   maxCandidates: 10,
+  lookbackHours: 78,
 });
 assert.equal(second.run.newLeadCount, 0);
 assert.equal(second.run.duplicateCount, 1);
 
-console.log('prospect-discovery tests passed');
+console.log('prospect-discovery recent-window, assignment and approach tests passed');

@@ -1,3 +1,4 @@
+import { recommendProspectApproach } from '@sales-automation/prospect-discovery';
 import type { StoredLeadRecord } from '@sales-automation/storage';
 import { renderProspectDashboardPage, type ProspectDashboardPageInput } from './prospects-page.js';
 
@@ -52,9 +53,10 @@ export function renderPaginatedProspectDashboardPage(input: PaginatedProspectDas
   html = repairEmbeddedClientScript(html);
   const { pagination, access } = input;
   html = applyDashboardSummary(html, pagination.summary);
+  html = applyApproachColumn(html, input.records, input.selected);
 
   const topActions = access.canRunGlobalOperations
-    ? `<div class="top-actions"><button id="pseb-sync" class="ghost">Sync PSEB collection</button><button id="import-starter" class="ghost">Load verified prospects</button><button id="run-discovery" class="primary">Run discovery now</button></div>`
+    ? `<div class="top-actions"><button id="pseb-sync" class="ghost">Sync PSEB collection</button><button id="import-starter" class="ghost">Load verified prospects</button><button id="run-discovery" class="primary">Refresh last 78 hours</button></div>`
     : '<div class="top-actions"><span class="restricted-note">Global discovery and imports are restricted to Admin and Waseem.</span></div>';
 
   html = html.replace(/<div class="top-actions">[\s\S]*?<\/div><\/header>/, `${topActions}</header>`);
@@ -113,6 +115,52 @@ export function applyDashboardSummary(html: string, summary: ProspectDashboardSu
     /(<div class="sidebar-card"><span>BD work queue<\/span><strong>)[^<]*(<\/strong><small>)[^<]*(<\/small>)/,
     `$1${summary.unassigned} unassigned$2${summary.followUpsDue} follow-ups due · ${summary.feedbackPending} feedback pending$3`,
   );
+}
+
+export function applyApproachColumn(
+  html: string,
+  records: StoredLeadRecord[],
+  selected?: StoredLeadRecord,
+): string {
+  html = html.replace(
+    '<th>Status</th><th>Follow-up</th>',
+    '<th>Status</th><th>Recommended approach</th><th>Follow-up</th>',
+  ).replace('colspan="6"', 'colspan="7"');
+
+  for (const record of records) {
+    const href = `href="/prospects?leadId=${encodeURIComponent(record.lead.id)}"`;
+    const hrefIndex = html.indexOf(href);
+    if (hrefIndex < 0) continue;
+    const rowStart = html.lastIndexOf('<tr class="prospect-row', hrefIndex);
+    const rowEnd = html.indexOf('</tr>', hrefIndex);
+    if (rowStart < 0 || rowEnd < 0) continue;
+    const row = html.slice(rowStart, rowEnd + 5);
+    const lastCell = row.lastIndexOf('<td>');
+    if (lastCell < 0) continue;
+    const approach = recommendProspectApproach(record.lead);
+    const approachCell = `<td class="approach-cell"><strong>${escapeHtml(approach.channelLabel)}</strong><span>${escapeHtml(shorten(approach.nextAction, 118))}</span></td>`;
+    const updatedRow = `${row.slice(0, lastCell)}${approachCell}${row.slice(lastCell)}`;
+    html = `${html.slice(0, rowStart)}${updatedRow}${html.slice(rowEnd + 5)}`;
+  }
+
+  if (selected) {
+    const approach = recommendProspectApproach(selected.lead);
+    html = html.replace(
+      /<p><strong>Recommended contact method:<\/strong>[\s\S]*?<\/p>/,
+      `<p><strong>Recommended contact method:</strong> ${escapeHtml(approach.channelLabel)} — ${escapeHtml(approach.reason)}</p>`,
+    );
+    html = html.replace(
+      /<p><strong>Next action:<\/strong>[\s\S]*?<\/p>/,
+      `<p><strong>Next action:</strong> ${escapeHtml(approach.nextAction)}</p>`,
+    );
+    const cc = [selected.lead.owner, 'waseem@codistan.org'].filter(Boolean).join(', ');
+    html = html.replace(
+      /(<div><span>Reply alerts<\/span><strong>[\s\S]*?<\/strong><\/div>)/,
+      `<div><span>CC on outbound</span><strong>${escapeHtml(cc || 'waseem@codistan.org')}</strong></div>$1`,
+    );
+  }
+
+  return html;
 }
 
 function renderFilterForm(pagination: ProspectDashboardPagination): string {
@@ -177,13 +225,17 @@ document.querySelectorAll('.disabled').forEach(link=>link.addEventListener('clic
 
 function paginationStyles(): string {
   return `
-.access-line{display:flex;align-items:center;gap:9px;margin-bottom:8px;color:#667085;font-size:12px}.scope-badge{display:inline-flex;border-radius:999px;padding:5px 9px;font-weight:800;background:#ecfdf3;color:#027a48}.scope-team{background:#fff7ed;color:#c2410c}.scope-own{background:#eef2ff;color:#4338ca}.restricted-note{max-width:310px;color:#667085;font-size:12px;text-align:right}.server-toolbar{grid-template-columns:minmax(220px,1.5fr) repeat(5,minmax(125px,.55fr)) minmax(100px,.35fr) auto auto;align-items:end}.page-size-control{display:grid;gap:4px;color:#667085;font-size:10px}.page-size-control select{width:100%}.filter-submit{height:42px}.clear-filters{align-self:center;font-size:12px}.pagination-bar{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:14px 18px;border-top:1px solid #eaecf0;color:#667085;font-size:12px}.pagination-bar>div{display:flex;gap:5px;flex-wrap:wrap}.page-link{border:1px solid #d0d5dd;border-radius:8px;padding:6px 9px;color:#344054;background:#fff}.page-link.active{background:#3157d5;border-color:#3157d5;color:#fff}.page-link.disabled{opacity:.45;pointer-events:none}.access-no-assign form[data-endpoint$="/owner"]{display:none}.is-loading .main{opacity:.62;pointer-events:none}.is-loading:after{content:'Loading…';position:fixed;inset:auto 20px 20px auto;background:#111827;color:#fff;padding:10px 14px;border-radius:10px;z-index:9999}
+.access-line{display:flex;align-items:center;gap:9px;margin-bottom:8px;color:#667085;font-size:12px}.scope-badge{display:inline-flex;border-radius:999px;padding:5px 9px;font-weight:800;background:#ecfdf3;color:#027a48}.scope-team{background:#fff7ed;color:#c2410c}.scope-own{background:#eef2ff;color:#4338ca}.restricted-note{max-width:310px;color:#667085;font-size:12px;text-align:right}.server-toolbar{grid-template-columns:minmax(220px,1.5fr) repeat(5,minmax(125px,.55fr)) minmax(100px,.35fr) auto auto;align-items:end}.page-size-control{display:grid;gap:4px;color:#667085;font-size:10px}.page-size-control select{width:100%}.filter-submit{height:42px}.clear-filters{align-self:center;font-size:12px}.pagination-bar{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:14px 18px;border-top:1px solid #eaecf0;color:#667085;font-size:12px}.pagination-bar>div{display:flex;gap:5px;flex-wrap:wrap}.page-link{border:1px solid #d0d5dd;border-radius:8px;padding:6px 9px;color:#344054;background:#fff}.page-link.active{background:#3157d5;border-color:#3157d5;color:#fff}.page-link.disabled{opacity:.45;pointer-events:none}.access-no-assign form[data-endpoint$="/owner"]{display:none}.approach-cell{min-width:210px}.approach-cell strong,.approach-cell span{display:block}.approach-cell span{margin-top:4px;color:#667085;font-size:11px;line-height:1.35}.is-loading .main{opacity:.62;pointer-events:none}.is-loading:after{content:'Loading…';position:fixed;inset:auto 20px 20px auto;background:#111827;color:#fff;padding:10px 14px;border-radius:10px;z-index:9999}
 @media(max-width:1550px){.server-toolbar{grid-template-columns:repeat(4,minmax(150px,1fr))}.restricted-note{text-align:left}}
-@media(max-width:800px){.server-toolbar{grid-template-columns:1fr}.pagination-bar{align-items:flex-start;flex-direction:column}.table-wrap{overflow:visible;max-height:none}table,thead,tbody,tr,th,td{display:block}thead{display:none}.prospect-row{margin:10px;border:1px solid #e4e7ec;border-radius:12px;padding:8px}.prospect-row td{display:grid;grid-template-columns:92px 1fr;gap:10px;border-top:1px solid #f0f1f3;padding:9px}.prospect-row td:first-child{border-top:0}.prospect-row td:before{font-size:10px;font-weight:800;color:#667085;text-transform:uppercase}.prospect-row td:nth-child(1):before{content:'Rank'}.prospect-row td:nth-child(2):before{content:'Company'}.prospect-row td:nth-child(3):before{content:'Service'}.prospect-row td:nth-child(4):before{content:'Owner'}.prospect-row td:nth-child(5):before{content:'Status'}.prospect-row td:nth-child(6):before{content:'Follow-up'}}`;
+@media(max-width:800px){.server-toolbar{grid-template-columns:1fr}.pagination-bar{align-items:flex-start;flex-direction:column}.table-wrap{overflow:visible;max-height:none}table,thead,tbody,tr,th,td{display:block}thead{display:none}.prospect-row{margin:10px;border:1px solid #e4e7ec;border-radius:12px;padding:8px}.prospect-row td{display:grid;grid-template-columns:92px 1fr;gap:10px;border-top:1px solid #f0f1f3;padding:9px}.prospect-row td:first-child{border-top:0}.prospect-row td:before{font-size:10px;font-weight:800;color:#667085;text-transform:uppercase}.prospect-row td:nth-child(1):before{content:'Rank'}.prospect-row td:nth-child(2):before{content:'Company'}.prospect-row td:nth-child(3):before{content:'Service'}.prospect-row td:nth-child(4):before{content:'Owner'}.prospect-row td:nth-child(5):before{content:'Status'}.prospect-row td:nth-child(6):before{content:'Approach'}.prospect-row td:nth-child(7):before{content:'Follow-up'}}`;
 }
 
 function label(value: string): string {
   return value.replace(/_/g, ' ').replace(/\b\w/g, (letter) => letter.toUpperCase());
+}
+
+function shorten(value: string, maxLength: number): string {
+  return value.length <= maxLength ? value : `${value.slice(0, maxLength - 1).trim()}…`;
 }
 
 function escapeRegExp(value: string): string {

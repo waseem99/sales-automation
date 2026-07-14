@@ -7,6 +7,11 @@ import type {
   OpportunitySignalStatus,
   ServiceCategory,
 } from '@sales-automation/shared';
+import {
+  applyAutomaticAssignment,
+  assignUnassignedProspects,
+  buildOwnerWorkload,
+} from './assignment.js';
 import { enrichCandidate } from './enrichment.js';
 import { sendProspectDigest } from './digest.js';
 import {
@@ -25,12 +30,15 @@ import type {
   ProspectSourceResult,
 } from './types.js';
 
+const DEFAULT_RECENT_LOOKBACK_HOURS = 78;
+
 export async function runProspectDiscovery(options: ProspectDiscoveryOptions): Promise<ProspectDiscoveryResult> {
   const now = options.now ?? (() => new Date().toISOString());
   const startedAt = now();
   const fetchImpl = options.fetchImpl ?? globalThis.fetch;
   if (!fetchImpl) throw new Error('Global fetch is unavailable. Supply fetchImpl.');
 
+  const assignmentBackfill = assignUnassignedProspects(options.repository, startedAt);
   const sourceResults: ProspectSourceResult[] = [];
   if (options.bingRssEnabled !== false) {
     sourceResults.push(await collectBingRssCandidates(
@@ -46,9 +54,12 @@ export async function runProspectDiscovery(options: ProspectDiscoveryOptions): P
 
   const existingRecords = options.repository.listLeads();
   const existingLeads = existingRecords.map((record) => record.lead);
-  const collected = dedupeCandidates(sourceResults.flatMap((result) => result.candidates), existingLeads);
+  const lookbackHours = normalizePositiveInteger(options.lookbackHours, DEFAULT_RECENT_LOOKBACK_HOURS);
+  const collected = dedupeCandidates(sourceResults.flatMap((result) => result.candidates), existingLeads)
+    .filter((candidate) => isInsideRecentWindow(candidate, startedAt, lookbackHours));
   const maxCandidates = normalizePositiveInteger(options.maxCandidates, 50);
   const existingKeys = buildExistingKeys(existingLeads);
+  const ownerWorkload = buildOwnerWorkload(existingLeads);
   const newLeads: Lead[] = [];
   let duplicateCount = 0;
   let enrichedCount = 0;
@@ -65,12 +76,19 @@ export async function runProspectDiscovery(options: ProspectDiscoveryOptions): P
         duplicateCount += 1;
         continue;
       }
-      const evaluation = enrichEvaluation(evaluateLead({
+      const evaluated = enrichEvaluation(evaluateLead({
         lead,
         portfolioItems: options.portfolioItems,
         generatedAt: now(),
       }));
+      const assigned = applyAutomaticAssignment(evaluated.lead, ownerWorkload, now());
+      const evaluation: LeadEvaluation = { ...evaluated, lead: assigned.lead };
       options.repository.saveEvaluation(evaluation, 'prospect-discovery');
+      options.repository.addNote(
+        evaluation.lead.id,
+        `routing::automatic::${assigned.assignment.owner}::${assigned.approach.channel}::${assigned.assignment.reason} | ${assigned.approach.nextAction}`,
+        'prospect-discovery',
+      );
       newLeads.push(evaluation.lead);
       for (const key of keys) existingKeys.add(key);
     } catch (error) {
@@ -88,6 +106,8 @@ export async function runProspectDiscovery(options: ProspectDiscoveryOptions): P
     enrichedCount,
     newLeadCount: newLeads.length,
     duplicateCount,
+    autoAssignedCount: assignmentBackfill.assigned + newLeads.length,
+    lookbackHours,
     emailStatus: 'skipped',
     errors,
     newLeadIds: newLeads.map((lead) => lead.id),
@@ -234,10 +254,20 @@ function dedupeCandidates(candidates: DiscoveryCandidate[], historicalLeads: Lea
   });
 }
 
+function isInsideRecentWindow(candidate: DiscoveryCandidate, capturedAt: string, lookbackHours: number): boolean {
+  if (candidate.opportunityStatus === 'partnership_target' || !candidate.publishedAt) return true;
+  const captured = Date.parse(capturedAt);
+  const published = Date.parse(candidate.publishedAt);
+  if (!Number.isFinite(captured) || !Number.isFinite(published)) return true;
+  const ageMs = captured - published;
+  return ageMs >= -60 * 60 * 1_000 && ageMs <= lookbackHours * 60 * 60 * 1_000;
+}
+
 function priority(candidate: DiscoveryCandidate, historicalLeads: Lead[]): number {
   const status = candidate.opportunityStatus === 'live_opportunity' ? 300
     : candidate.opportunityStatus === 'recent_demand_signal' ? 200 : 100;
-  const recency = candidate.publishedAt ? Math.max(0, 60 - Math.floor((Date.now() - Date.parse(candidate.publishedAt)) / 86_400_000)) : 0;
+  const ageHours = candidate.publishedAt ? Math.max(0, (Date.now() - Date.parse(candidate.publishedAt)) / 3_600_000) : undefined;
+  const recency = ageHours === undefined ? 0 : ageHours <= 48 ? 100 : ageHours <= 78 ? 60 : Math.max(0, 30 - Math.floor(ageHours / 24));
   return status + recency + historicalSourceAdjustment(candidate.sourceName, historicalLeads);
 }
 
