@@ -14,6 +14,7 @@ import {
   type ProspectVisibility,
 } from '@sales-automation/neon-state';
 import {
+  assignUnassignedProspects,
   collectPsebTechHubLeads,
   InMemoryProspectDiscoveryRunStore,
   runProspectDiscovery,
@@ -41,6 +42,7 @@ export interface AuthenticatedDashboardRuntimeInput {
 const GLOBAL_ROUTES = new Set([
   '/api/prospects/import-starter',
   '/api/prospects/run',
+  '/api/prospects/auto-assign',
   '/api/prospects/guidance/backfill',
   '/api/prospects/pseb-sync',
 ]);
@@ -162,6 +164,31 @@ async function handleGlobalRequest(input: AuthenticatedDashboardRuntimeInput & {
     }
     await persistNeonAppState(input.databaseUrl, state);
     return responseJson({ ok: true, imported, existing, total: state.repository.listLeads().length }, imported > 0 ? 201 : 200);
+  }
+
+  if (input.pathname === '/api/prospects/auto-assign') {
+    const assignment = assignUnassignedProspects(
+      state.repository,
+      new Date().toISOString(),
+      input.access.identifier,
+    );
+    await persistAssignmentRecords(input.databaseUrl, state.repository, assignment.assignments.map((item) => item.leadId));
+    return responseJson({
+      ok: true,
+      assigned: assignment.assigned,
+      alreadyAssigned: assignment.alreadyAssigned,
+      total: state.repository.listLeads().length,
+      distribution: assignmentDistribution(assignment.assignments),
+    }, assignment.assigned > 0 ? 201 : 200);
+  }
+
+  if (input.pathname === '/api/prospects/run') {
+    const assignment = assignUnassignedProspects(
+      state.repository,
+      new Date().toISOString(),
+      input.access.identifier,
+    );
+    await persistAssignmentRecords(input.databaseUrl, state.repository, assignment.assignments.map((item) => item.leadId));
   }
 
   const syncPseb = async () => {
@@ -289,6 +316,26 @@ function snapshots(records: StoredLeadRecord[]): Map<string, string> {
 async function persistChangedRecords(databaseUrl: string, records: StoredLeadRecord[], before: Map<string, string>): Promise<void> {
   const changed = records.filter((record) => before.get(record.lead.id) !== JSON.stringify(record));
   if (changed.length > 0) await persistLeadRecords(databaseUrl, changed);
+}
+
+async function persistAssignmentRecords(
+  databaseUrl: string,
+  repository: InMemoryLeadRepository,
+  leadIds: string[],
+): Promise<void> {
+  if (leadIds.length === 0) return;
+  const records = leadIds
+    .map((leadId) => repository.getLead(leadId))
+    .filter((record): record is StoredLeadRecord => Boolean(record));
+  await persistLeadRecords(databaseUrl, records);
+}
+
+function assignmentDistribution(assignments: Array<{ owner: string }>): Record<string, number> {
+  const distribution: Record<string, number> = {};
+  for (const assignment of assignments) {
+    distribution[assignment.owner] = (distribution[assignment.owner] ?? 0) + 1;
+  }
+  return distribution;
 }
 
 function serializeRecord(record: StoredLeadRecord) {
