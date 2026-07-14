@@ -2,6 +2,7 @@ import type {
   Lead,
   OpportunitySignalStatus,
   PortfolioItem,
+  TenderDocumentIntelligence,
   TenderOpportunityType,
   TenderSector,
   TenderTriState,
@@ -23,6 +24,7 @@ export interface TenderCandidateMetadata {
   consortiumAllowed?: TenderTriState;
   eligibilitySignals?: string[];
   riskFlags?: string[];
+  documentIntelligence?: TenderDocumentIntelligence;
 }
 
 export interface DiscoveryCandidate {
@@ -69,6 +71,9 @@ export interface ProspectDiscoveryRun {
   tenderCandidateCount?: number;
   newTenderCount?: number;
   rejectedCandidateCount?: number;
+  tenderDocumentIntelligenceCount?: number;
+  tenderAmendmentCount?: number;
+  tenderExistingEnrichedCount?: number;
   emailStatus: 'sent' | 'skipped' | 'failed';
   emailMessage?: string;
   errors: string[];
@@ -111,6 +116,9 @@ export interface ProspectDiscoveryOptions {
   canadaBuysEnabled?: boolean;
   ungmEnabled?: boolean;
   privateNonprofitTendersEnabled?: boolean;
+  expandedPublicTendersEnabled?: boolean;
+  tenderDocumentIntelligenceEnabled?: boolean;
+  tenderDocumentMaxBytes?: number;
   digest?: ProspectDigestOptions;
   runStore?: ProspectDiscoveryRunStore;
 }
