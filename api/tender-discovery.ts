@@ -53,13 +53,21 @@ export default {
           subjectPrefix: process.env.TENDER_DIGEST_SUBJECT_PREFIX ?? 'Codistan Tender & RFP Pipeline',
         },
       });
+
+      const falsePositiveIds = state.repository.listLeads()
+        .filter((record) => discovery.shouldRemoveStoredTenderLead(record.lead))
+        .map((record) => record.lead.id);
+
       await neonModule.persistNeonAppState(databaseUrl, state);
+      const removedFalsePositiveCount = await neonModule.deleteLeadRecords(databaseUrl, falsePositiveIds);
 
       const payload = {
         ok: true,
         actor,
         run: result.run,
         newTenderIds: result.newLeads.map((lead) => lead.id),
+        removedFalsePositiveCount,
+        rejectedCandidateCount: result.run.rejectedCandidateCount ?? 0,
         sourceSummary: result.sourceResults.map((source) => ({
           source: source.sourceName,
           checked: source.checked,

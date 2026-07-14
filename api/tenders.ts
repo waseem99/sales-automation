@@ -31,7 +31,10 @@ export default {
       const actor = await authorizedDashboardActor(request, sessionSecret);
       if (!actor) return new Response('', { status: 302, headers: { location: '/login', 'cache-control': 'no-store' } });
 
-      const neonModule = await import('@sales-automation/neon-state');
+      const [neonModule, discovery] = await Promise.all([
+        import('@sales-automation/neon-state'),
+        import('@sales-automation/prospect-discovery'),
+      ]);
       const databaseUrl = neonModule.requireDatabaseUrl(process.env.DATABASE_URL);
       const state = await neonModule.loadNeonAppState(databaseUrl);
       const canViewAll = actor === 'admin' || actor === 'waseem@codistan.org';
@@ -40,6 +43,7 @@ export default {
         : [actor];
       const rows: TenderViewRow[] = state.repository.listLeads()
         .filter((record) => Boolean(record.lead.tender) || record.lead.source === 'public_procurement')
+        .filter((record) => discovery.validateStoredTenderLead(record.lead).qualified)
         .filter((record) => canViewAll || visibleOwners.includes(record.lead.owner?.trim().toLowerCase() ?? ''))
         .map((record) => ({
           id: record.lead.id,
@@ -62,10 +66,9 @@ export default {
         }))
         .sort(compareRows);
 
-      const payload = request.headers.get('accept')?.includes('application/json')
+      return request.headers.get('accept')?.includes('application/json')
         ? Response.json({ ok: true, actor, total: rows.length, rows })
         : html(renderTenderPipeline(rows, actor, canViewAll));
-      return payload;
     } catch (error) {
       console.error('TENDER_PIPELINE_ERROR', error);
       return html(renderError(error instanceof Error ? error.message : String(error)), 500);
@@ -101,7 +104,7 @@ function renderTenderPipeline(rows: TenderViewRow[], actor: string, canRefresh: 
   <main class="shell">
     <header><div><p class="eyebrow">Formal procurement intelligence</p><h1>Tender & RFP Pipeline</h1><p>Pakistan, Canada, international development, private-sector and nonprofit software opportunities. Formal opportunities are routed to Jawad for bid/no-bid review.</p><div class="identity">Signed in as ${escapeHtml(actor)}</div></div><div class="actions"><a class="button ghost" href="/prospects">All prospects</a><a class="button ghost" href="/prospects?owner=jawad.jutt%40codistan.org">Jawad’s queue</a>${canRefresh ? '<button id="refresh-tenders" class="button primary">Refresh tenders & RFPs</button>' : ''}</div></header>
     <section class="metrics">${cards}</section>
-    <section class="status"><strong id="refresh-status">${rows.length ? `${rows.length} formal opportunities loaded.` : 'No formal opportunities stored yet.'}</strong><span>Scheduled refresh runs every six hours. Bid submission remains manual.</span></section>
+    <section class="status"><strong id="refresh-status">${rows.length ? `${rows.length} validated formal opportunities loaded.` : 'No validated formal opportunities stored yet.'}</strong><span>Scheduled refresh runs every six hours. Untrusted, tutorial, dictionary, job-board and non-procurement results are rejected.</span></section>
     <section class="table-card"><div class="table-heading"><div><h2>Qualified procurement opportunities</h2><p>Sorted by bid recommendation, closeability and deadline.</p></div><input id="tender-search" type="search" placeholder="Search buyer, title, portal, country or owner"/></div><div class="table-wrap"><table><thead><tr><th>Buyer / requirement</th><th>Market</th><th>Portal / reference</th><th>Deadline</th><th>Score</th><th>Bid recommendation</th><th>Owner / status</th><th>Risks</th><th>Actions</th></tr></thead><tbody id="tender-rows">${tableRows || '<tr><td colspan="9" class="empty">Run the tender refresh to collect qualified opportunities.</td></tr>'}</tbody></table></div></section>
   </main><script>${script(canRefresh)}</script></body></html>`;
 }
@@ -110,7 +113,7 @@ function script(canRefresh: boolean): string {
   return `
 const search=document.getElementById('tender-search');
 search?.addEventListener('input',()=>{const term=search.value.trim().toLowerCase();document.querySelectorAll('#tender-rows tr').forEach(row=>{row.hidden=Boolean(term)&&!row.textContent.toLowerCase().includes(term);});});
-${canRefresh ? `document.getElementById('refresh-tenders')?.addEventListener('click',async()=>{const button=document.getElementById('refresh-tenders'),status=document.getElementById('refresh-status');button.disabled=true;button.textContent='Checking official sources…';try{const response=await fetch('/api/tender-discovery',{method:'POST',headers:{'content-type':'application/json'},body:'{}'});const data=await response.json();if(!response.ok)throw new Error(data.error||data.detail||'Tender discovery failed');status.textContent=(data.run.newTenderCount+' new tenders; '+data.run.tenderCandidateCount+' qualified candidates; '+data.run.duplicateCount+' duplicates.');button.textContent='Reloading pipeline…';setTimeout(()=>location.reload(),900);}catch(error){status.textContent=error.message;button.disabled=false;button.textContent='Refresh tenders & RFPs';}});` : ''}
+${canRefresh ? `document.getElementById('refresh-tenders')?.addEventListener('click',async()=>{const button=document.getElementById('refresh-tenders'),status=document.getElementById('refresh-status');button.disabled=true;button.textContent='Checking verified sources…';try{const response=await fetch('/api/tender-discovery',{method:'POST',headers:{'content-type':'application/json'},body:'{}'});const data=await response.json();if(!response.ok)throw new Error(data.error||data.detail||'Tender discovery failed');status.textContent=(data.run.newTenderCount+' new tenders; '+data.run.tenderCandidateCount+' qualified; '+data.rejectedCandidateCount+' rejected; '+data.removedFalsePositiveCount+' false positives removed.');button.textContent='Reloading pipeline…';setTimeout(()=>location.reload(),900);}catch(error){status.textContent=error.message;button.disabled=false;button.textContent='Refresh tenders & RFPs';}});` : ''}
 `;
 }
 

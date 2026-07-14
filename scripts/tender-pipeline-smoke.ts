@@ -5,6 +5,7 @@ import {
   buildOwnerWorkload,
   buildTenderMetadata,
   tenderCandidateToLead,
+  validateTenderCandidate,
   type DiscoveryCandidate,
 } from '@sales-automation/prospect-discovery';
 
@@ -22,10 +23,12 @@ async function main(): Promise<void> {
   const tenderApiSource = readFileSync(new URL('../api/tender-discovery.ts', import.meta.url), 'utf8');
   const tenderPageSource = readFileSync(new URL('../api/tenders.ts', import.meta.url), 'utf8');
   assert.match(tenderApiSource, /runTenderDiscovery/);
-  assert.match(tenderApiSource, /tender-rfp-discovery/);
+  assert.match(tenderApiSource, /deleteLeadRecords/);
+  assert.match(tenderApiSource, /shouldRemoveStoredTenderLead/);
   assert.match(tenderPageSource, /Tender & RFP Pipeline/);
   assert.match(tenderPageSource, /Refresh tenders & RFPs/);
   assert.match(tenderPageSource, /Jawad’s queue/);
+  assert.match(tenderPageSource, /validateStoredTenderLead/);
 
   const candidate: DiscoveryCandidate = {
     sourceName: 'CanadaBuys',
@@ -51,6 +54,7 @@ async function main(): Promise<void> {
       consortiumAllowed: 'yes',
     },
   };
+  assert.equal(validateTenderCandidate(candidate).qualified, true);
   const metadata = buildTenderMetadata(candidate, '2026-07-14T12:00:00.000Z');
   assert.ok(metadata);
   assert.ok(metadata.closeabilityScore >= 80);
@@ -61,7 +65,30 @@ async function main(): Promise<void> {
   assert.equal(assignment.lead.owner, 'jawad.jutt@codistan.org');
   assert.equal(assignment.approach.channel, 'procurement_portal');
 
-  console.log('Tender sources, qualification, Jawad routing and Vercel workspace smoke tests passed');
+  const rejectedUrls = [
+    'https://www.merriam-webster.com/thesaurus/request',
+    'https://remoteok.com/remote-jobs/remote-assistente-de-gente-e-cultura-junior-joyn-group-1134711',
+    'https://www.runoob.com/python3/python-requests.html',
+    'https://blog.csdn.net/python03012/article/details/137588709',
+  ];
+  for (const sourceUrl of rejectedUrls) {
+    const falsePositive: DiscoveryCandidate = {
+      ...candidate,
+      sourceName: 'Private and nonprofit public notices',
+      sourceUrl,
+      title: 'Python request tutorial remote job',
+      summary: 'Dictionary, tutorial, documentation, code example or job opening.',
+      tender: {
+        ...candidate.tender!,
+        portal: 'Private and nonprofit public notices',
+      },
+    };
+    const validation = validateTenderCandidate(falsePositive);
+    assert.equal(validation.qualified, false, `${sourceUrl} must not qualify`);
+    assert.equal(validation.hardReject, true, `${sourceUrl} must be hard rejected`);
+  }
+
+  console.log('Tender source trust, strict qualification, false-positive cleanup, Jawad routing and Vercel workspace smoke tests passed');
 }
 
 main().catch((error) => {

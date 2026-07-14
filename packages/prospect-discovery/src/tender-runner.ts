@@ -11,6 +11,7 @@ import {
   collectPrivateNonprofitTenderCandidates,
   collectUngmTenderCandidates,
 } from './tenders.js';
+import { validateTenderCandidate } from './tender-validation.js';
 import { classifyTargeting } from './targeting.js';
 import type {
   DiscoveryCandidate,
@@ -35,17 +36,29 @@ export async function runTenderDiscovery(options: ProspectDiscoveryOptions): Pro
   const existingLeads = options.repository.listLeads().map((record) => record.lead);
   const existingKeys = new Set(existingLeads.flatMap(tenderLeadKeys));
   const workload = buildOwnerWorkload(existingLeads);
+  const errors = sourceResults.flatMap((result) => result.error ? [`${result.sourceName}: ${result.error}`] : []);
+  let rejectedCandidateCount = 0;
   const collected = dedupeTenderCandidates(sourceResults.flatMap((result) => result.candidates))
-    .filter((candidate) => isActiveTender(candidate, startedAt));
+    .filter((candidate) => isActiveTender(candidate, startedAt))
+    .filter((candidate) => {
+      const validation = validateTenderCandidate(candidate);
+      if (validation.qualified) return true;
+      rejectedCandidateCount += 1;
+      return false;
+    });
   const maxCandidates = positiveInteger(options.maxCandidates, 80);
   const newLeads: Lead[] = [];
   let duplicateCount = 0;
   let enrichedCount = 0;
-  const errors = sourceResults.flatMap((result) => result.error ? [`${result.sourceName}: ${result.error}`] : []);
 
   for (const candidate of collected.slice(0, maxCandidates)) {
     try {
       const enriched = await enrichCandidate(fetchImpl, candidate);
+      const validation = validateTenderCandidate(enriched);
+      if (!validation.qualified) {
+        rejectedCandidateCount += 1;
+        continue;
+      }
       if (enriched.companyWebsite || enriched.contactEmail || enriched.contactName || enriched.contactFormUrl) enrichedCount += 1;
       const lead = tenderCandidateToLead(enriched, now());
       const keys = tenderLeadKeys(lead);
@@ -93,6 +106,7 @@ export async function runTenderDiscovery(options: ProspectDiscoveryOptions): Pro
     autoAssignedCount: newLeads.length,
     tenderCandidateCount: collected.length,
     newTenderCount: newLeads.length,
+    rejectedCandidateCount,
     emailStatus: 'skipped',
     errors,
     newLeadIds: newLeads.map((lead) => lead.id),
@@ -106,6 +120,8 @@ export async function runTenderDiscovery(options: ProspectDiscoveryOptions): Pro
 }
 
 export function tenderCandidateToLead(candidate: DiscoveryCandidate, capturedAt: string): Lead {
+  const validation = validateTenderCandidate(candidate);
+  if (!validation.qualified) throw new Error(`Tender candidate failed validation: ${validation.reasons.join(' ')}`);
   const targetingText = `${candidate.title} ${candidate.summary} ${(candidate.tags ?? []).join(' ')}`;
   const targeting = classifyTargeting(targetingText, candidate.country);
   const tender = buildTenderMetadata(candidate, capturedAt);
