@@ -22,6 +22,17 @@ export interface ProspectPageQuery {
   feedback?: string;
 }
 
+export interface ProspectDashboardSummary {
+  total: number;
+  live: number;
+  contacted: number;
+  replied: number;
+  followUpsDue: number;
+  unassigned: number;
+  won: number;
+  feedbackPending: number;
+}
+
 export interface ProspectPageResult {
   records: StoredLeadRecord[];
   page: number;
@@ -32,6 +43,7 @@ export interface ProspectPageResult {
   start: number;
   end: number;
   owners: string[];
+  summary: ProspectDashboardSummary;
   query: Required<Omit<ProspectPageQuery, 'page' | 'pageSize'>>;
 }
 
@@ -39,6 +51,16 @@ interface RecordRow { record: unknown }
 interface CountRow { count: number | string }
 interface OwnerRow { owner: string | null }
 interface RunRow { run: unknown }
+interface SummaryRow {
+  total: number | string;
+  live: number | string;
+  contacted: number | string;
+  replied: number | string;
+  follow_ups_due: number | string;
+  unassigned: number | string;
+  won: number | string;
+  feedback_pending: number | string;
+}
 
 export function normalizeProspectPageQuery(query: ProspectPageQuery): {
   page: number;
@@ -76,9 +98,36 @@ export async function loadNeonProspectPage(
   const canViewAll = visibility.canViewAll;
   const filters = normalized.filters;
 
-  const [visibleRows, filteredRows, ownerRows] = await sql.transaction([
+  const [summaryRows, filteredRows, ownerRows] = await sql.transaction([
     sql`
-      SELECT COUNT(*)::int AS count
+      SELECT
+        COUNT(*)::int AS total,
+        COUNT(*) FILTER (
+          WHERE COALESCE(record->'lead'->>'opportunityStatus', '') = 'live_opportunity'
+        )::int AS live,
+        COUNT(*) FILTER (
+          WHERE COALESCE(record->'lead'->>'pipelineStatus', '') IN ('sent_manually','replied','meeting_booked','proposal_sent','won','lost')
+        )::int AS contacted,
+        COUNT(*) FILTER (
+          WHERE COALESCE(record->'lead'->>'pipelineStatus', '') IN ('replied','meeting_booked','proposal_sent','won','lost')
+        )::int AS replied,
+        COUNT(*) FILTER (
+          WHERE CASE
+            WHEN COALESCE(record->'lead'->>'nextFollowUpAt', '') ~ '^\\d{4}-\\d{2}-\\d{2}T'
+              THEN (record->'lead'->>'nextFollowUpAt')::timestamptz
+            ELSE NULL
+          END <= NOW()
+          AND COALESCE(record->'lead'->>'pipelineStatus', '') NOT IN ('won','lost','rejected','archived')
+        )::int AS follow_ups_due,
+        COUNT(*) FILTER (
+          WHERE COALESCE(record->'lead'->>'owner', '') = ''
+        )::int AS unassigned,
+        COUNT(*) FILTER (
+          WHERE COALESCE(record->'lead'->>'pipelineStatus', '') = 'won'
+        )::int AS won,
+        COUNT(*) FILTER (
+          WHERE COALESCE(record->'lead'->'feedback'->>'status', 'pending') <> 'complete'
+        )::int AS feedback_pending
       FROM prospect_records
       WHERE ${canViewAll}::boolean OR EXISTS (
         SELECT 1 FROM jsonb_array_elements_text(${ownerTokensJson}::jsonb) AS visible_token(value)
@@ -114,7 +163,8 @@ export async function loadNeonProspectPage(
     `,
   ], { readOnly: true, isolationLevel: 'ReadCommitted' });
 
-  const visibleTotal = numberValue((visibleRows as CountRow[])[0]?.count);
+  const summary = summaryFromRow((summaryRows as SummaryRow[])[0]);
+  const visibleTotal = summary.total;
   const filteredTotal = numberValue((filteredRows as CountRow[])[0]?.count);
   const totalPages = Math.max(1, Math.ceil(filteredTotal / normalized.pageSize));
   const page = Math.min(normalized.page, totalPages);
@@ -155,6 +205,7 @@ export async function loadNeonProspectPage(
     start,
     end,
     owners: (ownerRows as OwnerRow[]).map((row) => row.owner?.trim()).filter((owner): owner is string => Boolean(owner)),
+    summary,
     query: filters,
   };
 }
@@ -213,6 +264,19 @@ export async function loadNeonDiscoveryRuns(databaseUrl: string, limit = 30): Pr
     LIMIT ${Math.max(1, Math.min(limit, 180))}
   ` as RunRow[];
   return rows.map((row) => parseJson<ProspectDiscoveryRun>(row.run)).filter((run): run is ProspectDiscoveryRun => Boolean(run?.id));
+}
+
+function summaryFromRow(row: SummaryRow | undefined): ProspectDashboardSummary {
+  return {
+    total: numberValue(row?.total),
+    live: numberValue(row?.live),
+    contacted: numberValue(row?.contacted),
+    replied: numberValue(row?.replied),
+    followUpsDue: numberValue(row?.follow_ups_due),
+    unassigned: numberValue(row?.unassigned),
+    won: numberValue(row?.won),
+    feedbackPending: numberValue(row?.feedback_pending),
+  };
 }
 
 function normalizeTokens(tokens: string[]): string[] {
