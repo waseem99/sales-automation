@@ -24,8 +24,10 @@
   "dependencies": {
     "@sales-automation/evaluator": "workspace:*",
     "@sales-automation/fixtures": "workspace:*",
+    "@sales-automation/ingestion": "workspace:*",
     "@sales-automation/neon-state": "workspace:*",
     "@sales-automation/outreach-email": "workspace:*",
+    "@sales-automation/parsers": "workspace:*",
     "@sales-automation/prospect-discovery": "workspace:*",
     "@sales-automation/shared": "workspace:*",
     "@sales-automation/storage": "workspace:*",
