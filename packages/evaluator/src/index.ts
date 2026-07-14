@@ -11,12 +11,16 @@ export * from './closeability.js';
 export interface LeadEvaluation {
   lead: Lead;
   score: LeadScore;
-  closeability: CloseabilityScore;
+  closeability?: CloseabilityScore;
   profileRecommendation: ProfileRecommendation;
   portfolioMatches: PortfolioMatch[];
   recommendedNextAction: string;
   drafts: GeneratedDraft[];
   alertPlan: AlertPlan;
+}
+
+export interface EvaluatedLead extends LeadEvaluation {
+  closeability: CloseabilityScore;
 }
 
 export interface EvaluateLeadInput {
@@ -26,7 +30,7 @@ export interface EvaluateLeadInput {
   generatedAt?: string;
 }
 
-export function evaluateLead(input: EvaluateLeadInput): LeadEvaluation {
+export function evaluateLead(input: EvaluateLeadInput): EvaluatedLead {
   const redFlags = detectRedFlags(input.lead);
   const portfolioMatches = matchPortfolio({
     lead: input.lead,
@@ -78,46 +82,18 @@ export function evaluateLead(input: EvaluateLeadInput): LeadEvaluation {
     recommendedNextAction,
   });
 
-  return {
-    lead: input.lead,
-    score,
-    closeability,
-    profileRecommendation,
-    portfolioMatches,
-    recommendedNextAction,
-    drafts,
-    alertPlan,
-  };
+  return { lead: input.lead, score, closeability, profileRecommendation, portfolioMatches, recommendedNextAction, drafts, alertPlan };
 }
 
 export function detectRedFlags(lead: Lead): RedFlag[] {
   const text = `${lead.title} ${lead.description} ${lead.budgetSignal ?? ''} ${lead.timelineSignal ?? ''}`.toLowerCase();
   const redFlags: RedFlag[] = [];
-
-  if (text.includes('free sample') || text.includes('unpaid sample')) {
-    redFlags.push({ code: 'free_work_request', severity: 'high', reason: 'Lead appears to request free or unpaid sample work.' });
-  }
-
-  if (text.includes('$100') || text.includes('$200') || text.includes('cheap') || text.includes('low budget')) {
-    redFlags.push({ code: 'low_budget_signal', severity: 'high', reason: 'Budget signal appears too low for Codistan target opportunities.' });
-  }
-
-  if (text.includes('clone') && (text.includes('2 days') || text.includes('24 hours') || text.includes('48 hours'))) {
-    redFlags.push({ code: 'unrealistic_scope_timeline', severity: 'high', reason: 'Scope and timeline appear unrealistic.' });
-  }
-
-  if (hasProfileEligibilityLanguage(text)) {
-    redFlags.push({ code: 'profile_compliance_review_required', severity: 'medium', reason: 'Location, citizenship, clearance, onsite, or employment language requires human verification before selecting a profile.' });
-  }
-
-  if (text.includes('scrape linkedin') || text.includes('linkedin scraper') || text.includes('auto dm') || text.includes('automated dm')) {
-    redFlags.push({ code: 'unsafe_outreach_or_scraping_request', severity: 'critical', reason: 'Lead appears to request unsafe scraping or automated LinkedIn outreach.' });
-  }
-
-  if (text.includes('adult') || text.includes('gambling') || text.includes('crypto scam')) {
-    redFlags.push({ code: 'restricted_or_sensitive_industry', severity: 'critical', reason: 'Lead may involve a restricted or high-risk industry for outbound pursuit.' });
-  }
-
+  if (text.includes('free sample') || text.includes('unpaid sample')) redFlags.push({ code: 'free_work_request', severity: 'high', reason: 'Lead appears to request free or unpaid sample work.' });
+  if (text.includes('$100') || text.includes('$200') || text.includes('cheap') || text.includes('low budget')) redFlags.push({ code: 'low_budget_signal', severity: 'high', reason: 'Budget signal appears too low for Codistan target opportunities.' });
+  if (text.includes('clone') && (text.includes('2 days') || text.includes('24 hours') || text.includes('48 hours'))) redFlags.push({ code: 'unrealistic_scope_timeline', severity: 'high', reason: 'Scope and timeline appear unrealistic.' });
+  if (hasProfileEligibilityLanguage(text)) redFlags.push({ code: 'profile_compliance_review_required', severity: 'medium', reason: 'Location, citizenship, clearance, onsite, or employment language requires human verification before selecting a profile.' });
+  if (text.includes('scrape linkedin') || text.includes('linkedin scraper') || text.includes('auto dm') || text.includes('automated dm')) redFlags.push({ code: 'unsafe_outreach_or_scraping_request', severity: 'critical', reason: 'Lead appears to request unsafe scraping or automated LinkedIn outreach.' });
+  if (text.includes('adult') || text.includes('gambling') || text.includes('crypto scam')) redFlags.push({ code: 'restricted_or_sensitive_industry', severity: 'critical', reason: 'Lead may involve a restricted or high-risk industry for outbound pursuit.' });
   return redFlags;
 }
 
@@ -152,42 +128,20 @@ function getRecommendedNextAction(
   profileRecommendation: ProfileRecommendation,
   portfolioMatches: PortfolioMatch[],
 ): string {
-  if (score.status === 'rejected' || closeability.band === 'reject') {
-    return 'Reject or archive. Do not spend BD time unless a founder manually overrides with verified missing evidence.';
-  }
-
+  if (score.status === 'rejected' || closeability.band === 'reject') return 'Reject or archive. Do not spend BD time unless a founder manually overrides with verified missing evidence.';
   const routedProfile = profileRecommendation.upworkProfile;
   const profileInstruction = routedProfile ? `${routedProfile.label} (${routedProfile.url})` : profileRecommendation.primaryProfile;
   const rateRange = routedProfile?.targetHourlyRateRangeUsd;
   const rateInstruction = rateRange ? ` Target hourly rate: $${rateRange.min}–$${rateRange.max}/hour; do not revert to the obsolete lower profile rate.` : '';
   const gapInstruction = closeability.missingData.length > 0 ? ` First resolve: ${closeability.missingData.slice(0, 2).join(' ')}` : '';
-
   if (profileRecommendation.primaryProfile === 'needs_human_review') {
-    if (routedProfile) {
-      return `Human review required before bidding. Candidate profile: ${profileInstruction}. ${routedProfile.selectionReason} Verify profile ownership, eligibility, current public positioning, and the job restrictions first.${rateInstruction}${gapInstruction}`;
-    }
+    if (routedProfile) return `Human review required before bidding. Candidate profile: ${profileInstruction}. ${routedProfile.selectionReason} Verify profile ownership, eligibility, current public positioning, and the job restrictions first.${rateInstruction}${gapInstruction}`;
     return `Send to human review before outreach or bidding because profile, scope, or compliance risk is unclear.${gapInstruction}`;
   }
-
-  if (lead.leadType === 'linkedin_cold_prospect' || lead.leadType === 'sales_navigator_cold_prospect') {
-    return `Research account/contact manually, verify business email/LinkedIn context, then prepare human-approved outreach using ${portfolioMatches[0]?.portfolioItem.projectName ?? 'the strongest matched proof'}. Do not auto-DM.${gapInstruction}`;
-  }
-
-  if (closeability.band === 'priority_a') {
-    return `Priority A: review within one business day and prepare human-approved outreach through ${profileInstruction}.${rateInstruction} Use ${portfolioMatches[0]?.portfolioItem.projectName ?? 'the strongest approved proof'}.${closeability.reasonToActNow ? ` ${closeability.reasonToActNow}` : ''}`;
-  }
-
-  if (closeability.band === 'priority_b') {
-    return `Priority B: keep in the owner action queue, resolve the identified evidence gaps, then prepare tailored outreach through ${profileInstruction}.${rateInstruction}${gapInstruction}`;
-  }
-
-  if (score.urgency === 'urgent') {
-    return `Review immediately and bid manually through ${profileInstruction}.${rateInstruction} Include ${portfolioMatches[0]?.portfolioItem.projectName ?? 'the strongest available proof'} if approved.${gapInstruction}`;
-  }
-
-  if (score.status === 'qualified') {
-    return `Keep in research until closeability reaches Priority B. Use ${profileInstruction}.${rateInstruction}${gapInstruction}`;
-  }
-
+  if (lead.leadType === 'linkedin_cold_prospect' || lead.leadType === 'sales_navigator_cold_prospect') return `Research account/contact manually, verify business email/LinkedIn context, then prepare human-approved outreach using ${portfolioMatches[0]?.portfolioItem.projectName ?? 'the strongest matched proof'}. Do not auto-DM.${gapInstruction}`;
+  if (closeability.band === 'priority_a') return `Priority A: review within one business day and prepare human-approved outreach through ${profileInstruction}.${rateInstruction} Use ${portfolioMatches[0]?.portfolioItem.projectName ?? 'the strongest approved proof'}.${closeability.reasonToActNow ? ` ${closeability.reasonToActNow}` : ''}`;
+  if (closeability.band === 'priority_b') return `Priority B: keep in the owner action queue, resolve the identified evidence gaps, then prepare tailored outreach through ${profileInstruction}.${rateInstruction}${gapInstruction}`;
+  if (score.urgency === 'urgent') return `Review immediately and bid manually through ${profileInstruction}.${rateInstruction} Include ${portfolioMatches[0]?.portfolioItem.projectName ?? 'the strongest available proof'} if approved.${gapInstruction}`;
+  if (score.status === 'qualified') return `Keep in research until closeability reaches Priority B. Use ${profileInstruction}.${rateInstruction}${gapInstruction}`;
   return `Add to nurture/watch queue. Do not prioritize unless a stronger buying signal appears.${gapInstruction}`;
 }
