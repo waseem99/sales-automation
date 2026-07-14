@@ -1,6 +1,7 @@
 export * from './types.js';
 export * from './sources.js';
 export * from './tenders.js';
+export * from './tender-runner.js';
 export * from './targeting.js';
 export * from './pseb.js';
 export * from './enrichment.js';
