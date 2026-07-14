@@ -1,5 +1,4 @@
 import type { Lead, OpportunitySignalStatus } from '@sales-automation/shared';
-import { hasProjectOpportunityIntent } from './sources.js';
 import type { DiscoveryCandidate } from './types.js';
 
 export interface ProspectValidationResult {
@@ -42,6 +41,32 @@ const BLOCKED_AUTOMATIC_HOSTS = [
   'quora.com',
 ];
 
+const FORMAL_OPPORTUNITY_PATTERNS = [
+  /\brequest for proposals?\b/i,
+  /\brequest for quotations?\b/i,
+  /(?:^|[^a-z0-9])(?:rfp|rfq|eoi|itt|rfi)(?:[^a-z0-9]|$)/i,
+  /\bexpression of interest\b/i,
+  /\binvitation to (?:bid|tender)\b/i,
+  /\bcall for proposals?\b/i,
+  /\bprocurement notice\b/i,
+  /\btender notice\b/i,
+  /\bstatement of work\b/i,
+  /\bscope of work\b/i,
+  /\bsealed bids?\b/i,
+  /\btechnical and financial proposals?\b/i,
+];
+
+const BUYER_REQUEST_PATTERNS = [
+  /\b(?:we|our company|our organization|the organization|the company|the client)\s+(?:is|are)\s+(?:looking|seeking|searching)\s+for\s+(?:an?\s+)?(?:external\s+)?(?:software\s+|technology\s+|development\s+|implementation\s+|digital\s+|ai\s+)?(?:agency|vendor|partner|consultant|provider|team|firm)\b/i,
+  /\b(?:looking|seeking|searching)\s+for\s+(?:an?\s+)?(?:external\s+)?(?:software\s+|technology\s+|development\s+|implementation\s+|digital\s+|ai\s+)?(?:agency|vendor|partner|consultant|provider|team|firm)\s+(?:to|for)\b/i,
+  /\b(?:need|needs|require|requires|required)\s+(?:an?\s+)?(?:external\s+)?(?:software\s+|technology\s+|development\s+|implementation\s+|digital\s+|ai\s+)?(?:agency|vendor|partner|consultant|provider|team|firm)\b/i,
+  /\b(?:invite|invites|inviting|solicit|solicits|soliciting)\s+(?:qualified\s+)?(?:firms|vendors|agencies|consultants|providers|partners|proposals|bids)\b/i,
+  /\b(?:engage|engaging|hire|hiring|select|selecting)\s+(?:an?\s+)?(?:external\s+)?(?:agency|vendor|partner|consultant|provider|development team|software firm)\b/i,
+  /\b(?:vendor|agency|implementation partner|development partner|technology partner|consultant|service provider)\s+(?:required|needed|wanted)\b/i,
+  /\b(?:outsourcing|outsource)\s+(?:the\s+)?(?:development|implementation|maintenance|software|project)\b/i,
+  /\b(?:contract|fixed[- ]price|fixed[- ]scope)\s+(?:software|development|implementation|consulting|project|engagement)\b/i,
+];
+
 const REFERENCE_OR_ENTERTAINMENT_PATTERNS = [
   /\b(?:free )?encyclopedia\b/i,
   /\bwiki(?:pedia|media|tionary)?\b/i,
@@ -72,6 +97,12 @@ const CONTENT_PATH_PATTERNS = [
   /\/(?:blog|blogs|article|articles|learn|learning|academy|resources?|guides?|tutorials?|glossary|dictionary|thesaurus|docs|documentation|news)(?:\/|$)/i,
   /\/(?:beginner|beginners)-guide(?:\/|-|$)/i,
 ];
+
+export function hasResultLevelProjectOpportunityIntent(text: string): boolean {
+  const normalized = text.replace(/\s+/g, ' ').trim();
+  return FORMAL_OPPORTUNITY_PATTERNS.some((pattern) => pattern.test(normalized))
+    || BUYER_REQUEST_PATTERNS.some((pattern) => pattern.test(normalized));
+}
 
 export function validateAutomaticProspectCandidate(candidate: DiscoveryCandidate): ProspectValidationResult {
   return validateProspectLike({
@@ -136,7 +167,7 @@ function validateProspectLike(input: {
   }
 
   const text = `${input.title} ${input.description} ${input.evidenceSummary ?? ''}`.replace(/\s+/g, ' ').trim();
-  const explicitProjectIntent = hasProjectOpportunityIntent(text);
+  const explicitProjectIntent = hasResultLevelProjectOpportunityIntent(text);
   const referenceContent = REFERENCE_OR_ENTERTAINMENT_PATTERNS.some((pattern) => pattern.test(text));
   const editorialContent = EDITORIAL_OR_LEARNING_PATTERNS.some((pattern) => pattern.test(text));
   const contentPath = CONTENT_PATH_PATTERNS.some((pattern) => pattern.test(parsed.pathname));
