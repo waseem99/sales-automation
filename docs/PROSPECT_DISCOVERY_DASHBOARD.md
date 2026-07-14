@@ -1,160 +1,134 @@
 # Prospect Discovery Dashboard
 
-## Product priority
+## Purpose
 
-1. Continuously discover new external prospects from public sources.
-2. Store evidence, company details, decision-makers, and public contact routes.
-3. Let BD manage outreach, responses, meetings, proposals, and outcomes from one protected dashboard.
-4. Require structured feedback and use it to improve future source priority.
+The Prospect Desk is the canonical internal workspace for discovering, qualifying, assigning and managing Codistan business opportunities.
+
+It combines:
+
+- Current public prospect discovery.
+- Formal Tender & RFP discovery.
+- Public company/contact enrichment.
+- Qualification, service routing and proof matching.
+- Automatic owner assignment.
+- Human-reviewed outreach and reply guidance.
+- Pipeline, follow-up, feedback and outcome management.
 
 ## Production architecture
 
 ```text
-Vercel dashboard and API functions
+Vercel dashboard functions
+        ↓
+Scoped Prospect Desk runtime
         ↓
 Neon Postgres
         ↑
-Vercel daily Cron
+Daily prospect cron + six-hour tender cron
         ↓
-Public discovery sources and company websites
-        ↓
-Existing-domain SMTP mailbox
-        ↓
-Daily internal BD digest and CSV
+Public and official sources
 ```
 
-The original Lead Desk remains available at `/lead-desk`. The Prospect Desk is the default route.
+The production dashboards are:
 
-## Daily discovery sources
+- `/prospects`
+- `/tenders`
 
-The lean release uses sources that do not require paid data-provider APIs:
+The previous `/lead-desk` application has been retired.
 
-- Bing public RSS searches using focused opportunity and partnership queries.
-- RemoteOK public feed.
-- Configured public Greenhouse boards.
-- Configured public Lever sites.
-- Configured public RSS and RFP feeds.
-- Official company Home, About, Team, Leadership, Contact, Services, Careers, Work, and Portfolio pages.
+## General prospect discovery
 
-The system does not log in to LinkedIn, bypass access controls, solve CAPTCHAs, or automatically contact prospects.
+The general discovery engine uses:
 
-## Discovery process
+- Focused public search/RSS queries.
+- RemoteOK only for general job/demand-signal collection, not tender qualification.
+- Configured public Greenhouse and Lever sources.
+- Configured public RSS feeds.
+- Official company Home, About, Team, Leadership, Contact, Services, Careers, Work and Portfolio pages.
+
+The recent-opportunity action prioritizes signals within 48 hours and accepts qualifying dated opportunities up to 78 hours old.
+
+## Tender and RFP discovery
+
+The formal procurement pipeline uses:
+
+- Pakistan PPRA/EPADS.
+- CanadaBuys.
+- UNGM.
+- Pakistan and Canadian private/nonprofit public notices.
+
+A tender must pass source, procurement-intent, software-service, language and expiry validation before it is stored. Dictionaries, tutorials, blogs, social pages, job boards and unrelated keyword matches are rejected.
+
+Formal procurement records include deadline, eligibility, local-presence/consortium signals, risk flags, closeability score and bid recommendation. They route to Jawad.
+
+## Qualification and routing
+
+Every accepted opportunity is evaluated for:
+
+- Active requirement or current demand signal.
+- Codistan service fit.
+- Public contact route and decision-maker quality.
+- Commercial and timing signals.
+- Relevant approved proof.
+- Geography, industry and compliance risk.
+
+The assignment engine routes tenders, partnerships, direct-client work, strategic opportunities and general outreach according to the central team policy.
+
+The dashboard recommends a compliant first channel:
+
+- Email.
+- LinkedIn manual outreach.
+- WhatsApp to a verified public business number.
+- Official contact form.
+- Upwork manual proposal.
+- Tender portal/procurement email.
+- Research first.
+
+## Access and management
+
+- Admin and Waseem see all company leads.
+- Talha sees his team scope.
+- Other accounts see their assigned scope.
+- Global imports, discovery, assignment and source synchronization are restricted.
+- Authorization is enforced server-side and in Neon queries.
+
+Available management actions include:
+
+- Search, filtering and pagination.
+- Owner and service-plan updates.
+- Pipeline status and follow-up scheduling.
+- Team activity logging.
+- Qualification audit and first-outreach draft.
+- Inbound-reply analysis.
+- Compulsory structured feedback.
+
+Won, lost and rejected statuses require completed feedback.
+
+## Learning loop
+
+Source/query priority uses completed BD feedback and outcomes:
+
+- High relevance, accurate contacts, replies, meetings, proposals, wins and “increase” recommendations raise priority.
+- Poor relevance, bad contacts, rejection and “reduce/stop” recommendations lower priority.
+
+This is transparent rule-based learning. It does not claim autonomous model training without sufficient real outcome data.
+
+## Scheduled jobs
 
 ```text
-Daily Vercel Cron
-→ acquire Neon run lock
-→ collect current source results
-→ remove stale and duplicate items
-→ resolve official company websites
-→ crawl public company/contact pages
-→ extract public contacts and decision-makers
-→ classify opportunity, demand signal, or partnership target
-→ evaluate and match Codistan proof
-→ save to Neon
-→ email the new-prospect digest and CSV
-→ release run lock
+/api/cron/prospect-discovery   daily
+/api/tender-discovery          every six hours
+/api/cron/outreach             hourly, guarded
 ```
 
-Only records meeting minimum quality requirements are stored. General partnership targets require an active company website and a usable public contact route or named decision-maker.
+Named Neon locks prevent overlapping runs.
 
-## Required Vercel settings
+## Outreach safety
 
-```text
-DATABASE_URL
-ADMIN_PASSWORD
-SESSION_SECRET
-CRON_SECRET
-DASHBOARD_ACTOR
-PROSPECT_DIGEST_TO
-PROSPECT_DIGEST_FROM
-SMTP_HOST
-SMTP_PORT
-SMTP_SECURE
-SMTP_USER
-SMTP_PASSWORD
-```
+All outreach remains human-reviewed. Live SMTP sending is unavailable unless every safety gate passes. See `docs/ARCHITECTURE.md` and `docs/VERCEL_DEPLOYMENT.md`.
 
-An existing mailbox on the current domain can be used. No new subdomain is required.
+## Current next priorities
 
-Recommended lean limits:
-
-```text
-PROSPECT_MAX_CANDIDATES=15
-PROSPECT_MAX_SEARCH_QUERIES=10
-```
-
-Optional source lists:
-
-```text
-PROSPECT_SEARCH_QUERIES
-PROSPECT_GREENHOUSE_BOARDS
-PROSPECT_LEVER_SITES
-PROSPECT_RSS_FEEDS
-```
-
-## Dashboard functions
-
-- Fixed admin-password login using an HTTP-only signed session cookie.
-- New-today, live-opportunity, contacted, replied, meeting, won, and feedback-pending metrics.
-- Search and filtering by pipeline, signal, and feedback status.
-- Company, contact, evidence, source, service match, proof, and draft details.
-- Owner assignment and pipeline management.
-- Structured comments, outreach, replies, meetings, and proposal activities.
-- Compulsory BD feedback.
-- Source-learning table using ratings, replies, and wins.
-- Discovery-run and email-delivery history.
-- Manual **Run discovery now** action.
-
-All external outreach remains human-approved.
-
-## Compulsory feedback
-
-Every new prospect starts as feedback pending. BD must record:
-
-- Relevance rating from 1–5.
-- Contact accuracy.
-- Source quality.
-- Increase, keep, reduce, or stop using the source.
-- Corrected service category where needed.
-- Explanation.
-
-Won, lost, and rejected statuses are blocked until feedback is complete.
-
-Future discovery ordering uses:
-
-- Positive relevance ratings.
-- Replies, meetings, proposals, and wins.
-- Increase/keep recommendations.
-- Rejection, poor source quality, and reduce/stop recommendations.
-
-The first release learns at source/query level. It does not claim autonomous model training before enough real feedback exists.
-
-## Persistence
-
-Neon stores complete prospect records as JSONB while preserving the existing repository interfaces. It also stores discovery runs and a distributed cron lock.
-
-Tables are created automatically:
-
-```text
-prospect_records
-prospect_discovery_runs
-prospect_run_locks
-```
-
-## Cleanup applied
-
-- Removed the obsolete Render deployment configuration.
-- Replaced production JSON-file persistence with Neon.
-- Replaced the in-process production timer with Vercel Cron.
-- Kept local JSON development support.
-- Reused evaluator, routing, portfolio, drafting, audit, and dashboard packages.
-- Kept secrets in Vercel environment variables.
-- Kept the legacy Lead Desk for Upwork/Gmail workflows.
-
-## Next phase after live validation
-
-1. Replace sample portfolio fixtures with approved production portfolio data.
-2. Measure source precision using at least several weeks of BD feedback.
-3. Disable consistently poor queries automatically.
-4. Add more free and paid acquisition sources based on measured performance.
-5. Add individual BD accounts only when one shared admin login becomes limiting.
+- Replace temporary portfolio fixtures with an approved production catalog.
+- Integrate authorized manual Upwork/LinkedIn input into this dashboard and Neon.
+- Improve closeability ranking and commercial outcome reporting.
+- Improve source health, deliverability and CI observability.
