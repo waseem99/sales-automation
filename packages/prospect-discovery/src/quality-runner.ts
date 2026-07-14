@@ -55,6 +55,7 @@ export async function runProspectDiscovery(options: ProspectDiscoveryOptions): P
     closeabilityRescoredCount += 1;
   }
   result.run.closeabilityRescoredCount = closeabilityRescoredCount;
+  options.runStore?.saveRun(result.run);
   return result;
 }
 
