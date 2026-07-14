@@ -1,5 +1,5 @@
 import type { ServiceCategory } from '@sales-automation/shared';
-import { DEFAULT_SEARCH_QUERIES } from './sources.js';
+import { buildCampaignSearchQueries, resolveDiscoveryCampaigns } from './campaigns.js';
 
 export type DeliveryModel = 'remote_first' | 'hybrid' | 'local_weighted';
 
@@ -27,33 +27,7 @@ export interface TargetingDecision {
   reason: string;
 }
 
-const expandedQueries = [
-  '"looking for a development partner" software',
-  '"request for proposal" software development',
-  '"request for proposal" mobile app development',
-  '"implementation partner" generative AI',
-  'cybersecurity consultancy United States',
-  'digital marketing agency United States',
-  'SEO branding agency United Kingdom',
-  'mobile app development agency Canada',
-  'animation VFX studio United States',
-  'game development studio United States',
-  'AR VR immersive agency UAE',
-  '"white label development partner" agency',
-  'performance marketing agency Canada',
-  'content production studio United Kingdom',
-  'creative technology agency Saudi Arabia',
-  'managed security consultancy Australia',
-  'Flutter React Native agency United States',
-  '2D 3D animation studio Canada',
-  'video production studio United States',
-  'software outsourcing partner Europe',
-];
-
-export const EXPANDED_TARGET_SEARCH_QUERIES = [...new Set([
-  ...expandedQueries,
-  ...DEFAULT_SEARCH_QUERIES,
-])];
+export const EXPANDED_TARGET_SEARCH_QUERIES = buildCampaignSearchQueries(resolveDiscoveryCampaigns());
 
 const localWeightedTerms = [
   'on-site', 'onsite', 'in person', 'local team', 'local agency', 'photo shoot', 'photoshoot',

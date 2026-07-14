@@ -68,6 +68,8 @@ export interface ProspectDiscoveryRun {
   autoAssignedCount?: number;
   employmentRejectedCount?: number;
   closeabilityRescoredCount?: number;
+  activeCampaignIds?: string[];
+  searchQueryCount?: number;
   lookbackHours?: number;
   tenderCandidateCount?: number;
   newTenderCount?: number;
@@ -106,6 +108,7 @@ export interface ProspectDiscoveryOptions {
   maxSearchQueries?: number;
   lookbackHours?: number;
   searchQueries?: string[];
+  campaignIds?: string[];
   remoteOkEnabled?: boolean;
   bingRssEnabled?: boolean;
   greenhouseBoards?: string[];
