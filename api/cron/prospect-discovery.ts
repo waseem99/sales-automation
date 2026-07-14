@@ -19,12 +19,13 @@ export default {
       }
 
       phase = 'load_runtime_modules';
-      const [{ randomUUID }, loadedNeonModule, prospectModule, fixturesModule, catalogModule, starterModule] = await Promise.all([
+      const [{ randomUUID }, loadedNeonModule, prospectModule, fixturesModule, catalogModule, sourceControlModule, starterModule] = await Promise.all([
         import('node:crypto'),
         loadNeonModule(),
         import('@sales-automation/prospect-discovery'),
         import('@sales-automation/fixtures'),
         import('@sales-automation/neon-state/portfolio-catalog'),
+        import('@sales-automation/neon-state/source-controls'),
         import('../../vercel/approved-portfolio.js'),
       ]);
       neonModule = loadedNeonModule;
@@ -42,6 +43,11 @@ export default {
       const approvedPortfolio = await catalogModule.loadApprovedPortfolioCatalog(databaseUrl);
       catalogModule.replacePortfolioArray(fixturesModule.samplePortfolioItems, catalogModule.asPortfolioItems(approvedPortfolio));
 
+      phase = 'load_source_controls';
+      const sourceControls = sourceControlModule.sourceControlMap(
+        await sourceControlModule.loadDiscoverySourceControls(databaseUrl),
+      );
+
       phase = 'load_application_state';
       const state = await neonModule.loadNeonAppState(databaseUrl);
 
@@ -50,6 +56,7 @@ export default {
         state.repository,
         state.runStore,
         fixturesModule.samplePortfolioItems,
+        sourceControls,
       ));
 
       phase = 'persist_application_state';
@@ -59,6 +66,7 @@ export default {
         ok: true,
         run: result.run,
         approvedPortfolioCount: approvedPortfolio.length,
+        sourceControls,
         newLeadIds: result.newLeads.map((lead) => lead.id),
       });
     } catch (error) {
@@ -87,11 +95,12 @@ async function loadNeonModule() {
   return import('@sales-automation/neon-state');
 }
 
-function buildDiscoveryOptions(repository: unknown, runStore: unknown, portfolioItems: unknown[]) {
+function buildDiscoveryOptions(repository: unknown, runStore: unknown, portfolioItems: unknown[], sourceControls: unknown) {
   return {
     repository,
     runStore,
     portfolioItems,
+    sourceControls,
     maxCandidates: positiveInteger(process.env.PROSPECT_MAX_CANDIDATES, 15),
     maxSearchQueries: positiveInteger(process.env.PROSPECT_MAX_SEARCH_QUERIES, 12),
     searchQueries: splitList(process.env.PROSPECT_SEARCH_QUERIES),

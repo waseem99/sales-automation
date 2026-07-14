@@ -20,11 +20,12 @@ export default {
         return Response.json({ error: 'Forbidden: tender discovery is restricted to Admin and Waseem.' }, { status: 403 });
       }
 
-      const [{ randomUUID }, loadedNeon, discovery, fixtures] = await Promise.all([
+      const [{ randomUUID }, loadedNeon, discovery, fixtures, sourceControlModule] = await Promise.all([
         import('node:crypto'),
         loadNeonModule(),
         import('@sales-automation/prospect-discovery'),
         import('@sales-automation/fixtures'),
+        import('@sales-automation/neon-state/source-controls'),
       ]);
       neonModule = loadedNeon;
       databaseUrl = neonModule.requireDatabaseUrl(process.env.DATABASE_URL);
@@ -32,17 +33,20 @@ export default {
       const locked = await neonModule.acquireNamedRunLock(databaseUrl, LOCK_NAME, lockToken, 20);
       if (!locked) return Response.json({ ok: true, skipped: true, reason: 'Another tender discovery run is active.' });
 
+      const sourceControls = sourceControlModule.sourceControlMap(
+        await sourceControlModule.loadDiscoverySourceControls(databaseUrl),
+      );
       const state = await neonModule.loadNeonAppState(databaseUrl);
       const result = await discovery.runTenderDiscovery({
         repository: state.repository,
         runStore: state.runStore,
         portfolioItems: fixtures.samplePortfolioItems,
         maxCandidates: positiveInteger(process.env.TENDER_MAX_CANDIDATES, 80),
-        ppraEnabled: process.env.TENDER_PPRA_ENABLED !== 'false',
-        canadaBuysEnabled: process.env.TENDER_CANADABUYS_ENABLED !== 'false',
-        ungmEnabled: process.env.TENDER_UNGM_ENABLED !== 'false',
-        privateNonprofitTendersEnabled: process.env.TENDER_PRIVATE_NONPROFIT_ENABLED !== 'false',
-        expandedPublicTendersEnabled: process.env.TENDER_EXPANDED_PUBLIC_SOURCES_ENABLED !== 'false',
+        ppraEnabled: sourceControls.ppra ?? process.env.TENDER_PPRA_ENABLED !== 'false',
+        canadaBuysEnabled: sourceControls.canadabuys ?? process.env.TENDER_CANADABUYS_ENABLED !== 'false',
+        ungmEnabled: sourceControls.ungm ?? process.env.TENDER_UNGM_ENABLED !== 'false',
+        privateNonprofitTendersEnabled: sourceControls.private_nonprofit_tenders ?? process.env.TENDER_PRIVATE_NONPROFIT_ENABLED !== 'false',
+        expandedPublicTendersEnabled: sourceControls.expanded_public_tenders ?? process.env.TENDER_EXPANDED_PUBLIC_SOURCES_ENABLED !== 'false',
         tenderDocumentIntelligenceEnabled: process.env.TENDER_DOCUMENT_INTELLIGENCE_ENABLED !== 'false',
         tenderDocumentMaxBytes: positiveInteger(process.env.TENDER_DOCUMENT_MAX_BYTES, 4_000_000),
         digest: {
@@ -68,6 +72,7 @@ export default {
         ok: true,
         actor,
         run: result.run,
+        sourceControls,
         newTenderIds: result.newLeads.map((lead) => lead.id),
         removedFalsePositiveCount,
         rejectedCandidateCount: result.run.rejectedCandidateCount ?? 0,

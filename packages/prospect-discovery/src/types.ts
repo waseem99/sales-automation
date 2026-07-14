@@ -56,6 +56,26 @@ export interface ProspectSourceResult {
   error?: string;
 }
 
+export interface ProspectSourceRunStat {
+  sourceName: string;
+  checked: number;
+  acceptedCandidates: number;
+  error?: string;
+}
+
+export interface DiscoveryRuntimeSourceControls {
+  bing_rss?: boolean;
+  remoteok?: boolean;
+  greenhouse?: boolean;
+  lever?: boolean;
+  generic_rss?: boolean;
+  ppra?: boolean;
+  canadabuys?: boolean;
+  ungm?: boolean;
+  private_nonprofit_tenders?: boolean;
+  expanded_public_tenders?: boolean;
+}
+
 export interface ProspectDiscoveryRun {
   id: string;
   startedAt: string;
@@ -70,6 +90,7 @@ export interface ProspectDiscoveryRun {
   closeabilityRescoredCount?: number;
   activeCampaignIds?: string[];
   searchQueryCount?: number;
+  sourceStats?: ProspectSourceRunStat[];
   lookbackHours?: number;
   tenderCandidateCount?: number;
   newTenderCount?: number;
@@ -109,6 +130,7 @@ export interface ProspectDiscoveryOptions {
   lookbackHours?: number;
   searchQueries?: string[];
   campaignIds?: string[];
+  sourceControls?: DiscoveryRuntimeSourceControls;
   remoteOkEnabled?: boolean;
   bingRssEnabled?: boolean;
   greenhouseBoards?: string[];

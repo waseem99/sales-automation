@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { sampleLeads, samplePortfolioItems } from '@sales-automation/fixtures';
 import { InMemoryLeadRepository } from '@sales-automation/storage';
-import { filterRssItems, runProspectDiscovery } from './quality-runner.js';
+import { applySourceControls, filterRssItems, runProspectDiscovery } from './quality-runner.js';
 import { InMemoryProspectDiscoveryRunStore } from './run-store.js';
 
 const rss = `<?xml version="1.0"?><rss><channel>
@@ -35,6 +35,42 @@ assert.equal(partnership.rejected, 1);
 assert.match(partnership.xml, /credibleagency\.example\/<\/link>/i);
 assert.doesNotMatch(partnership.xml, /how-to-select-a-partner/i);
 
+const controlled = applySourceControls({
+  repository: new InMemoryLeadRepository(),
+  portfolioItems: samplePortfolioItems,
+  bingRssEnabled: true,
+  remoteOkEnabled: true,
+  greenhouseBoards: ['example-board'],
+  leverSites: ['example-site'],
+  rssFeeds: ['https://example.com/feed.xml'],
+  ppraEnabled: true,
+  canadaBuysEnabled: false,
+  ungmEnabled: true,
+  privateNonprofitTendersEnabled: true,
+  expandedPublicTendersEnabled: true,
+}, {
+  bing_rss: false,
+  remoteok: false,
+  greenhouse: false,
+  lever: false,
+  generic_rss: false,
+  ppra: false,
+  canadabuys: true,
+  ungm: false,
+  private_nonprofit_tenders: false,
+  expanded_public_tenders: false,
+});
+assert.equal(controlled.bingRssEnabled, false);
+assert.equal(controlled.remoteOkEnabled, false);
+assert.deepEqual(controlled.greenhouseBoards, []);
+assert.deepEqual(controlled.leverSites, []);
+assert.deepEqual(controlled.rssFeeds, []);
+assert.equal(controlled.ppraEnabled, false);
+assert.equal(controlled.canadaBuysEnabled, true);
+assert.equal(controlled.ungmEnabled, false);
+assert.equal(controlled.privateNonprofitTendersEnabled, false);
+assert.equal(controlled.expandedPublicTendersEnabled, false);
+
 const existingLead = sampleLeads.find((lead) => lead.id === 'lead-upwork-rag-001');
 assert.ok(existingLead);
 const repository = new InMemoryLeadRepository();
@@ -46,17 +82,35 @@ const result = await runProspectDiscovery({
   runStore,
   portfolioItems: samplePortfolioItems,
   campaignIds: ['ai_rag_automation', 'cybersecurity_compliance'],
+  sourceControls: {
+    bing_rss: false,
+    remoteok: false,
+    greenhouse: false,
+    lever: false,
+    generic_rss: false,
+    ppra: false,
+    canadabuys: false,
+    ungm: false,
+    private_nonprofit_tenders: false,
+    expanded_public_tenders: false,
+  },
   bingRssEnabled: false,
   remoteOkEnabled: false,
+  greenhouseBoards: [],
+  leverSites: [],
+  rssFeeds: [],
+  tenderSourcesEnabled: false,
   now: () => '2026-07-08T18:30:00.000Z',
   fetchImpl: globalThis.fetch,
 });
 assert.equal(result.run.closeabilityRescoredCount, 1);
 assert.deepEqual(result.run.activeCampaignIds, ['ai_rag_automation', 'cybersecurity_compliance']);
 assert.ok((result.run.searchQueryCount ?? 0) >= 10);
+assert.deepEqual(result.run.sourceStats, []);
 assert.equal(repository.listLeads().length, beforeCount, 'Rescoring must not create duplicates');
 assert.ok(repository.getLead(existingLead.id)?.latestEvaluation?.closeability);
 assert.deepEqual(runStore.listRuns(1)[0]?.activeCampaignIds, result.run.activeCampaignIds);
 assert.equal(runStore.listRuns(1)[0]?.closeabilityRescoredCount, 1);
+assert.deepEqual(runStore.listRuns(1)[0]?.sourceStats, []);
 
-console.log('RSS quality guard, campaign selection and final run persistence tests passed');
+console.log('RSS quality guard, source controls, campaign selection and final run persistence tests passed');

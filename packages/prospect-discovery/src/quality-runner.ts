@@ -17,6 +17,7 @@ import {
 } from './prospect-validation.js';
 import type {
   DiscoveryCandidate,
+  DiscoveryRuntimeSourceControls,
   ProspectDiscoveryOptions,
   ProspectDiscoveryResult,
   ProspectFetch,
@@ -34,14 +35,21 @@ export async function runProspectDiscovery(options: ProspectDiscoveryOptions): P
   const campaigns = resolveDiscoveryCampaigns(configuredCampaignIds);
   const campaignQueries = buildCampaignSearchQueries(campaigns);
   const searchQueries = options.searchQueries?.length ? options.searchQueries : campaignQueries;
+  const controlledOptions = applySourceControls(options, options.sourceControls ?? {});
 
   const result = await runProspectDiscoveryBase({
-    ...options,
+    ...controlledOptions,
     searchQueries,
     fetchImpl: createProspectQualityFetch(fetchImpl),
   });
   result.run.activeCampaignIds = campaigns.map((campaign) => campaign.id);
   result.run.searchQueryCount = searchQueries.length;
+  result.run.sourceStats = result.sourceResults.map((source) => ({
+    sourceName: source.sourceName,
+    checked: source.checked,
+    acceptedCandidates: source.candidates.length,
+    error: source.error,
+  }));
 
   const generatedAt = options.now?.() ?? result.run.completedAt ?? new Date().toISOString();
   let closeabilityRescoredCount = 0;
@@ -57,6 +65,25 @@ export async function runProspectDiscovery(options: ProspectDiscoveryOptions): P
   result.run.closeabilityRescoredCount = closeabilityRescoredCount;
   options.runStore?.saveRun(result.run);
   return result;
+}
+
+export function applySourceControls(
+  options: ProspectDiscoveryOptions,
+  controls: DiscoveryRuntimeSourceControls,
+): ProspectDiscoveryOptions {
+  return {
+    ...options,
+    bingRssEnabled: controls.bing_rss ?? options.bingRssEnabled,
+    remoteOkEnabled: controls.remoteok ?? options.remoteOkEnabled,
+    greenhouseBoards: controls.greenhouse === false ? [] : options.greenhouseBoards,
+    leverSites: controls.lever === false ? [] : options.leverSites,
+    rssFeeds: controls.generic_rss === false ? [] : options.rssFeeds,
+    ppraEnabled: controls.ppra ?? options.ppraEnabled,
+    canadaBuysEnabled: controls.canadabuys ?? options.canadaBuysEnabled,
+    ungmEnabled: controls.ungm ?? options.ungmEnabled,
+    privateNonprofitTendersEnabled: controls.private_nonprofit_tenders ?? options.privateNonprofitTendersEnabled,
+    expandedPublicTendersEnabled: controls.expanded_public_tenders ?? options.expandedPublicTendersEnabled,
+  };
 }
 
 export function createProspectQualityFetch(fetchImpl: ProspectFetch): ProspectFetch {
