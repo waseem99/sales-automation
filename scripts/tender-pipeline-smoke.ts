@@ -1,9 +1,11 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import {
+  analyzeTenderText,
   applyAutomaticAssignment,
   buildOwnerWorkload,
   buildTenderMetadata,
+  EXPANDED_PUBLIC_TENDER_SOURCES,
   tenderCandidateToLead,
   validateTenderCandidate,
   type DiscoveryCandidate,
@@ -22,13 +24,28 @@ async function main(): Promise<void> {
 
   const tenderApiSource = readFileSync(new URL('../api/tender-discovery.ts', import.meta.url), 'utf8');
   const tenderPageSource = readFileSync(new URL('../api/tenders.ts', import.meta.url), 'utf8');
+  const runnerSource = readFileSync(new URL('../packages/prospect-discovery/src/tender-runner.ts', import.meta.url), 'utf8');
+  const documentSource = readFileSync(new URL('../packages/prospect-discovery/src/tender-documents.ts', import.meta.url), 'utf8');
   assert.match(tenderApiSource, /runTenderDiscovery/);
   assert.match(tenderApiSource, /deleteLeadRecords/);
   assert.match(tenderApiSource, /shouldRemoveStoredTenderLead/);
+  assert.match(tenderApiSource, /TENDER_DOCUMENT_INTELLIGENCE_ENABLED/);
+  assert.match(tenderApiSource, /TENDER_EXPANDED_PUBLIC_SOURCES_ENABLED/);
+  assert.match(tenderApiSource, /documentIntelligenceCount/);
+  assert.match(tenderApiSource, /amendmentCount/);
   assert.match(tenderPageSource, /Tender & RFP Pipeline/);
-  assert.match(tenderPageSource, /Refresh tenders & RFPs/);
+  assert.match(tenderPageSource, /Refresh tenders & documents/);
   assert.match(tenderPageSource, /Jawad’s queue/);
   assert.match(tenderPageSource, /validateStoredTenderLead/);
+  assert.match(tenderPageSource, /Open one-page bid\/no-bid brief/);
+  assert.match(tenderPageSource, /Changed — re-review/);
+  assert.match(runnerSource, /enrichTenderDocumentIntelligence/);
+  assert.match(runnerSource, /tender_amendment::changed/);
+  assert.match(documentSource, /Human decision required/);
+  assert.match(documentSource, /extractTextFromPdfBytes/);
+  assert.ok(EXPANDED_PUBLIC_TENDER_SOURCES.some((source) => source.portal === 'Punjab PPRA'));
+  assert.ok(EXPANDED_PUBLIC_TENDER_SOURCES.some((source) => source.portal === 'BC Bid'));
+  assert.ok(EXPANDED_PUBLIC_TENDER_SOURCES.some((source) => source.portal === 'SEAO Quebec'));
 
   const candidate: DiscoveryCandidate = {
     sourceName: 'CanadaBuys',
@@ -60,7 +77,35 @@ async function main(): Promise<void> {
   assert.ok(metadata.closeabilityScore >= 80);
   assert.equal(metadata.recommendation, 'priority_bid');
 
+  const intelligence = analyzeTenderText({
+    candidate,
+    checkedAt: '2026-07-14T12:00:00.000Z',
+    format: 'notice_summary',
+    text: `Scope of Work: The vendor shall design and implement a digital service platform.
+Deliverables
+- Develop the web application and API integrations.
+- Migrate data and train users.
+Eligibility
+- Minimum five years experience and three similar projects.
+Evaluation Criteria
+- Technical proposal 70 points.
+- Financial proposal 30 points.
+Project Manager and Solution Architect CVs are required.
+Bid security: CAD 10,000.
+Submit proposals through the CanadaBuys electronic portal.`,
+  });
+  assert.ok(intelligence.contentHash);
+  assert.match(intelligence.scopeSummary ?? '', /digital service platform/i);
+  assert.ok(intelligence.deliverables.length > 0);
+  assert.ok(intelligence.eligibilityRequirements.length > 0);
+  assert.ok(intelligence.evaluationCriteria.length > 0);
+  assert.ok(intelligence.requiredTeamRoles.includes('Project Manager'));
+  assert.match(intelligence.bidNoBidBrief, /BID \/ NO-BID BRIEF/);
+  assert.match(intelligence.bidNoBidBrief, /Human decision required/);
+
+  candidate.tender!.documentIntelligence = intelligence;
   const lead = tenderCandidateToLead(candidate, '2026-07-14T12:00:00.000Z');
+  assert.equal(lead.tender?.documentIntelligence?.contentHash, intelligence.contentHash);
   const assignment = applyAutomaticAssignment(lead, buildOwnerWorkload([]), '2026-07-14T12:00:00.000Z');
   assert.equal(assignment.lead.owner, 'jawad.jutt@codistan.org');
   assert.equal(assignment.approach.channel, 'procurement_portal');
@@ -88,7 +133,7 @@ async function main(): Promise<void> {
     assert.equal(validation.hardReject, true, `${sourceUrl} must be hard rejected`);
   }
 
-  console.log('Tender source trust, strict qualification, false-positive cleanup, Jawad routing and Vercel workspace smoke tests passed');
+  console.log('Tender source trust, document intelligence, bid briefs, amendment UI, Jawad routing and Vercel workspace smoke tests passed');
 }
 
 main().catch((error) => {
