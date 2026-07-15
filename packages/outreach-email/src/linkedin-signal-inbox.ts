@@ -15,6 +15,7 @@ export interface LinkedInSignalInboxConfig {
 }
 
 export interface LinkedInSignalInboxMessage {
+  uid: number;
   origin: LinkedInInboxSignalOrigin;
   messageId: string;
   sender: string;
@@ -33,6 +34,7 @@ export interface LinkedInSignalInboxPollResult {
 }
 
 export interface PotentialSignalMessageInput {
+  uid?: number;
   messageId?: string;
   sender?: string;
   subject?: string;
@@ -71,14 +73,7 @@ export async function pollLinkedInSignalInbox(config: LinkedInSignalInboxConfig)
   };
   if (!config.configured || !config.mailboxEmail || !config.mailboxPassword) return result;
 
-  const client = new ImapFlow({
-    host: config.host,
-    port: config.port,
-    secure: config.secure,
-    auth: { user: config.mailboxEmail, pass: config.mailboxPassword },
-    logger: false,
-  });
-
+  const client = createClient(config);
   await client.connect();
   const lock = await client.getMailboxLock(config.folder);
   try {
@@ -89,6 +84,7 @@ export async function pollLinkedInSignalInbox(config: LinkedInSignalInboxConfig)
         if (!message.source) continue;
         const parsed = await simpleParser(message.source);
         const candidate = parsePotentialLinkedInSignalMessage({
+          uid: message.uid,
           messageId: parsed.messageId?.trim() || `linkedin-signal-${config.mailboxEmail}-${message.uid}`,
           sender: normalizeEmail(parsed.from?.value?.[0]?.address) ?? parsed.from?.text,
           subject: parsed.subject,
@@ -98,7 +94,6 @@ export async function pollLinkedInSignalInbox(config: LinkedInSignalInboxConfig)
         if (!candidate) continue;
         result.messages.push(candidate);
         result.accepted += 1;
-        await client.messageFlagsAdd(message.uid, ['\\Seen'], { uid: true });
       } catch (error) {
         result.errors.push(`UID ${message.uid}: ${errorMessage(error)}`);
       }
@@ -108,6 +103,24 @@ export async function pollLinkedInSignalInbox(config: LinkedInSignalInboxConfig)
     await client.logout().catch(() => undefined);
   }
   return result;
+}
+
+export async function acknowledgeLinkedInSignalInbox(
+  config: LinkedInSignalInboxConfig,
+  uids: number[],
+): Promise<number> {
+  const uniqueUids = [...new Set(uids.filter((uid) => Number.isInteger(uid) && uid > 0))];
+  if (!config.configured || !config.mailboxEmail || !config.mailboxPassword || uniqueUids.length === 0) return 0;
+  const client = createClient(config);
+  await client.connect();
+  const lock = await client.getMailboxLock(config.folder);
+  try {
+    for (const uid of uniqueUids) await client.messageFlagsAdd(uid, ['\\Seen'], { uid: true });
+  } finally {
+    lock.release();
+    await client.logout().catch(() => undefined);
+  }
+  return uniqueUids.length;
 }
 
 export function parsePotentialLinkedInSignalMessage(input: PotentialSignalMessageInput): LinkedInSignalInboxMessage | undefined {
@@ -124,6 +137,7 @@ export function parsePotentialLinkedInSignalMessage(input: PotentialSignalMessag
 
   const salesNavigator = salesNavigatorPattern.test(`${subject ?? ''}\n${text}`);
   return {
+    uid: input.uid ?? 0,
     origin: salesNavigator ? 'sales_navigator_email' : 'linkedin_notification_email',
     messageId: input.messageId?.trim() || `linkedin-email-${stableHash(`${sender}|${subject ?? ''}|${text.slice(0, 500)}`)}`,
     sender,
@@ -132,6 +146,16 @@ export function parsePotentialLinkedInSignalMessage(input: PotentialSignalMessag
     sourceUrl,
     receivedAt: normalizeIso(input.receivedAt) ?? new Date().toISOString(),
   };
+}
+
+function createClient(config: LinkedInSignalInboxConfig): ImapFlow {
+  return new ImapFlow({
+    host: config.host,
+    port: config.port,
+    secure: config.secure,
+    auth: { user: config.mailboxEmail!, pass: config.mailboxPassword! },
+    logger: false,
+  });
 }
 
 function extractLinkedInPostUrl(value: string): string | undefined {
