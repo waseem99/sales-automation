@@ -6,13 +6,32 @@ const ACTOR_COOKIE = 'codistan_admin_actor';
 
 export default {
   async fetch(request: Request): Promise<Response> {
+    let runtimeName = 'lead-signal-intake';
     try {
       if (!['GET', 'POST'].includes(request.method)) return Response.json({ error: 'Method not allowed.' }, { status: 405 });
       const sessionSecret = requireEnvironment('SESSION_SECRET');
       const cronAuthorized = Boolean(process.env.CRON_SECRET?.trim())
         && request.headers.get('authorization') === `Bearer ${process.env.CRON_SECRET?.trim()}`;
       const actor = cronAuthorized ? 'authorized-lead-signal-intake' : await authorizedDashboardActor(request, sessionSecret);
-      if (!actor) return Response.json({ error: 'Authentication required.' }, { status: 401 });
+      if (!actor) {
+        if (request.method === 'GET') return new Response('', { status: 302, headers: { location: '/login', 'cache-control': 'no-store' } });
+        return Response.json({ error: 'Authentication required.' }, { status: 401 });
+      }
+
+      const pathname = originalPath(request);
+      const databaseUrl = requireEnvironment('DATABASE_URL');
+      if (pathname === '/operations' || pathname === '/api/source-controls') {
+        runtimeName = 'operations';
+        const operations = await import('../vercel/operations-runtime.js');
+        return operations.handleOperationsRuntime({
+          request,
+          databaseUrl,
+          pathname,
+          actor,
+          canManage: actor === 'admin' || actor === 'waseem@codistan.org',
+        });
+      }
+
       if (!cronAuthorized && !['admin', 'waseem@codistan.org'].includes(actor)) {
         return Response.json({ error: 'Forbidden: lead-signal intake is restricted to Admin and Waseem.' }, { status: 403 });
       }
@@ -22,10 +41,8 @@ export default {
         import('../vercel/linkedin-warm-signal-engine.js'),
         import('../vercel/upwork-saved-search-engine.js'),
       ]);
-      const databaseUrl = requireEnvironment('DATABASE_URL');
       await loadApprovedPortfolioIntoRuntime(databaseUrl);
       const state = await neonState.loadNeonAppState(databaseUrl);
-      const pathname = new URL(request.url).pathname;
       const wantsHtml = (request.headers.get('accept') ?? '').includes('text/html') || pathname === '/lead-signals';
 
       if (request.method === 'GET') {
@@ -81,11 +98,12 @@ export default {
       return wantsHtml ? html(renderResult(response)) : Response.json(response, { status: 201 });
     } catch (error) {
       const referenceId = await errorReference();
-      console.error('LEAD_SIGNALS_API_ERROR', { referenceId, error });
+      console.error('SHARED_SIGNAL_OPERATIONS_API_ERROR', { referenceId, runtimeName, error });
       const wantsHtml = (request.headers.get('accept') ?? '').includes('text/html');
+      const labelText = runtimeName === 'operations' ? 'Operations' : 'Lead Signal Intake';
       return wantsHtml
-        ? html(renderError(referenceId), 500)
-        : Response.json({ error: 'Lead Signal Intake could not start.', referenceId }, { status: 500 });
+        ? html(renderError(referenceId, labelText), 500)
+        : Response.json({ error: `${labelText} could not start.`, referenceId }, { status: 500 });
     }
   },
 };
@@ -135,7 +153,7 @@ function renderRecent(items: ReturnType<typeof listRecentSignals>): string {
 function renderResult(input: { sourceKind: string; result: unknown }): string {
   return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Lead Signal Result</title><style>${styles()}</style></head><body><main><p class="eyebrow">Completed</p><h1>Lead signal processed</h1><p>Source: ${escapeHtml(label(input.sourceKind))}</p><pre>${escapeHtml(JSON.stringify(input.result, null, 2))}</pre><nav><a href="/lead-signals">Return to signals</a><a href="/priorities">Priority queue</a></nav></main></body></html>`;
 }
-function renderError(referenceId: string): string { return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Lead Signal Error</title><style>${styles()}</style></head><body><main><h1>Lead Signal Intake could not start</h1><p>The failure was recorded. Retry the page or return to Prospects.</p><pre>Reference: ${escapeHtml(referenceId)}</pre><nav><a href="/lead-signals">Retry</a><a href="/prospects">Prospects</a></nav></main></body></html>`; }
+function renderError(referenceId: string, labelText: string): string { return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${escapeHtml(labelText)} unavailable</title><style>${styles()}</style></head><body><main><h1>${escapeHtml(labelText)} could not start</h1><p>The failure was recorded. Retry the page or return to Prospects.</p><pre>Reference: ${escapeHtml(referenceId)}</pre><nav><a href="${labelText === 'Operations' ? '/operations' : '/lead-signals'}">Retry</a><a href="/prospects">Prospects</a></nav></main></body></html>`; }
 function safeguards() { return { authenticatedLinkedInScraping: false, automatedLinkedInMessaging: false, automatedUpworkApplication: false, humanReviewRequired: true }; }
 
 async function loadApprovedPortfolioIntoRuntime(databaseUrl: string): Promise<void> {
@@ -164,6 +182,7 @@ async function sessionTokenFor(expiresAt: number, secret: string): Promise<strin
 async function actorTokenFor(identifier: string, secret: string): Promise<string> { const {createHmac}=await import('node:crypto'); const encoded=Buffer.from(identifier,'utf8').toString('base64url'); return `${encoded}.${createHmac('sha256',secret).update(`actor:${encoded}`).digest('base64url')}`; }
 async function safeEqual(left: string, right: string): Promise<boolean> { const {timingSafeEqual}=await import('node:crypto'); const a=Buffer.from(left); const b=Buffer.from(right); return a.length===b.length&&timingSafeEqual(a,b); }
 async function errorReference(): Promise<string> { const { randomUUID } = await import('node:crypto'); return randomUUID(); }
+function originalPath(request: Request): string { const url=new URL(request.url); const rewritten=url.searchParams.get('__path'); return rewritten ? (rewritten.startsWith('/')?rewritten:`/${rewritten}`) : url.pathname; }
 function parseCookies(value: string): Record<string,string> { const result:Record<string,string>={}; for(const part of value.split(';')){const [name,...rest]=part.trim().split('='); if(name) result[name]=rest.join('=');} return result; }
 async function parseBody(request: Request): Promise<unknown> { const raw=await request.text(); if(!raw) return {}; if(raw.length>120000) throw new Error('Signal payload is too large.'); const type=request.headers.get('content-type')?.toLowerCase()??''; if(type.includes('application/x-www-form-urlencoded')) return Object.fromEntries(new URLSearchParams(raw)); try{return JSON.parse(raw);}catch{return Object.fromEntries(new URLSearchParams(raw));} }
 function asObject(value: unknown): Record<string,unknown> { return value&&typeof value==='object'&&!Array.isArray(value)?value as Record<string,unknown>:{}; }
