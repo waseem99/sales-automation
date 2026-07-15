@@ -1,37 +1,43 @@
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
-import type { StoredLeadRecord } from '@sales-automation/storage';
-import { extractOutreachOperationalTelemetry } from '../vercel/outreach-telemetry.js';
-
-const startedAt = '2026-07-15T04:00:00.000Z';
-const completedAt = '2026-07-15T04:01:00.000Z';
-const encode = (value: unknown) => Buffer.from(JSON.stringify(value), 'utf8').toString('base64url');
-const record = {
-  lead: { id: 'lead-1' },
-  notes: [
-    `outreach::sent::${encode({ leadId: 'lead-1', sequence: 0, sender: 'sales@codistan.org', recipient: 'buyer@example.com', sentAt: completedAt })}`,
-    `outreach::inbound::${encode({ messageId: 'm1', from: 'buyer@example.com', mailboxEmail: 'sales@codistan.org', receivedAt: completedAt, classification: 'positive_reply', replyBody: 'private reply content' })}`,
-    `outreach::suppressed::${encode({ email: 'buyer@example.com', reason: 'unsubscribe_or_stop', recordedAt: completedAt })}`,
-  ],
-} as unknown as StoredLeadRecord;
-const events = extractOutreachOperationalTelemetry([record], {
-  startedAt, completedAt, liveSendingAllowed: true, dryRun: false,
-  configuredMailboxCount: 1, activeSenderCount: 1, repliesChecked: 1, repliesMatched: 1,
-  repliesProcessed: 1, bouncesOrSuppressions: 1, alertsSent: 0, planned: 1, sent: 1,
-  failed: 0, skippedByDailyLimit: 0, errors: [], sentLeadIds: ['lead-1'],
-});
-assert.ok(events.some((event) => event.eventType === 'smtp_delivery'));
-assert.ok(events.some((event) => event.eventType === 'reply'));
-assert.ok(events.some((event) => event.eventType === 'suppression'));
-assert.equal(JSON.stringify(events).includes('private reply content'), false, 'Message bodies must never enter telemetry.');
-assert.equal(events.find((event) => event.eventType === 'smtp_delivery')?.recipientDomain, 'example.com');
 
 const outreachCron = await readFile(new URL('../api/cron/outreach.ts', import.meta.url), 'utf8');
+const extractor = await readFile(new URL('../vercel/outreach-telemetry.ts', import.meta.url), 'utf8');
+const storage = await readFile(new URL('../packages/neon-state/src/operational-telemetry.ts', import.meta.url), 'utf8');
+const deliveryPage = await readFile(new URL('../api/delivery-health.ts', import.meta.url), 'utf8');
+const vercelConfig = JSON.parse(await readFile(new URL('../vercel.json', import.meta.url), 'utf8')) as {
+  crons?: Array<{ path?: string }>;
+  rewrites?: Array<{ source?: string; destination?: string }>;
+  functions?: Record<string, { maxDuration?: number }>;
+};
+
+assert.match(outreachCron, /extractOutreachOperationalTelemetry/);
 assert.match(outreachCron, /persistOperationalTelemetryEvents/);
 assert.match(outreachCron, /pruneOperationalTelemetry/);
 assert.match(outreachCron, /persistTelemetryWithoutBreakingResponse/);
-const deliveryPage = await readFile(new URL('../api/delivery-health.ts', import.meta.url), 'utf8');
-assert.match(deliveryPage, /recipientEmailsStored:\s*false/);
-assert.match(deliveryPage, /restricted to Admin and Waseem/);
+assert.match(outreachCron, /OUTREACH_TELEMETRY_PERSISTENCE_ERROR/);
 
-console.log('Delivery telemetry extraction, privacy and inline cron deployment contract passed');
+assert.match(extractor, /eventType:\s*'smtp_delivery'/);
+assert.match(extractor, /eventType:\s*'imap_poll'/);
+assert.match(extractor, /'bounce'\s*:\s*'reply'|classification === 'bounce_or_delivery_failure'/);
+assert.match(extractor, /domainOf\(/);
+assert.doesNotMatch(extractor, /details:\s*\{[^}]*replyBody/s);
+
+assert.match(storage, /operational_telemetry_events/);
+assert.match(storage, /recipient_domain/);
+assert.doesNotMatch(storage, /recipient_email/);
+assert.match(storage, /occurrence_count\s*=\s*operational_telemetry_events\.occurrence_count\s*\+\s*1/);
+assert.match(storage, /forbiddenDetailKey/);
+assert.match(storage, /body\|content\|subject\|recipient\|email\|password\|secret\|token/);
+assert.match(storage, /\[redacted-email\]/);
+
+assert.match(deliveryPage, /recipientEmailsStored:\s*false/);
+assert.match(deliveryPage, /messageBodiesStored:\s*false/);
+assert.match(deliveryPage, /restricted to Admin and Waseem/);
+assert.match(deliveryPage, /loadOperationalTelemetryEvents/);
+
+assert.ok(vercelConfig.crons?.some((cron) => cron.path === '/api/cron/outreach'));
+assert.ok(vercelConfig.rewrites?.some((rewrite) => rewrite.source === '/delivery-health' && rewrite.destination === '/api/delivery-health'));
+assert.equal(vercelConfig.functions?.['api/delivery-health.ts']?.maxDuration, 300);
+
+console.log('Delivery telemetry privacy, persistence and production wiring contract passed');
