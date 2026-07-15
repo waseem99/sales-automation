@@ -20,6 +20,7 @@ import {
   LINKEDIN_PUBLIC_INDEX_QUERIES,
   type LinkedInWarmSignalInput,
   type ProspectDiscoveryRun,
+  type PublicLinkedInIndexCollection,
 } from '@sales-automation/prospect-discovery';
 import { processLinkedInWarmSignalBatch } from '../../vercel/linkedin-warm-signal-engine.js';
 import { approvedStarterPortfolioItems } from '../../vercel/approved-portfolio.js';
@@ -76,14 +77,14 @@ export default {
       })));
 
       const publicQueries = splitQueries(process.env.LINKEDIN_PUBLIC_INDEX_QUERIES);
-      const publicIndex = publicIndexEnabled
+      const publicIndex: PublicLinkedInIndexCollection = publicIndexEnabled
         ? await collectPublicLinkedInIndexSignals(
           globalThis.fetch,
           publicQueries.length ? publicQueries : LINKEDIN_PUBLIC_INDEX_QUERIES,
           positiveInteger(process.env.LINKEDIN_PUBLIC_INDEX_MAX_QUERIES, 6, 12),
           startedAt,
         )
-        : { checked: 0, inputs: [] as LinkedInWarmSignalInput[] };
+        : { checked: 0, inputs: [], error: undefined };
       if (publicIndex.error) errors.push(`linkedin_public_index: ${publicIndex.error}`);
       signals.push(...publicIndex.inputs);
 
