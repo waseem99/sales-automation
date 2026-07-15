@@ -9,6 +9,7 @@
     "api/tenders.ts": { "maxDuration": 300 },
     "api/tender-discovery.ts": { "maxDuration": 300 },
     "api/prospect-cleanup.ts": { "maxDuration": 300 },
+    "api/contact-enrichment.ts": { "maxDuration": 300 },
     "api/cron/prospect-discovery.ts": { "maxDuration": 300 },
     "api/cron/outreach.ts": { "maxDuration": 300 }
   },
