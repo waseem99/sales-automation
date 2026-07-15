@@ -3,7 +3,6 @@ import { readFileSync } from 'node:fs';
 
 const protectedFiles = [
   '../api/lead-signals.ts',
-  '../api/operations.ts',
   '../vercel/portfolio-catalog-runtime.ts',
   '../vercel/operations-runtime.ts',
   '../vercel/linkedin-warm-signal-engine.ts',
@@ -31,13 +30,14 @@ const signalApi = readFileSync(new URL('../api/lead-signals.ts', import.meta.url
 assert.equal(signalApi.includes("import('@sales-automation/neon-state')"), true);
 assert.equal(signalApi.includes("import('../vercel/linkedin-warm-signal-engine.js')"), true);
 assert.equal(signalApi.includes("import('../vercel/upwork-saved-search-engine.js')"), true);
+assert.equal(signalApi.includes("import('../vercel/operations-runtime.js')"), true);
 
 const vercel = JSON.parse(readFileSync(new URL('../vercel.json', import.meta.url), 'utf8')) as {
   functions?: Record<string, unknown>;
   rewrites?: Array<{ source: string; destination: string }>;
 };
-assert.ok(vercel.functions?.['api/operations.ts']);
-assert.equal(vercel.rewrites?.find((item) => item.source === '/operations')?.destination, '/api/operations?__path=/operations');
-assert.equal(vercel.rewrites?.find((item) => item.source === '/api/source-controls')?.destination, '/api/operations?__path=/api/source-controls');
+assert.equal(Boolean(vercel.functions?.['api/operations.ts']), false);
+assert.equal(vercel.rewrites?.find((item) => item.source === '/operations')?.destination, '/api/lead-signals?__path=/operations');
+assert.equal(vercel.rewrites?.find((item) => item.source === '/api/source-controls')?.destination, '/api/lead-signals?__path=/api/source-controls');
 
 console.log('Portfolio, Operations and Signal Intake keep ESM packages behind dynamic serverless boundaries');
