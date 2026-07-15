@@ -4,7 +4,7 @@
 
 Issue #87 requires provider-level outreach and mailbox failures to be visible without exposing message contents, credentials or private recipient data.
 
-The hourly Vercel schedule now calls `/api/cron/outreach-observed`. That wrapper executes the existing outreach cycle unchanged, extracts privacy-safe operational facts, persists them to Neon and returns the original worker response.
+The existing hourly Vercel route `/api/cron/outreach` now records privacy-safe telemetry directly after its normal outreach cycle. The route, locking, sending gates, reply processing and response contract remain unchanged. Telemetry persistence is isolated so a telemetry failure cannot fail or alter the outreach response.
 
 ## Events
 
@@ -42,7 +42,7 @@ The storage sanitizer removes sensitive keys and redacts email addresses from pe
 
 Each operational condition is bucketed by event type, status, provider, worker, mailbox, lead, recipient domain and UTC hour. Repeated occurrences within the hour update one row and increment `occurrence_count` rather than generating repeated alerts.
 
-Data older than 90 days is pruned by the observed outreach wrapper.
+Data older than 90 days is pruned after successful outreach telemetry processing.
 
 ## Workspace
 

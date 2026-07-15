@@ -26,11 +26,12 @@ assert.ok(events.some((event) => event.eventType === 'suppression'));
 assert.equal(JSON.stringify(events).includes('private reply content'), false, 'Message bodies must never enter telemetry.');
 assert.equal(events.find((event) => event.eventType === 'smtp_delivery')?.recipientDomain, 'example.com');
 
-const wrapper = await readFile(new URL('../api/cron/outreach-observed.ts', import.meta.url), 'utf8');
-assert.match(wrapper, /persistOperationalTelemetryEvents/);
-assert.match(wrapper, /pruneOperationalTelemetry/);
+const outreachCron = await readFile(new URL('../api/cron/outreach.ts', import.meta.url), 'utf8');
+assert.match(outreachCron, /persistOperationalTelemetryEvents/);
+assert.match(outreachCron, /pruneOperationalTelemetry/);
+assert.match(outreachCron, /persistTelemetryWithoutBreakingResponse/);
 const deliveryPage = await readFile(new URL('../api/delivery-health.ts', import.meta.url), 'utf8');
 assert.match(deliveryPage, /recipientEmailsStored:\s*false/);
 assert.match(deliveryPage, /restricted to Admin and Waseem/);
 
-console.log('Delivery telemetry extraction, privacy and deployment contract passed');
+console.log('Delivery telemetry extraction, privacy and inline cron deployment contract passed');
