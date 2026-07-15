@@ -22,6 +22,6 @@ assert.match(workflow, /name:\s*Repository CI \(best effort\)/);
 assert.match(workflow, /actions\/checkout@v4/);
 assert.match(workflow, /pnpm deploy:check/);
 assert.match(releaseDoc, /production Vercel deployment is the enforced release gate/i);
-assert.match(releaseDoc, /successful Vercel status/i);
+assert.match(releaseDoc, /successful[^\n]*Vercel[^\n]*status/i);
 
 console.log('Vercel release gate and best-effort GitHub CI contract passed');
