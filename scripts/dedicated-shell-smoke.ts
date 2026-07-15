@@ -23,10 +23,10 @@ for (const entry of entries) {
   assert.equal(config.functions?.[functionPath]?.maxDuration, 300);
   assert.equal(config.rewrites?.find((rewrite) => rewrite.source === entry.route)?.destination, `/api/${entry.file}`);
   const wrapper = readFileSync(new URL(`../api/${entry.file}.ts`, import.meta.url), 'utf8');
-  const core = readFileSync(new URL(`../api/${entry.file}-core.ts`, import.meta.url), 'utf8');
+  const core = readFileSync(new URL(`../vercel/${entry.file}-core.ts`, import.meta.url), 'utf8');
   assert.match(wrapper, /serveDedicatedWorkspace/);
   assert.match(wrapper, new RegExp(`activeRoute:\\s*'${entry.route.replace('/', '\\/')}'`));
-  assert.match(wrapper, new RegExp(`import\\('\\./${entry.file}-core\\.js'\\)`));
+  assert.match(wrapper, new RegExp(`import\\('\\.\\.\\/vercel\\/${entry.file}-core\\.js'\\)`));
   assert.ok(core.length > 500, `${entry.file}-core.ts must retain the original handler implementation`);
   assert.match(core, /export const maxDuration = 300/);
 }
