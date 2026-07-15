@@ -21,7 +21,7 @@ assert.match(operations, /activeShare > 0\.5/);
 assert.match(operations, /OUTREACH_DNS_READY/);
 assert.match(operations, /OUTREACH_SENDING_ENABLED/);
 assert.match(operations, /VERCEL_GIT_COMMIT_SHA/);
-assert.match(operations, /GitHub Actions/);
+assert.match(operations, /Release gate/);
 assert.match(operations, /source controls are restricted to Admin and Waseem/);
 assert.match(operations, /repeatRecommendations/);
 assert.match(operations, /priorityA/);
