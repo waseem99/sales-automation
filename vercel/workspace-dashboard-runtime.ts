@@ -1,4 +1,3 @@
-import { samplePortfolioItems } from '@sales-automation/fixtures';
 import {
   loadNeonDiscoveryRuns,
   loadNeonScopedRecords,
@@ -58,6 +57,9 @@ export async function handleWorkspaceDashboardRuntime(
   const before = snapshots(repository.listLeads());
   const runs = await loadNeonDiscoveryRuns(input.databaseUrl, 30);
   const runStore = new InMemoryProspectDiscoveryRunStore(runs);
+  const portfolioCatalog = await import('@sales-automation/neon-state/portfolio-catalog');
+  const approvedPortfolio = await portfolioCatalog.loadApprovedPortfolioCatalog(input.databaseUrl);
+  const portfolioItems = portfolioCatalog.asPortfolioItems(approvedPortfolio);
   const internalUrl = new URL('/prospects', 'https://local.invalid');
   for (const [key, value] of url.searchParams.entries()) internalUrl.searchParams.set(key, value);
 
@@ -71,7 +73,7 @@ export async function handleWorkspaceDashboardRuntime(
   }, {
     repository,
     runStore,
-    portfolioItems: samplePortfolioItems,
+    portfolioItems,
     adminPassword: input.adminPassword,
     sessionSecret: input.sessionSecret,
     secureCookies: true,
