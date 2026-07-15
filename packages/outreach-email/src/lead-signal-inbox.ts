@@ -136,7 +136,7 @@ export async function pollLeadSignalInbox(
     const orderedUids = [...candidateSources.keys()].sort((left, right) => right - left);
     for (const uid of orderedUids) {
       try {
-        for await (const message of client.fetch(uid, { uid: true, source: true, envelope: true }, { uid: true })) {
+        for await (const message of client.fetch([uid], { uid: true, source: true, envelope: true }, { uid: true })) {
           if (!message.source) continue;
           const parsed = await simpleParser(message.source);
           const candidate = parsePotentialLeadSignalMessage({
@@ -235,6 +235,7 @@ async function addSearchMatches(
 ): Promise<void> {
   try {
     const matches = await client.search(query, { uid: true });
+    if (!Array.isArray(matches)) return;
     for (const uid of matches.slice(-maximum)) {
       const kinds = target.get(uid) ?? new Set<'upwork' | 'linkedin' | 'forwarded'>();
       kinds.add(kind);
