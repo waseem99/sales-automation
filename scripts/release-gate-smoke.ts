@@ -16,7 +16,7 @@ assert.match(vercel.buildCommand ?? '', /pnpm build:vercel/);
 assert.match(packageJson.scripts?.['build:vercel'] ?? '', /pnpm build/);
 assert.match(packageJson.scripts?.['build:vercel'] ?? '', /pnpm test:vercel-runtime/);
 assert.match(packageJson.scripts?.['test:vercel-runtime'] ?? '', /delivery-telemetry-smoke\.ts/);
-assert.ok(vercel.crons?.some((cron) => cron.path === '/api/cron/outreach-observed'));
+assert.ok(vercel.crons?.some((cron) => cron.path === '/api/cron/outreach'));
 assert.ok(vercel.rewrites?.some((rewrite) => rewrite.source === '/delivery-health' && rewrite.destination === '/api/delivery-health'));
 assert.match(workflow, /name:\s*Repository CI \(best effort\)/);
 assert.match(workflow, /actions\/checkout@v4/);
