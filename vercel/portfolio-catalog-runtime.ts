@@ -1,14 +1,9 @@
-import {
-  archivePortfolioCatalogItem,
-  ensurePortfolioCatalogSeeded,
-  loadPortfolioCatalog,
-  upsertPortfolioCatalogItem,
-  type ManagedPortfolioItem,
-  type PortfolioApprovalStatus,
-  type PortfolioAssetHealth,
+import type {
+  ManagedPortfolioItem,
+  PortfolioApprovalStatus,
+  PortfolioAssetHealth,
 } from '@sales-automation/neon-state/portfolio-catalog';
 import type { CodistanProfile, ServiceCategory } from '@sales-automation/shared';
-import { approvedStarterPortfolioItems } from './approved-portfolio.js';
 
 export interface PortfolioCatalogRuntimeInput {
   request: Request;
@@ -31,15 +26,19 @@ const profiles: CodistanProfile[] = [
 ];
 
 export async function handlePortfolioCatalogRuntime(input: PortfolioCatalogRuntimeInput): Promise<Response> {
-  await ensurePortfolioCatalogSeeded(input.databaseUrl, approvedStarterPortfolioItems);
+  const [catalog, starters] = await Promise.all([
+    import('@sales-automation/neon-state/portfolio-catalog'),
+    import('./approved-portfolio.js'),
+  ]);
+  await catalog.ensurePortfolioCatalogSeeded(input.databaseUrl, starters.approvedStarterPortfolioItems);
 
   if (input.request.method === 'GET' && input.pathname === '/portfolio') {
-    const items = await loadPortfolioCatalog(input.databaseUrl);
+    const items = await catalog.loadPortfolioCatalog(input.databaseUrl);
     return html(renderPortfolioCatalogPage(items, input.actor, input.canManage));
   }
 
   if (input.request.method === 'GET' && input.pathname === '/api/portfolio-catalog') {
-    const items = await loadPortfolioCatalog(input.databaseUrl);
+    const items = await catalog.loadPortfolioCatalog(input.databaseUrl);
     return json({ items, canManage: input.canManage });
   }
 
@@ -47,7 +46,7 @@ export async function handlePortfolioCatalogRuntime(input: PortfolioCatalogRunti
 
   if (input.request.method === 'POST' && input.pathname === '/api/portfolio-catalog') {
     const payload = asObject(await parseBody(input.request));
-    const existing = (await loadPortfolioCatalog(input.databaseUrl)).find((item) => item.id === optionalString(payload.id));
+    const existing = (await catalog.loadPortfolioCatalog(input.databaseUrl)).find((item) => item.id === optionalString(payload.id));
     const now = new Date().toISOString();
     const approvalStatus = enumValue<PortfolioApprovalStatus>(payload.approvalStatus, 'approvalStatus', ['draft', 'approved', 'archived']);
     const confidentiality = enumValue<ManagedPortfolioItem['confidentiality']>(payload.confidentiality, 'confidentiality', ['public', 'anonymized', 'private']);
@@ -78,14 +77,14 @@ export async function handlePortfolioCatalogRuntime(input: PortfolioCatalogRunti
     };
     if (item.serviceCategories.length === 0) throw new Error('At least one valid service category is required.');
     if (item.bestProfiles.length === 0) item.bestProfiles = ['needs_human_review'];
-    await upsertPortfolioCatalogItem(input.databaseUrl, item);
+    await catalog.upsertPortfolioCatalogItem(input.databaseUrl, item);
     return json({ ok: true, item }, existing ? 200 : 201);
   }
 
   if (input.request.method === 'DELETE' && input.pathname === '/api/portfolio-catalog') {
     const payload = asObject(await parseBody(input.request));
     const id = requiredString(payload.id, 'id');
-    const item = await archivePortfolioCatalogItem(input.databaseUrl, id, input.actor);
+    const item = await catalog.archivePortfolioCatalogItem(input.databaseUrl, id, input.actor);
     return item ? json({ ok: true, item }) : json({ error: 'Portfolio item not found.' }, 404);
   }
 
