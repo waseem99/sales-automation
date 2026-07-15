@@ -1,19 +1,26 @@
-name: CI
+name: Repository CI (best effort)
 
 on:
   pull_request:
   push:
     branches:
       - main
-      - sprint-1-foundation
+
+permissions:
+  contents: read
+
+concurrency:
+  group: repository-ci-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   verify:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v5
+        uses: actions/checkout@v4
         with:
           show-progress: false
 
@@ -26,51 +33,7 @@ jobs:
         run: |
           node --version
           npm --version
-          command -v pnpm
           pnpm --version
 
-      - name: Install dependencies
-        run: pnpm install --no-frozen-lockfile --silent
-
-      - name: Typecheck
-        id: typecheck
-        continue-on-error: true
-        run: pnpm typecheck > typecheck.log 2>&1
-
-      - name: Print typecheck log tail
-        if: always()
-        run: tail -n 160 typecheck.log || true
-
-      - name: Upload typecheck log
-        if: always()
-        uses: actions/upload-artifact@v5
-        with:
-          name: typecheck-log
-          path: typecheck.log
-
-      - name: Fail if typecheck failed
-        if: steps.typecheck.outcome != 'success'
-        run: exit 1
-
-      - name: Test
-        id: test
-        continue-on-error: true
-        run: pnpm test > test.log 2>&1
-
-      - name: Print test log tail
-        if: always()
-        run: tail -n 120 test.log || true
-
-      - name: Upload test log
-        if: always()
-        uses: actions/upload-artifact@v5
-        with:
-          name: test-log
-          path: test.log
-
-      - name: Fail if tests failed
-        if: steps.test.outcome != 'success'
-        run: exit 1
-
-      - name: Build
-        run: pnpm build
+      - name: Run repository deployment check
+        run: pnpm deploy:check

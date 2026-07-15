@@ -68,7 +68,7 @@ assert.equal(updated?.contactName, 'Amelia Carter');
 assert.equal(updated?.contactRole, 'Chief Technology Officer');
 assert.equal(updated?.contactFormUrl, 'https://example.co/contact-us');
 assert.equal(getStoredContactEnrichment(updated!).status, 'ready');
-assert.ok(repository.getLead(lead.id)?.notes.some((note) => note.body.includes('contact-enrichment::ready::high')));
+assert.ok(repository.getLead(lead.id)?.notes.some((note) => note.includes('contact-enrichment::ready::high')));
 
 const personalOnly = await verifyPublicContactEnrichment({
   lead: baseLead({ id: 'personal-only', companyWebsite: 'https://personal.example' }),

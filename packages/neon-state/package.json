@@ -17,13 +17,17 @@
     "./source-controls": {
       "types": "./dist/source-controls.d.ts",
       "default": "./dist/source-controls.js"
+    },
+    "./operational-telemetry": {
+      "types": "./dist/operational-telemetry.d.ts",
+      "default": "./dist/operational-telemetry.js"
     }
   },
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "lint": "tsc -p tsconfig.json --noEmit",
-    "test": "tsx src/index.test.ts && tsx src/portfolio-catalog.test.ts && tsx src/source-controls.test.ts"
+    "test": "tsx src/index.test.ts && tsx src/portfolio-catalog.test.ts && tsx src/source-controls.test.ts && tsx src/operational-telemetry.test.ts"
   },
   "dependencies": {
     "@neondatabase/serverless": "^1.0.2",
