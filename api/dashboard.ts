@@ -147,6 +147,19 @@ export default {
       phase = 'load_managed_portfolio_catalog';
       await loadApprovedPortfolioIntoRuntime(databaseUrl);
 
+      const workspaceRuntime = await import('../vercel/workspace-dashboard-runtime.js');
+      if (request.method === 'GET' && workspaceRuntime.isWorkspaceDashboardPath(pathname)) {
+        phase = 'load_workspace_dashboard_runtime';
+        return workspaceRuntime.handleWorkspaceDashboardRuntime({
+          request,
+          originalUrl,
+          databaseUrl,
+          session,
+          adminPassword,
+          sessionSecret,
+        });
+      }
+
       if (pathname === '/priorities' || pathname === '/api/closeability-rescore') {
         phase = 'load_priority_queue_runtime';
         const priorityRuntime = await import('../vercel/priority-queue-runtime.js');

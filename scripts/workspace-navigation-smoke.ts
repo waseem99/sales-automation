@@ -8,6 +8,7 @@ import {
   resolveWorkspacePage,
   WORKSPACE_PAGES,
 } from '../vercel/workspace-pages.js';
+import { isWorkspaceDashboardPath } from '../vercel/workspace-dashboard-runtime.js';
 
 const now = '2026-07-15T12:00:00.000Z';
 const records: StoredLeadRecord[] = [
@@ -26,6 +27,9 @@ assert.equal(new Set(WORKSPACE_PAGES.map((page) => page.route)).size, WORKSPACE_
 assert.equal(resolveWorkspacePage('/leads/linkedin')?.id, 'linkedin');
 assert.equal(resolveWorkspacePage('/services/software/')?.id, 'software');
 assert.equal(resolveWorkspacePage('/not-a-workspace'), undefined);
+assert.equal(isWorkspaceDashboardPath('/leads/rfq'), true);
+assert.equal(isWorkspaceDashboardPath('/services/cybersecurity/'), true);
+assert.equal(isWorkspaceDashboardPath('/operations'), false);
 
 const linkedin = buildWorkspacePage(records, { pageSize: 25 }, requiredPage('/leads/linkedin'), undefined, now);
 assert.equal(linkedin.page.visibleTotal, 1);
@@ -59,11 +63,17 @@ const vercel = JSON.parse(readFileSync(new URL('../vercel.json', import.meta.url
   rewrites: Array<{ source: string; destination: string }>;
 };
 for (const page of WORKSPACE_PAGES) {
-  assert.ok(vercel.rewrites.some((rewrite) => rewrite.source === page.route && rewrite.destination.includes('/api/workspaces')),
-    `Missing Vercel rewrite for ${page.route}`);
+  assert.ok(vercel.rewrites.some((rewrite) => rewrite.source === page.route
+    && rewrite.destination.includes('/api/dashboard')
+    && rewrite.destination.includes(`__path=${page.route}`)),
+  `Missing dashboard rewrite for ${page.route}`);
 }
+const dashboardSource = readFileSync(new URL('../api/dashboard.ts', import.meta.url), 'utf8');
+assert.match(dashboardSource, /workspace-dashboard-runtime\.js/);
+assert.match(dashboardSource, /isWorkspaceDashboardPath\(pathname\)/);
+assert.doesNotMatch(JSON.stringify(vercel), /api\/workspaces/);
 
-console.log('Dedicated workspace routes, filters, sidebar and Vercel routing smoke tests passed');
+console.log('Dedicated workspace routes, filters, sidebar and existing-dashboard routing smoke tests passed');
 
 function requiredPage(route: string) {
   const page = resolveWorkspacePage(route);
