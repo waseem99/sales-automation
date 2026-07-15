@@ -1,3 +1,9 @@
+import {
+  loadRuntimeBoundary,
+  runtimeErrorResponse,
+  runtimeFailureDetails,
+} from '../vercel/runtime-contract.js';
+
 export const maxDuration = 300;
 
 const SESSION_COOKIE = 'codistan_admin_session';
@@ -134,7 +140,7 @@ export default {
 
       if (pathname === '/portfolio' || pathname === '/api/portfolio-catalog') {
         phase = 'load_portfolio_catalog_runtime';
-        const portfolioRuntime = await import('../vercel/portfolio-catalog-runtime.js');
+        const portfolioRuntime = await loadRuntimeBoundary(phase, () => import('../vercel/portfolio-catalog-runtime.js'));
         return portfolioRuntime.handlePortfolioCatalogRuntime({
           request,
           databaseUrl,
@@ -146,7 +152,7 @@ export default {
 
       if (pathname === '/operations' || pathname === '/api/source-controls') {
         phase = 'load_operations_runtime';
-        const operationsRuntime = await import('../vercel/operations-runtime.js');
+        const operationsRuntime = await loadRuntimeBoundary(phase, () => import('../vercel/operations-runtime.js'));
         return operationsRuntime.handleOperationsRuntime({
           request,
           databaseUrl,
@@ -159,7 +165,7 @@ export default {
       phase = 'load_managed_portfolio_catalog';
       await loadApprovedPortfolioIntoRuntime(databaseUrl);
 
-      const workspaceRuntime = await import('../vercel/workspace-dashboard-runtime.js');
+      const workspaceRuntime = await loadRuntimeBoundary('load_workspace_route_contract', () => import('../vercel/workspace-dashboard-runtime.js'));
       if (request.method === 'GET' && workspaceRuntime.isWorkspaceDashboardPath(pathname)) {
         phase = 'load_workspace_dashboard_runtime';
         return workspaceRuntime.handleWorkspaceDashboardRuntime({
@@ -174,26 +180,31 @@ export default {
 
       if (pathname === '/priorities' || pathname === '/api/closeability-rescore') {
         phase = 'load_priority_queue_runtime';
-        const priorityRuntime = await import('../vercel/priority-queue-runtime.js');
+        const priorityRuntime = await loadRuntimeBoundary(phase, () => import('../vercel/priority-queue-runtime.js'));
         return priorityRuntime.handlePriorityQueueRuntime({ request, databaseUrl, pathname, session });
       }
 
       phase = 'load_scoped_dashboard_runtime';
-      const runtime = await import('./dashboard-runtime.js');
+      const runtime = await loadRuntimeBoundary(phase, () => import('./dashboard-runtime.js'));
       return runtime.handleAuthenticatedDashboardRequest({ request, originalUrl, session, adminPassword, sessionSecret });
     } catch (error) {
-      const details = normalizeError(error);
-      console.error('VERCEL_DASHBOARD_RUNTIME_ERROR', { phase, message: details.message, stack: details.stack });
-      return runtimeErrorResponse(request, phase, details.message);
+      const failure = runtimeFailureDetails(error, phase);
+      console.error('VERCEL_DASHBOARD_RUNTIME_ERROR', {
+        referenceId: failure.referenceId,
+        operation: failure.operation,
+        message: failure.message,
+        stack: failure.stack,
+      });
+      return runtimeErrorResponse(request, failure);
     }
   },
 };
 
 async function loadApprovedPortfolioIntoRuntime(databaseUrl: string): Promise<void> {
   const [catalog, starters, fixtures] = await Promise.all([
-    import('@sales-automation/neon-state/portfolio-catalog'),
-    import('../vercel/approved-portfolio.js'),
-    import('@sales-automation/fixtures'),
+    loadRuntimeBoundary('load_portfolio_catalog_package', () => import('@sales-automation/neon-state/portfolio-catalog')),
+    loadRuntimeBoundary('load_approved_portfolio_seed', () => import('../vercel/approved-portfolio.js')),
+    loadRuntimeBoundary('load_portfolio_fixtures_package', () => import('@sales-automation/fixtures')),
   ]);
   await catalog.ensurePortfolioCatalogSeeded(databaseUrl, starters.approvedStarterPortfolioItems);
   const approved = await catalog.loadApprovedPortfolioCatalog(databaseUrl);
@@ -309,6 +320,3 @@ function asObject(value: unknown): Record<string, unknown> { return value&&typeo
 function securityHeaders(): Record<string,string> { return {'x-content-type-options':'nosniff','x-frame-options':'DENY','referrer-policy':'same-origin','content-security-policy':"default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'"}; }
 function html(body: string,status=200): Response { return new Response(body,{status,headers:{...securityHeaders(),'content-type':'text/html; charset=utf-8','cache-control':'no-store'}}); }
 function json(value: unknown,status=200,additionalHeaders: Record<string,string> = {}): Response { return new Response(JSON.stringify(value),{status,headers:{...securityHeaders(),...additionalHeaders,'content-type':'application/json; charset=utf-8','cache-control':'no-store'}}); }
-function runtimeErrorResponse(request: Request,phase:string,message:string): Response { const acceptsHtml=request.headers.get('accept')?.includes('text/html')??false; if(!acceptsHtml)return json({error:'Application runtime failed.',phase,detail:message},500); return html(`<!doctype html><html><body style="font-family:system-ui;background:#f8fafc;padding:40px"><main style="max-width:760px;margin:auto;background:#fff;padding:28px;border-radius:16px"><h1>Prospect Desk could not start</h1><p>Failure during <strong>${escapeHtml(phase)}</strong>.</p><code>${escapeHtml(message)}</code></main></body></html>`,500); }
-function normalizeError(error: unknown): {message:string;stack?:string} { return error instanceof Error?{message:error.message,stack:error.stack}:{message:String(error)}; }
-function escapeHtml(value: string): string { return value.replace(/[&<>"']/g,(character)=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'})[character]??character); }

@@ -20,17 +20,33 @@ There is one production application path:
 ```text
 Vercel
   api/dashboard.ts
-    api/dashboard-runtime.ts
-      @sales-automation/web/prospect-handler
-        Neon Postgres
+    shared route/auth/error contract
+      specialized Vercel runtimes
+      api/dashboard-runtime.ts
+        @sales-automation/web/prospect-handler
+          Neon Postgres
 ```
 
-Public application routes:
+Public and authentication routes:
 
-- `/prospects` — scoped Prospect Desk.
-- `/tenders` — formal Tender & RFP Pipeline.
 - `/login` — internal account login.
 - `/health` — non-secret configuration health.
+
+Authenticated workspaces:
+
+- `/prospects`
+- `/priorities`
+- `/leads/*`
+- `/services/*`
+- `/lead-signals`
+- `/linkedin-signals`
+- `/tenders`
+- `/portfolio`
+- `/re-engagement`
+- `/operations`
+- `/delivery-health`
+
+The machine-readable route, role, runtime-target and response contract is defined in `vercel/runtime-contract.ts` and documented in `docs/PROTECTED_ROUTE_CONTRACT.md`.
 
 Scheduled routes:
 
@@ -65,6 +81,7 @@ The retired Local MVP Lead Desk, duplicate `api/index.ts` runtime, Render/Docker
 - `apps/web` — Prospect Desk rendering, scoped access, activity, qualification and local development server.
 - `packages/outreach-email` — guarded SMTP/IMAP outreach, follow-ups, bounce/reply processing and suppression.
 - `api/` — Vercel entry points only.
+- `vercel/runtime-contract.ts` — route inventory, role expectations, shared dynamic-load boundary and safe runtime failure contract.
 
 ### Retained future source foundation
 
@@ -77,7 +94,19 @@ The retired Local MVP Lead Desk, duplicate `api/index.ts` runtime, Render/Docker
 - Jawad, Moiz, Subaina, Danish, Hiba and Bilal: assigned scope according to the central dashboard access rules.
 - Formal tenders and RFPs route to Jawad.
 
-Authorization is enforced in the server/runtime and database queries; it is not only a UI filter.
+Authorization is enforced in the server/runtime and database queries; it is not only a UI filter. The protected-route contract adds regression coverage but does not replace those checks.
+
+## Runtime and error contract
+
+Specialized route modules are loaded at request time through a shared runtime boundary. Runtime failures must:
+
+- retain a server-side stack and operation log;
+- include a non-sensitive reference ID;
+- return safe HTML or JSON according to the request;
+- never expose database URLs, credentials, private messages or buyer data;
+- provide retry or safe navigation for HTML requests.
+
+`pnpm test:protected-routes` verifies the route inventory, unauthenticated behavior, role classification, admin-only mutations and safe failure responses. `pnpm deploy:check` remains the full release gate.
 
 ## Data model and persistence
 
@@ -110,7 +139,7 @@ Do not change these gates merely to make a test email send. SPF, DKIM, DMARC, se
 ## Change rules
 
 - Add new acquisition sources through `packages/prospect-discovery` or the retained compliant parser/ingestion boundary.
-- Add production routes through `api/dashboard-runtime.ts` or a dedicated protected Vercel function.
+- Add production routes through `api/dashboard.ts`, `api/dashboard-runtime.ts` or a dedicated protected Vercel function, and register them in `vercel/runtime-contract.ts`.
 - Do not create another dashboard, auth stack, database adapter or worker unless the current boundary cannot support the requirement.
 - Source adapters must have false-positive regression tests using real failure examples.
 - All lead mutations must be scoped and persisted through Neon helpers.

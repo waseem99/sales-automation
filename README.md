@@ -8,10 +8,24 @@ The production application is the **Prospect Desk**. It discovers public prospec
 
 ## Production routes
 
-- `/prospects` — scoped Prospect Desk.
-- `/tenders` — Pakistan, Canada and international Tender & RFP Pipeline.
+Public and authentication routes:
+
 - `/login` — internal account access.
 - `/health` — non-secret runtime health.
+
+Authenticated workspaces:
+
+- `/prospects` — scoped Prospect Desk.
+- `/priorities` — owner and team priority queue.
+- `/leads/*` — source and procurement workspaces.
+- `/services/*` — service-specific workspaces.
+- `/lead-signals` — unified Upwork and LinkedIn signal intake.
+- `/linkedin-signals` — LinkedIn and Sales Navigator signal review.
+- `/tenders` — Pakistan, Canada and international Tender & RFP Pipeline.
+- `/portfolio` — approved proof and case-study catalog.
+- `/re-engagement` — previous-client and dormant-opportunity workspace.
+- `/operations` — source quality and commercial operations controls.
+- `/delivery-health` — mailbox, outreach and automation health.
 
 The old Local MVP Lead Desk and duplicate API runtime have been retired.
 
@@ -60,9 +74,10 @@ pnpm test
 pnpm build
 ```
 
-Deployment-sensitive check:
+Deployment-sensitive checks:
 
 ```bash
+pnpm test:protected-routes
 pnpm deploy:check
 ```
 
@@ -90,6 +105,7 @@ OUTREACH_DRY_RUN=true
 ## Documentation
 
 - [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md)
+- [`docs/PROTECTED_ROUTE_CONTRACT.md`](docs/PROTECTED_ROUTE_CONTRACT.md)
 - [`docs/DEVELOPER_HANDOFF.md`](docs/DEVELOPER_HANDOFF.md)
 - [`docs/CODEBASE_REVIEW.md`](docs/CODEBASE_REVIEW.md)
 - [`docs/VERCEL_DEPLOYMENT.md`](docs/VERCEL_DEPLOYMENT.md)
