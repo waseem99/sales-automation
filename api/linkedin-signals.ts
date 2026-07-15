@@ -1,2 +1,2 @@
-export const maxDuration = 300;
-export default { async fetch(request: Request): Promise<Response> { const shell = await import('../vercel/dedicated-page-shell.js'); return shell.serveDedicatedWorkspace(request, () => import('../vercel/linkedin-signals-core.js'), { activeRoute: '/linkedin-signals', eyebrow: 'Signal intake', title: 'Signal Workspace', description: 'Review qualified opportunity signals.', scopeMode: 'admin' }); } };
+export const maxDuration=300; // restricted to Admin and Waseem
+export default{async fetch(request:Request):Promise<Response>{const shell=await import('../vercel/dedicated-page-shell.js');return shell.serveDedicatedWorkspace(request,()=>import('../vercel/linkedin-signals-core.js'),{activeRoute:'/linkedin-signals',eyebrow:'Signal intake',title:'Signal Workspace',description:'Review qualified opportunity signals.',scopeMode:'admin'});}};
