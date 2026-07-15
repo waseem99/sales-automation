@@ -1,6 +1,18 @@
+import { evaluateLead } from '@sales-automation/evaluator';
+import { samplePortfolioItems } from '@sales-automation/fixtures';
+import { ingestLeads } from '@sales-automation/ingestion';
 import type { NeonAppState } from '@sales-automation/neon-state';
-import type { UpworkSavedSearchDecision } from '@sales-automation/prospect-discovery';
+import { parseUpworkEmail } from '@sales-automation/parsers';
+import {
+  applyAutomaticAssignment,
+  applyUpworkSavedSearchDecision,
+  buildOwnerWorkload,
+  enrichRepositoryContacts,
+  evaluateUpworkSavedSearchLead,
+  type UpworkSavedSearchDecision,
+} from '@sales-automation/prospect-discovery';
 import type { Lead } from '@sales-automation/shared';
+import { auditMissingFirstOutreachGuidance } from '@sales-automation/web';
 
 export interface UpworkSavedSearchEmailInput {
   messageId: string;
@@ -49,14 +61,6 @@ export async function processUpworkSavedSearchBatch(input: {
   minimumHourlyRateUsd?: number;
   maximumAgeHours?: number;
 }): Promise<ProcessUpworkSavedSearchBatchResult> {
-  const [evaluator, fixtures, ingestionModule, parsers, discovery, web] = await Promise.all([
-    import('@sales-automation/evaluator'),
-    import('@sales-automation/fixtures'),
-    import('@sales-automation/ingestion'),
-    import('@sales-automation/parsers'),
-    import('@sales-automation/prospect-discovery'),
-    import('@sales-automation/web'),
-  ]);
   const generatedAt = input.generatedAt ?? new Date().toISOString();
   const decisions = new Map<string, UpworkSavedSearchDecision>();
   const accepted: Lead[] = [];
@@ -64,7 +68,7 @@ export async function processUpworkSavedSearchBatch(input: {
   let totalParsed = 0;
 
   for (const email of input.emails) {
-    const parsed = parsers.parseUpworkEmail({
+    const parsed = parseUpworkEmail({
       emailBody: `${email.subject ?? ''}\n${email.text}`,
       receivedAt: email.receivedAt,
     });
@@ -73,7 +77,7 @@ export async function processUpworkSavedSearchBatch(input: {
       const withEvidence = lead.sourceUrl || !email.sourceUrl
         ? lead
         : { ...lead, sourceUrl: email.sourceUrl, evidenceUrl: email.sourceUrl };
-      const decision = discovery.evaluateUpworkSavedSearchLead(withEvidence, fixtures.samplePortfolioItems, {
+      const decision = evaluateUpworkSavedSearchLead(withEvidence, samplePortfolioItems, {
         minimumFixedBudgetUsd: input.minimumFixedBudgetUsd,
         minimumHourlyRateUsd: input.minimumHourlyRateUsd,
         maximumAgeHours: input.maximumAgeHours,
@@ -82,7 +86,7 @@ export async function processUpworkSavedSearchBatch(input: {
         rejectedReasons.push(...decision.reasonCodes);
         continue;
       }
-      const prepared = discovery.applyUpworkSavedSearchDecision(withEvidence, decision, generatedAt);
+      const prepared = applyUpworkSavedSearchDecision(withEvidence, decision, generatedAt);
       const raw = prepared.rawPayload && typeof prepared.rawPayload === 'object' && !Array.isArray(prepared.rawPayload)
         ? prepared.rawPayload as Record<string, unknown>
         : {};
@@ -99,20 +103,20 @@ export async function processUpworkSavedSearchBatch(input: {
     }
   }
 
-  const ingestion = ingestionModule.ingestLeads({
+  const ingestion = ingestLeads({
     sourceKind: 'upwork_email',
     leads: accepted,
     repository: input.state.repository,
-    portfolioItems: fixtures.samplePortfolioItems,
+    portfolioItems: samplePortfolioItems,
     actor: input.actor,
     generatedAt,
   });
-  const workload = discovery.buildOwnerWorkload(input.state.repository.listLeads().map((record) => record.lead));
+  const workload = buildOwnerWorkload(input.state.repository.listLeads().map((record) => record.lead));
   let assigned = 0;
   for (const captured of ingestion.captured) {
     const record = input.state.repository.getLead(captured.leadId);
     if (!record) continue;
-    const applied = discovery.applyAutomaticAssignment(record.lead, workload, generatedAt);
+    const applied = applyAutomaticAssignment(record.lead, workload, generatedAt);
     input.state.repository.saveEvaluation({ ...captured.evaluation, lead: applied.lead }, input.actor);
     input.state.repository.addNote(
       captured.leadId,
@@ -134,9 +138,9 @@ export async function processUpworkSavedSearchBatch(input: {
     .map((item) => item.leadId)
     .filter((leadId) => decisions.get(leadId)?.outcome === 'keep');
   if (contactReadyLeadIds.length) {
-    web.auditMissingFirstOutreachGuidance({
+    auditMissingFirstOutreachGuidance({
       repository: input.state.repository,
-      portfolioItems: fixtures.samplePortfolioItems,
+      portfolioItems: samplePortfolioItems,
       actor: input.actor,
       generatedAt,
       leadIds: contactReadyLeadIds,
@@ -149,7 +153,7 @@ export async function processUpworkSavedSearchBatch(input: {
     .map((record) => record.lead.id);
   const contactEnrichment = input.enrichContacts === false || !enrichableLeadIds.length
     ? emptyEnrichment()
-    : await discovery.enrichRepositoryContacts({
+    : await enrichRepositoryContacts({
       repository: input.state.repository,
       fetchImpl: input.fetchImpl ?? globalThis.fetch,
       maxRecords: Math.min(50, enrichableLeadIds.length),
@@ -162,9 +166,9 @@ export async function processUpworkSavedSearchBatch(input: {
   for (const captured of ingestion.captured) {
     const record = input.state.repository.getLead(captured.leadId);
     if (!record) continue;
-    input.state.repository.saveEvaluation(evaluator.evaluateLead({
+    input.state.repository.saveEvaluation(evaluateLead({
       lead: record.lead,
-      portfolioItems: fixtures.samplePortfolioItems,
+      portfolioItems: samplePortfolioItems,
       generatedAt,
     }), input.actor);
     rescored += 1;
