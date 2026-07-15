@@ -1,7 +1,6 @@
-import {
-  normalizeProspectPageQuery,
-  type ProspectPageQuery,
-  type ProspectPageResult,
+import type {
+  ProspectPageQuery,
+  ProspectPageResult,
 } from '@sales-automation/neon-state';
 import type { Lead, PipelineStatus, ServiceCategory } from '@sales-automation/shared';
 import type { StoredLeadRecord } from '@sales-automation/storage';
@@ -56,204 +55,79 @@ const softwareServices: ServiceCategory[] = [
 ];
 
 export const WORKSPACE_PAGES: WorkspacePageDefinition[] = [
-  {
-    id: 'all',
-    route: '/prospects',
-    navigationLabel: 'All prospects',
-    eyebrow: 'Complete opportunity workspace',
-    title: 'All Prospects',
-    description: 'Review every visible opportunity, assign ownership, manage outreach and record outcomes.',
-    listTitle: 'All prospects',
-    listDescription: 'The complete lead and opportunity pipeline within your authorized scope.',
-    emptyMessage: 'No prospects are available in this scope.',
-    match: () => true,
-  },
-  {
-    id: 'linkedin',
-    route: '/leads/linkedin',
-    navigationLabel: 'LinkedIn warm leads',
-    eyebrow: 'Warm social demand signals',
-    title: 'LinkedIn Warm Leads',
-    description: 'Buyer-authored LinkedIn and Sales Navigator requests that passed the warm-signal quality gate.',
-    listTitle: 'LinkedIn and Sales Navigator leads',
-    listDescription: 'Prioritize fresh requests, verify the original post and prepare human-reviewed outreach.',
-    emptyMessage: 'No LinkedIn warm leads currently match this scope.',
-    match: (lead) => lead.source === 'linkedin'
-      || lead.source === 'sales_navigator'
-      || lead.leadType === 'linkedin_warm_post'
-      || lead.leadType === 'linkedin_sales_nav_alert',
-  },
-  {
-    id: 'upwork',
-    route: '/leads/upwork',
-    navigationLabel: 'Upwork saved searches',
-    eyebrow: 'Qualified marketplace alerts',
-    title: 'Upwork Saved-Search Leads',
-    description: 'Saved-search opportunities filtered by budget, freshness, client credibility and delivery fit.',
-    listTitle: 'Qualified Upwork opportunities',
-    listDescription: 'Open the original job, confirm live details and prepare proposals manually.',
-    emptyMessage: 'No qualified Upwork saved-search leads currently match this scope.',
-    match: (lead) => lead.source === 'upwork' || lead.leadType === 'upwork_job',
-  },
-  {
-    id: 'rfq',
-    route: '/leads/rfq',
-    navigationLabel: 'RFQs',
-    eyebrow: 'Procurement opportunities',
-    title: 'Request for Quotation Leads',
-    description: 'Formal RFQs identified through procurement sources and classified by opportunity type.',
-    listTitle: 'RFQ opportunities',
-    listDescription: 'Review deadlines, eligibility, pricing requirements and submission routes.',
-    emptyMessage: 'No RFQ opportunities currently match this scope.',
-    match: (lead) => lead.tender?.opportunityType === 'rfq',
-  },
-  {
-    id: 'rfp',
-    route: '/leads/rfp',
-    navigationLabel: 'RFPs',
-    eyebrow: 'Procurement opportunities',
-    title: 'Request for Proposal Leads',
-    description: 'Formal RFPs requiring technical, commercial and eligibility review before a bid decision.',
-    listTitle: 'RFP opportunities',
-    listDescription: 'Use the tender intelligence brief and keep submission human-controlled.',
-    emptyMessage: 'No RFP opportunities currently match this scope.',
-    match: (lead) => lead.tender?.opportunityType === 'rfp',
-  },
-  {
-    id: 'eoi',
-    route: '/leads/eoi',
-    navigationLabel: 'EOIs',
-    eyebrow: 'Early procurement opportunities',
-    title: 'Expression of Interest Leads',
-    description: 'EOIs and early-stage procurement notices that may open a later proposal or consortium route.',
-    listTitle: 'EOI opportunities',
-    listDescription: 'Confirm eligibility, local-presence and consortium conditions before responding.',
-    emptyMessage: 'No EOI opportunities currently match this scope.',
-    match: (lead) => lead.tender?.opportunityType === 'eoi',
-  },
-  {
-    id: 'rfi',
-    route: '/leads/rfi',
-    navigationLabel: 'RFIs',
-    eyebrow: 'Market and capability requests',
-    title: 'Request for Information Leads',
-    description: 'RFIs and market-sounding requests where capability positioning may influence later procurement.',
-    listTitle: 'RFI opportunities',
-    listDescription: 'Respond only after confirming the requested capability, evidence and submission route.',
-    emptyMessage: 'No RFI opportunities currently match this scope.',
-    match: (lead) => lead.tender?.opportunityType === 'rfi',
-  },
-  {
-    id: 'tenders',
-    route: '/leads/tenders',
-    navigationLabel: 'All tenders',
-    eyebrow: 'Complete procurement pipeline',
-    title: 'All RFP, RFQ and Tender Leads',
-    description: 'Every structured procurement opportunity, including RFPs, RFQs, EOIs, RFIs and other tender types.',
-    listTitle: 'Tender and procurement opportunities',
-    listDescription: 'Review bid/no-bid guidance, deadlines, eligibility and document intelligence.',
-    emptyMessage: 'No tender opportunities currently match this scope.',
-    match: (lead) => Boolean(lead.tender) || lead.source === 'public_procurement',
-  },
-  {
-    id: 'research',
-    route: '/leads/research',
-    navigationLabel: 'Research queue',
-    eyebrow: 'Missing evidence and verification',
-    title: 'Lead Research Queue',
-    description: 'Potentially relevant records that still need company, buyer, budget, source or contact verification.',
-    listTitle: 'Research-required leads',
-    listDescription: 'Resolve missing evidence before moving a record into the contact-ready pipeline.',
-    emptyMessage: 'No leads currently require research in this scope.',
-    match: (lead) => lead.pipelineStatus === 'needs_research',
-  },
-  {
-    id: 'partnerships',
-    route: '/leads/partnerships',
-    navigationLabel: 'Partnership leads',
-    eyebrow: 'Agency and delivery partnerships',
-    title: 'Partnership and White-Label Leads',
-    description: 'Agency, referral, implementation and overflow-delivery opportunities suited to a partner-led approach.',
-    listTitle: 'Partnership opportunities',
-    listDescription: 'Position the relevant delivery capability without treating a relationship signal as confirmed buyer intent.',
-    emptyMessage: 'No partnership opportunities currently match this scope.',
-    match: (lead) => lead.prospectStage === 'partner_prospect'
-      || lead.opportunityStatus === 'partnership_target'
-      || lead.leadType === 'partner_prospect'
-      || lead.source === 'partner_research',
-  },
-  {
-    id: 'services',
-    route: '/services',
-    navigationLabel: 'Services overview',
-    eyebrow: 'Commercial service pipeline',
-    title: 'Leads by Service Line',
-    description: 'Review all opportunities currently mapped to a defined Codistan, Hilarious AI, Cytas or Motionly service.',
-    listTitle: 'Service-mapped opportunities',
-    listDescription: 'Use the service filter or the dedicated service pages to focus the pipeline.',
-    emptyMessage: 'No service-mapped leads currently match this scope.',
-    match: (lead) => lead.serviceCategory !== 'unknown',
-  },
-  {
-    id: 'ai',
-    route: '/services/ai',
-    navigationLabel: 'AI and automation',
-    eyebrow: 'Hilarious AI and Codistan capabilities',
-    title: 'AI, RAG and Automation Leads',
-    description: 'AI agents, automation, RAG, document intelligence, voice AI and AI-enabled SaaS opportunities.',
-    listTitle: 'AI and automation pipeline',
-    listDescription: 'Match each opportunity with approved AI proof and the correct technical entry offer.',
-    emptyMessage: 'No AI or automation leads currently match this scope.',
-    match: (lead) => aiServices.includes(lead.serviceCategory),
-  },
-  {
-    id: 'software',
-    route: '/services/software',
-    navigationLabel: 'Software and SaaS',
-    eyebrow: 'Custom product delivery',
-    title: 'Software, SaaS and Enterprise Leads',
-    description: 'Custom software, SaaS, web application, enterprise system and digital-transformation opportunities.',
-    listTitle: 'Software delivery pipeline',
-    listDescription: 'Prioritize funded, urgent and implementation-ready opportunities.',
-    emptyMessage: 'No software or SaaS leads currently match this scope.',
-    match: (lead) => softwareServices.includes(lead.serviceCategory),
-  },
-  {
-    id: 'cybersecurity',
-    route: '/services/cybersecurity',
-    navigationLabel: 'Cybersecurity',
-    eyebrow: 'Cytas security capabilities',
-    title: 'Cybersecurity and Compliance Leads',
-    description: 'VAPT, cloud security, IAM, SOC 2, ISO 27001, HIPAA, CMMC and managed-security opportunities.',
-    listTitle: 'Security and compliance pipeline',
-    listDescription: 'Verify the regulatory driver, deadline, authority and required assurance evidence.',
-    emptyMessage: 'No cybersecurity or compliance leads currently match this scope.',
-    match: (lead) => lead.serviceCategory === 'cybersecurity_compliance',
-  },
-  {
-    id: 'immersive',
-    route: '/services/immersive',
-    navigationLabel: '3D, AR and VR',
-    eyebrow: 'Motionly immersive capabilities',
-    title: '3D, AR, VR and Real-Time Leads',
-    description: 'Product animation, immersive training, AR, VR, Unity and Unreal opportunities.',
-    listTitle: 'Immersive and 3D pipeline',
-    listDescription: 'Confirm the target device, production quality, interactivity and delivery timeline.',
-    emptyMessage: 'No immersive, AR, VR or 3D leads currently match this scope.',
-    match: (lead) => lead.serviceCategory === 'ar_3d_unity_unreal',
-  },
-  {
-    id: 'marketing',
-    route: '/services/marketing',
-    navigationLabel: 'Web and marketing',
-    eyebrow: 'Digital presence and growth',
-    title: 'Website, SEO and Digital Marketing Leads',
-    description: 'Website, portal, SEO, digital marketing, branding and growth-management opportunities.',
-    listTitle: 'Web and digital-growth pipeline',
-    listDescription: 'Separate strategic growth opportunities from low-value one-off production requests.',
-    emptyMessage: 'No website or digital-marketing leads currently match this scope.',
-    match: (lead) => lead.serviceCategory === 'website_portal',
-  },
+  workspace('all', '/prospects', 'All prospects', 'Complete opportunity workspace', 'All Prospects',
+    'Review every visible opportunity, assign ownership, manage outreach and record outcomes.',
+    'All prospects', 'The complete lead and opportunity pipeline within your authorized scope.',
+    'No prospects are available in this scope.', () => true),
+  workspace('linkedin', '/leads/linkedin', 'LinkedIn warm leads', 'Warm social demand signals', 'LinkedIn Warm Leads',
+    'Buyer-authored LinkedIn and Sales Navigator requests that passed the warm-signal quality gate.',
+    'LinkedIn and Sales Navigator leads', 'Prioritize fresh requests, verify the original post and prepare human-reviewed outreach.',
+    'No LinkedIn warm leads currently match this scope.',
+    (lead) => lead.source === 'linkedin' || lead.source === 'sales_navigator'
+      || lead.leadType === 'linkedin_warm_post' || lead.leadType === 'linkedin_sales_nav_alert'),
+  workspace('upwork', '/leads/upwork', 'Upwork saved searches', 'Qualified marketplace alerts', 'Upwork Saved-Search Leads',
+    'Saved-search opportunities filtered by budget, freshness, client credibility and delivery fit.',
+    'Qualified Upwork opportunities', 'Open the original job, confirm live details and prepare proposals manually.',
+    'No qualified Upwork saved-search leads currently match this scope.',
+    (lead) => lead.source === 'upwork' || lead.leadType === 'upwork_job'),
+  workspace('rfq', '/leads/rfq', 'RFQs', 'Procurement opportunities', 'Request for Quotation Leads',
+    'Formal RFQs identified through procurement sources and classified by opportunity type.',
+    'RFQ opportunities', 'Review deadlines, eligibility, pricing requirements and submission routes.',
+    'No RFQ opportunities currently match this scope.', (lead) => lead.tender?.opportunityType === 'rfq'),
+  workspace('rfp', '/leads/rfp', 'RFPs', 'Procurement opportunities', 'Request for Proposal Leads',
+    'Formal RFPs requiring technical, commercial and eligibility review before a bid decision.',
+    'RFP opportunities', 'Use the tender intelligence brief and keep submission human-controlled.',
+    'No RFP opportunities currently match this scope.', (lead) => lead.tender?.opportunityType === 'rfp'),
+  workspace('eoi', '/leads/eoi', 'EOIs', 'Early procurement opportunities', 'Expression of Interest Leads',
+    'EOIs and early-stage procurement notices that may open a later proposal or consortium route.',
+    'EOI opportunities', 'Confirm eligibility, local-presence and consortium conditions before responding.',
+    'No EOI opportunities currently match this scope.', (lead) => lead.tender?.opportunityType === 'eoi'),
+  workspace('rfi', '/leads/rfi', 'RFIs', 'Market and capability requests', 'Request for Information Leads',
+    'RFIs and market-sounding requests where capability positioning may influence later procurement.',
+    'RFI opportunities', 'Respond only after confirming the requested capability, evidence and submission route.',
+    'No RFI opportunities currently match this scope.', (lead) => lead.tender?.opportunityType === 'rfi'),
+  workspace('tenders', '/leads/tenders', 'All tenders', 'Complete procurement pipeline', 'All RFP, RFQ and Tender Leads',
+    'Every structured procurement opportunity, including RFPs, RFQs, EOIs, RFIs and other tender types.',
+    'Tender and procurement opportunities', 'Review bid/no-bid guidance, deadlines, eligibility and document intelligence.',
+    'No tender opportunities currently match this scope.',
+    (lead) => Boolean(lead.tender) || lead.source === 'public_procurement'),
+  workspace('research', '/leads/research', 'Research queue', 'Missing evidence and verification', 'Lead Research Queue',
+    'Potentially relevant records that still need company, buyer, budget, source or contact verification.',
+    'Research-required leads', 'Resolve missing evidence before moving a record into the contact-ready pipeline.',
+    'No leads currently require research in this scope.', (lead) => lead.pipelineStatus === 'needs_research'),
+  workspace('partnerships', '/leads/partnerships', 'Partnership leads', 'Agency and delivery partnerships', 'Partnership and White-Label Leads',
+    'Agency, referral, implementation and overflow-delivery opportunities suited to a partner-led approach.',
+    'Partnership opportunities', 'Position the relevant delivery capability without treating a relationship signal as confirmed buyer intent.',
+    'No partnership opportunities currently match this scope.',
+    (lead) => lead.prospectStage === 'partner_prospect' || lead.opportunityStatus === 'partnership_target'
+      || lead.leadType === 'partner_prospect' || lead.source === 'partner_research'),
+  workspace('services', '/services', 'Services overview', 'Commercial service pipeline', 'Leads by Service Line',
+    'Review all opportunities currently mapped to a defined Codistan, Hilarious AI, Cytas or Motionly service.',
+    'Service-mapped opportunities', 'Use the service filter or the dedicated service pages to focus the pipeline.',
+    'No service-mapped leads currently match this scope.', (lead) => lead.serviceCategory !== 'unknown'),
+  workspace('ai', '/services/ai', 'AI and automation', 'Hilarious AI and Codistan capabilities', 'AI, RAG and Automation Leads',
+    'AI agents, automation, RAG, document intelligence, voice AI and AI-enabled SaaS opportunities.',
+    'AI and automation pipeline', 'Match each opportunity with approved AI proof and the correct technical entry offer.',
+    'No AI or automation leads currently match this scope.', (lead) => aiServices.includes(lead.serviceCategory)),
+  workspace('software', '/services/software', 'Software and SaaS', 'Custom product delivery', 'Software, SaaS and Enterprise Leads',
+    'Custom software, SaaS, web application, enterprise system and digital-transformation opportunities.',
+    'Software delivery pipeline', 'Prioritize funded, urgent and implementation-ready opportunities.',
+    'No software or SaaS leads currently match this scope.', (lead) => softwareServices.includes(lead.serviceCategory)),
+  workspace('cybersecurity', '/services/cybersecurity', 'Cybersecurity', 'Cytas security capabilities', 'Cybersecurity and Compliance Leads',
+    'VAPT, cloud security, IAM, SOC 2, ISO 27001, HIPAA, CMMC and managed-security opportunities.',
+    'Security and compliance pipeline', 'Verify the regulatory driver, deadline, authority and required assurance evidence.',
+    'No cybersecurity or compliance leads currently match this scope.',
+    (lead) => lead.serviceCategory === 'cybersecurity_compliance'),
+  workspace('immersive', '/services/immersive', '3D, AR and VR', 'Motionly immersive capabilities', '3D, AR, VR and Real-Time Leads',
+    'Product animation, immersive training, AR, VR, Unity and Unreal opportunities.',
+    'Immersive and 3D pipeline', 'Confirm the target device, production quality, interactivity and delivery timeline.',
+    'No immersive, AR, VR or 3D leads currently match this scope.',
+    (lead) => lead.serviceCategory === 'ar_3d_unity_unreal'),
+  workspace('marketing', '/services/marketing', 'Web and marketing', 'Digital presence and growth', 'Website, SEO and Digital Marketing Leads',
+    'Website, portal, SEO, digital marketing, branding and growth-management opportunities.',
+    'Web and digital-growth pipeline', 'Separate strategic growth opportunities from low-value one-off production requests.',
+    'No website or digital-marketing leads currently match this scope.',
+    (lead) => lead.serviceCategory === 'website_portal'),
 ];
 
 export function resolveWorkspacePage(pathname: string): WorkspacePageDefinition | undefined {
@@ -268,7 +142,7 @@ export function buildWorkspacePage(
   selectedId?: string,
   now = new Date().toISOString(),
 ): WorkspacePageBuildResult {
-  const normalized = normalizeProspectPageQuery(query);
+  const normalized = normalizeWorkspacePageQuery(query);
   const workspaceRecords = records.filter((record) => pageDefinition.match(record.lead));
   const filtered = workspaceRecords.filter((record) => matchesFilters(record, normalized.filters, now));
   const ordered = [...filtered].sort((left, right) => compareRecords(left, right, normalized.filters.followUp));
@@ -312,10 +186,7 @@ export function applyWorkspacePageChrome(
   output = output.replace(/href="\/prospects\?/g, `href="${page.route}?`);
   output = output.replace(/action="\/prospects"/g, `action="${page.route}"`);
   output = output.replace(/href="\/prospects\?pageSize=/g, `href="${page.route}?pageSize=`);
-  output = output.replace(
-    /<aside class="sidebar">[\s\S]*?<\/aside>/,
-    renderWorkspaceSidebar(page.route, summary),
-  );
+  output = output.replace(/<aside class="sidebar">[\s\S]*?<\/aside>/, renderWorkspaceSidebar(page.route, summary));
   output = output.replace(
     /<header class="topbar"><div>[\s\S]*?<\/div><div class="top-actions">/,
     `<header class="topbar"><div><button id="sidebar-toggle" class="sidebar-toggle" type="button" aria-label="Toggle navigation">☰</button><p class="eyebrow">${escapeHtml(page.eyebrow)}</p><h1>${escapeHtml(page.title)}</h1><p>${escapeHtml(page.description)}</p></div><div class="top-actions">`,
@@ -336,59 +207,84 @@ export function applyWorkspacePageChrome(
 
 export function renderWorkspaceSidebar(activeRoute: string, summary?: ProspectPageResult['summary']): string {
   const groups: Array<{ label: string; links: Array<{ href: string; text: string }> }> = [
-    {
-      label: 'Overview',
-      links: [
-        { href: '/prospects', text: 'All prospects' },
-        { href: '/priorities', text: 'Priority queue' },
-        { href: '/leads/research', text: 'Research queue' },
-      ],
-    },
-    {
-      label: 'Warm leads',
-      links: [
-        { href: '/leads/linkedin', text: 'LinkedIn warm leads' },
-        { href: '/leads/upwork', text: 'Upwork saved searches' },
-        { href: '/lead-signals', text: 'Signal intake' },
-      ],
-    },
-    {
-      label: 'Procurement',
-      links: [
-        { href: '/leads/rfq', text: 'RFQs' },
-        { href: '/leads/rfp', text: 'RFPs' },
-        { href: '/leads/eoi', text: 'EOIs' },
-        { href: '/leads/rfi', text: 'RFIs' },
-        { href: '/leads/tenders', text: 'All tenders' },
-        { href: '/tenders', text: 'Tender intelligence' },
-      ],
-    },
-    {
-      label: 'Services',
-      links: [
-        { href: '/services', text: 'Services overview' },
-        { href: '/services/ai', text: 'AI and automation' },
-        { href: '/services/software', text: 'Software and SaaS' },
-        { href: '/services/cybersecurity', text: 'Cybersecurity' },
-        { href: '/services/immersive', text: '3D, AR and VR' },
-        { href: '/services/marketing', text: 'Web and marketing' },
-      ],
-    },
-    {
-      label: 'Growth and system',
-      links: [
-        { href: '/leads/partnerships', text: 'Partnership leads' },
-        { href: '/re-engagement', text: 'Re-engagement' },
-        { href: '/portfolio', text: 'Portfolio proof' },
-        { href: '/operations', text: 'Operations' },
-        { href: '/delivery-health', text: 'Delivery health' },
-      ],
-    },
+    { label: 'Overview', links: [
+      { href: '/prospects', text: 'All prospects' },
+      { href: '/priorities', text: 'Priority queue' },
+      { href: '/leads/research', text: 'Research queue' },
+    ] },
+    { label: 'Warm leads', links: [
+      { href: '/leads/linkedin', text: 'LinkedIn warm leads' },
+      { href: '/leads/upwork', text: 'Upwork saved searches' },
+      { href: '/lead-signals', text: 'Signal intake' },
+    ] },
+    { label: 'Procurement', links: [
+      { href: '/leads/rfq', text: 'RFQs' },
+      { href: '/leads/rfp', text: 'RFPs' },
+      { href: '/leads/eoi', text: 'EOIs' },
+      { href: '/leads/rfi', text: 'RFIs' },
+      { href: '/leads/tenders', text: 'All tenders' },
+      { href: '/tenders', text: 'Tender intelligence' },
+    ] },
+    { label: 'Services', links: [
+      { href: '/services', text: 'Services overview' },
+      { href: '/services/ai', text: 'AI and automation' },
+      { href: '/services/software', text: 'Software and SaaS' },
+      { href: '/services/cybersecurity', text: 'Cybersecurity' },
+      { href: '/services/immersive', text: '3D, AR and VR' },
+      { href: '/services/marketing', text: 'Web and marketing' },
+    ] },
+    { label: 'Growth and system', links: [
+      { href: '/leads/partnerships', text: 'Partnership leads' },
+      { href: '/re-engagement', text: 'Re-engagement' },
+      { href: '/portfolio', text: 'Portfolio proof' },
+      { href: '/operations', text: 'Operations' },
+      { href: '/delivery-health', text: 'Delivery health' },
+    ] },
   ];
   const queue = summary
     ? `<div class="sidebar-card"><span>Current page</span><strong>${summary.total} visible</strong><small>${summary.followUpsDue} follow-ups due · ${summary.unassigned} unassigned</small></div>`
     : '';
   return `<aside class="sidebar" id="workspace-sidebar"><div class="brand"><div class="brand-mark">C</div><div><strong>Codistan</strong><span>Prospect Desk</span></div></div><div class="workspace-nav">${groups.map((group) => `<section class="nav-group"><span class="nav-label">${escapeHtml(group.label)}</span>${group.links.map((link) => `<a class="nav-item ${isActiveRoute(activeRoute, link.href) ? 'active' : ''}" href="${escapeAttribute(link.href)}">${escapeHtml(link.text)}</a>`).join('')}</section>`).join('')}</div>${queue}<button id="logout-button" class="ghost full">Log out</button></aside>`;
+}
+
+function workspace(
+  id: WorkspacePageId,
+  route: string,
+  navigationLabel: string,
+  eyebrow: string,
+  title: string,
+  description: string,
+  listTitle: string,
+  listDescription: string,
+  emptyMessage: string,
+  match: (lead: Lead) => boolean,
+): WorkspacePageDefinition {
+  return { id, route, navigationLabel, eyebrow, title, description, listTitle, listDescription, emptyMessage, match };
+}
+
+function normalizeWorkspacePageQuery(query: ProspectPageQuery): {
+  page: number;
+  pageSize: ProspectPageResult['pageSize'];
+  filters: ProspectPageResult['query'];
+} {
+  const page = positiveInteger(query.page, 1);
+  const requestedPageSize = positiveInteger(query.pageSize, 25);
+  const pageSize = [25, 50, 100].includes(requestedPageSize)
+    ? requestedPageSize as ProspectPageResult['pageSize']
+    : 25;
+  return {
+    page,
+    pageSize,
+    filters: {
+      search: clean(query.search),
+      status: clean(query.status),
+      signal: clean(query.signal),
+      service: clean(query.service),
+      owner: clean(query.owner),
+      feedback: clean(query.feedback),
+      followUp: normalizeFollowUpFilter(query.followUp),
+    },
+  };
 }
 
 function matchesFilters(record: StoredLeadRecord, filters: ProspectPageResult['query'], now: string): boolean {
@@ -456,6 +352,22 @@ function isActiveRoute(activeRoute: string, href: string): boolean {
   if (activeRoute === href) return true;
   if (href === '/leads/tenders' && activeRoute === '/tenders') return true;
   return false;
+}
+
+function normalizeFollowUpFilter(value: unknown): string {
+  const normalized = clean(value);
+  return ['due', 'overdue', 'today', 'next_7_days', 'scheduled', 'not_scheduled'].includes(normalized)
+    ? normalized
+    : '';
+}
+
+function clean(value: unknown): string {
+  return typeof value === 'string' ? value.trim() : '';
+}
+
+function positiveInteger(value: unknown, fallback: number): number {
+  const parsed = typeof value === 'number' ? value : Number.parseInt(String(value ?? ''), 10);
+  return Number.isInteger(parsed) && parsed > 0 ? parsed : fallback;
 }
 
 function workspaceStyles(): string {
