@@ -1,13 +1,5 @@
-import type {
-  ProspectPageQuery,
-  ProspectVisibility,
-} from '@sales-automation/neon-state';
+import type { ProspectPageQuery, ProspectVisibility } from '@sales-automation/neon-state';
 import type { StoredLeadRecord } from '@sales-automation/storage';
-import {
-  applyWorkspacePageChrome,
-  buildWorkspacePage,
-  resolveWorkspacePage,
-} from './workspace-pages.js';
 
 interface WorkspaceSession {
   identifier: string;
@@ -23,25 +15,45 @@ export interface WorkspaceDashboardRuntimeInput {
   sessionSecret: string;
 }
 
+const WORKSPACE_ROUTES = new Set([
+  '/prospects',
+  '/leads/linkedin',
+  '/leads/upwork',
+  '/leads/rfq',
+  '/leads/rfp',
+  '/leads/eoi',
+  '/leads/rfi',
+  '/leads/tenders',
+  '/leads/research',
+  '/leads/partnerships',
+  '/services',
+  '/services/ai',
+  '/services/software',
+  '/services/cybersecurity',
+  '/services/immersive',
+  '/services/marketing',
+]);
+
 export function isWorkspaceDashboardPath(pathname: string): boolean {
-  return Boolean(resolveWorkspacePage(normalizePath(pathname)));
+  return WORKSPACE_ROUTES.has(normalizePath(pathname));
 }
 
 export async function handleWorkspaceDashboardRuntime(
   input: WorkspaceDashboardRuntimeInput,
 ): Promise<Response> {
-  const url = new URL(input.originalUrl, 'https://local.invalid');
-  const pathname = normalizePath(url.pathname);
-  const workspace = resolveWorkspacePage(pathname);
-  if (!workspace) return Response.json({ error: 'Workspace page not found.' }, { status: 404 });
-
-  const [neonState, prospectDiscovery, storage, prospectHandler, portfolioCatalog] = await Promise.all([
+  const [neonState, prospectDiscovery, storage, prospectHandler, portfolioCatalog, workspacePages] = await Promise.all([
     import('@sales-automation/neon-state'),
     import('@sales-automation/prospect-discovery'),
     import('@sales-automation/storage'),
     import('@sales-automation/web/prospect-handler'),
     import('@sales-automation/neon-state/portfolio-catalog'),
+    import('./workspace-pages.js'),
   ]);
+
+  const url = new URL(input.originalUrl, 'https://local.invalid');
+  const pathname = normalizePath(url.pathname);
+  const workspace = workspacePages.resolveWorkspacePage(pathname);
+  if (!workspace) return Response.json({ error: 'Workspace page not found.' }, { status: 404 });
 
   const access = prospectHandler.resolveDashboardAccess(input.session.identifier, input.session.displayName);
   const visibility: ProspectVisibility = {
@@ -52,7 +64,7 @@ export async function handleWorkspaceDashboardRuntime(
   const query = pageQuery(url);
   const selectedId = url.searchParams.get('leadId') ?? undefined;
   const generatedAt = new Date().toISOString();
-  const built = buildWorkspacePage(scopedRecords, query, workspace, selectedId, generatedAt);
+  const built = workspacePages.buildWorkspacePage(scopedRecords, query, workspace, selectedId, generatedAt);
   const repository = new storage.InMemoryLeadRepository(built.repositoryRecords);
   const before = snapshots(repository.listLeads());
   const runs = await neonState.loadNeonDiscoveryRuns(input.databaseUrl, 30);
@@ -86,7 +98,7 @@ export async function handleWorkspaceDashboardRuntime(
   }
   const contentType = result.headers['content-type'] ?? '';
   const body = contentType.includes('text/html')
-    ? applyWorkspacePageChrome(result.body, workspace, built.page.summary)
+    ? workspacePages.applyWorkspacePageChrome(result.body, workspace, built.page.summary)
     : result.body;
   return new Response(body, { status: result.status, headers: result.headers });
 }
