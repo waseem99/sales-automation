@@ -10,13 +10,15 @@
     "api/tender-discovery.ts": { "maxDuration": 300 },
     "api/prospect-cleanup.ts": { "maxDuration": 300 },
     "api/contact-enrichment.ts": { "maxDuration": 300 },
+    "api/delivery-health.ts": { "maxDuration": 300 },
     "api/cron/prospect-discovery.ts": { "maxDuration": 300 },
-    "api/cron/outreach.ts": { "maxDuration": 300 }
+    "api/cron/outreach.ts": { "maxDuration": 300 },
+    "api/cron/outreach-observed.ts": { "maxDuration": 300 }
   },
   "crons": [
     { "path": "/api/tender-discovery", "schedule": "15 */6 * * *" },
     { "path": "/api/cron/prospect-discovery", "schedule": "0 4 * * *" },
-    { "path": "/api/cron/outreach", "schedule": "0 * * * *" }
+    { "path": "/api/cron/outreach-observed", "schedule": "0 * * * *" }
   ],
   "redirects": [
     { "source": "/", "destination": "/prospects", "permanent": false }
@@ -28,6 +30,7 @@
     { "source": "/priorities", "destination": "/api/dashboard?__path=/priorities" },
     { "source": "/portfolio", "destination": "/api/dashboard?__path=/portfolio" },
     { "source": "/operations", "destination": "/api/dashboard?__path=/operations" },
+    { "source": "/delivery-health", "destination": "/api/delivery-health" },
     { "source": "/tenders", "destination": "/api/tenders" },
     { "source": "/api/login", "destination": "/api/dashboard?__path=/api/login" },
     { "source": "/api/logout", "destination": "/api/dashboard?__path=/api/logout" },
