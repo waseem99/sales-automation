@@ -1,4 +1,5 @@
 type RuntimeContractModule = typeof import('../vercel/runtime-contract.js');
+type WorkspacePagesModule = typeof import('../vercel/workspace-pages.js');
 
 type RuntimeFailure = {
   referenceId: string;
@@ -14,6 +15,7 @@ const ACTOR_COOKIE = 'codistan_admin_actor';
 const SESSION_LIFETIME_SECONDS = 12 * 60 * 60;
 const loginAttempts = new Map<string, { count: number; firstAttemptAt: number }>();
 let runtimeContractPromise: Promise<RuntimeContractModule> | undefined;
+let workspacePagesPromise: Promise<WorkspacePagesModule> | undefined;
 
 interface DashboardAccount {
   identifier: string;
@@ -148,25 +150,45 @@ export default {
       if (pathname === '/portfolio' || pathname === '/api/portfolio-catalog') {
         phase = 'load_portfolio_catalog_runtime';
         const portfolioRuntime = await runtimeContract.loadRuntimeBoundary(phase, () => import('../vercel/portfolio-catalog-runtime.js'));
-        return portfolioRuntime.handlePortfolioCatalogRuntime({
+        const response = await portfolioRuntime.handlePortfolioCatalogRuntime({
           request,
           databaseUrl,
           actor: session.identifier,
           canManage: access.role === 'admin',
           pathname,
         });
+        if (pathname !== '/portfolio') return response;
+        phase = 'apply_portfolio_shell';
+        return applySpecializedShellResponse(response, {
+          activeRoute: '/portfolio',
+          eyebrow: 'Approved proof governance',
+          title: 'Portfolio Proof Catalog',
+          description: 'Manage the evidence qualification, drafting and the BD workspace may use.',
+          actor: session.displayName,
+          scopeLabel: access.role === 'admin' ? 'Proof governance' : 'Read-only proof catalog',
+        }, runtimeContract);
       }
 
       if (pathname === '/operations' || pathname === '/api/source-controls') {
         phase = 'load_operations_runtime';
         const operationsRuntime = await runtimeContract.loadRuntimeBoundary(phase, () => import('../vercel/operations-runtime.js'));
-        return operationsRuntime.handleOperationsRuntime({
+        const response = await operationsRuntime.handleOperationsRuntime({
           request,
           databaseUrl,
           pathname,
           actor: session.identifier,
           canManage: access.role === 'admin',
         });
+        if (pathname !== '/operations') return response;
+        phase = 'apply_operations_shell';
+        return applySpecializedShellResponse(response, {
+          activeRoute: '/operations',
+          eyebrow: 'Production observability',
+          title: 'Sales Operations Health',
+          description: 'Review source quality, concentration, deployment and outreach configuration.',
+          actor: session.displayName,
+          scopeLabel: access.role === 'admin' ? 'Operations controls' : access.scopeLabel,
+        }, runtimeContract);
       }
 
       phase = 'load_managed_portfolio_catalog';
@@ -188,7 +210,17 @@ export default {
       if (pathname === '/priorities' || pathname === '/api/closeability-rescore') {
         phase = 'load_priority_queue_runtime';
         const priorityRuntime = await runtimeContract.loadRuntimeBoundary(phase, () => import('../vercel/priority-queue-runtime.js'));
-        return priorityRuntime.handlePriorityQueueRuntime({ request, databaseUrl, pathname, session });
+        const response = await priorityRuntime.handlePriorityQueueRuntime({ request, databaseUrl, pathname, session });
+        if (pathname !== '/priorities') return response;
+        phase = 'apply_priority_shell';
+        return applySpecializedShellResponse(response, {
+          activeRoute: '/priorities',
+          eyebrow: 'Owner action queue',
+          title: 'Priority Opportunities',
+          description: 'Closeability ranks realistic conversion readiness separately from general relevance.',
+          actor: session.displayName,
+          scopeLabel: access.scopeLabel,
+        }, runtimeContract);
       }
 
       phase = 'load_scoped_dashboard_runtime';
@@ -214,6 +246,28 @@ export default {
 function loadRuntimeContract(): Promise<RuntimeContractModule> {
   runtimeContractPromise ??= import('../vercel/runtime-contract.js');
   return runtimeContractPromise;
+}
+
+function loadWorkspacePages(): Promise<WorkspacePagesModule> {
+  workspacePagesPromise ??= import('../vercel/workspace-pages.js');
+  return workspacePagesPromise;
+}
+
+async function applySpecializedShellResponse(
+  response: Response,
+  options: Parameters<WorkspacePagesModule['applySpecializedPageShell']>[1],
+  runtimeContract: RuntimeContractModule,
+): Promise<Response> {
+  if (response.status >= 400 || !response.headers.get('content-type')?.includes('text/html')) return response;
+  const workspacePages = await runtimeContract.loadRuntimeBoundary('load_specialized_shell_renderer', loadWorkspacePages);
+  const body = await response.text();
+  const headers = new Headers(response.headers);
+  headers.delete('content-length');
+  return new Response(workspacePages.applySpecializedPageShell(body, options), {
+    status: response.status,
+    statusText: response.statusText,
+    headers,
+  });
 }
 
 async function loadApprovedPortfolioIntoRuntime(databaseUrl: string, runtimeContract: RuntimeContractModule): Promise<void> {
