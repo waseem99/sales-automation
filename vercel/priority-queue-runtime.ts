@@ -1,8 +1,6 @@
-import { evaluateLead, type CloseabilityScore, type LeadEvaluation } from '@sales-automation/evaluator';
-import { samplePortfolioItems } from '@sales-automation/fixtures';
-import { loadNeonScopedRecords, persistLeadRecords, type ProspectVisibility } from '@sales-automation/neon-state';
+import type { CloseabilityScore, LeadEvaluation } from '@sales-automation/evaluator';
+import type { ProspectVisibility } from '@sales-automation/neon-state';
 import type { StoredLeadRecord } from '@sales-automation/storage';
-import { resolveDashboardAccess } from '@sales-automation/web';
 
 export interface PriorityQueueRuntimeInput {
   request: Request;
@@ -11,18 +9,44 @@ export interface PriorityQueueRuntimeInput {
   session: { identifier: string; displayName: string };
 }
 
+interface PriorityAccess {
+  identifier: string;
+  displayName: string;
+  scopeKind: string;
+  scopeLabel: string;
+  visibleOwnerTokens: string[];
+  canRunGlobalOperations: boolean;
+}
+
 const finalStatuses = new Set(['won', 'lost', 'rejected', 'archived']);
 const contactedStatuses = new Set(['sent_manually', 'replied', 'meeting_booked', 'proposal_sent', 'won', 'lost']);
 
 export async function handlePriorityQueueRuntime(input: PriorityQueueRuntimeInput): Promise<Response> {
-  const access = resolveDashboardAccess(input.session.identifier, input.session.displayName);
+  const [evaluator, fixtures, neonState, web] = await Promise.all([
+    import('@sales-automation/evaluator'),
+    import('@sales-automation/fixtures'),
+    import('@sales-automation/neon-state'),
+    import('@sales-automation/web'),
+  ]);
+  const access = web.resolveDashboardAccess(input.session.identifier, input.session.displayName) as PriorityAccess;
   const visibility: ProspectVisibility = { canViewAll: access.scopeKind === 'all', ownerTokens: access.visibleOwnerTokens };
+  const evaluateRecord = (record: StoredLeadRecord, force: boolean): StoredLeadRecord => {
+    if (closeability(record) && !force) return record;
+    return {
+      ...record,
+      latestEvaluation: evaluator.evaluateLead({
+        lead: record.lead,
+        portfolioItems: fixtures.samplePortfolioItems,
+        generatedAt: new Date().toISOString(),
+      }),
+    };
+  };
 
   if (input.request.method === 'POST' && input.pathname === '/api/closeability-rescore') {
     if (!access.canRunGlobalOperations) return json({ error: 'Forbidden: rescoring is restricted to Admin and Waseem.' }, 403);
-    const records = await loadNeonScopedRecords(input.databaseUrl, { canViewAll: true, ownerTokens: [] });
+    const records = await neonState.loadNeonScopedRecords(input.databaseUrl, { canViewAll: true, ownerTokens: [] });
     const rescored = records.map((record) => evaluateRecord(record, true));
-    await persistLeadRecords(input.databaseUrl, rescored);
+    await neonState.persistLeadRecords(input.databaseUrl, rescored);
     return json({
       ok: true,
       rescored: rescored.length,
@@ -38,7 +62,7 @@ export async function handlePriorityQueueRuntime(input: PriorityQueueRuntimeInpu
 
   const url = new URL(input.request.url);
   const threshold = thresholdValue(url.searchParams.get('threshold'));
-  const records = await loadNeonScopedRecords(input.databaseUrl, visibility);
+  const records = await neonState.loadNeonScopedRecords(input.databaseUrl, visibility);
   const evaluated = records.map((record) => evaluateRecord(record, false));
   const active = evaluated
     .filter((record) => !finalStatuses.has(record.lead.pipelineStatus))
@@ -47,14 +71,6 @@ export async function handlePriorityQueueRuntime(input: PriorityQueueRuntimeInpu
   const topFive = active.filter((record) => !contactedStatuses.has(record.lead.pipelineStatus)).slice(0, 5);
 
   return html(renderPriorityPage({ access, threshold, topFive, active, generatedAt: new Date().toISOString() }));
-}
-
-function evaluateRecord(record: StoredLeadRecord, force: boolean): StoredLeadRecord {
-  if (closeability(record) && !force) return record;
-  return {
-    ...record,
-    latestEvaluation: evaluateLead({ lead: record.lead, portfolioItems: samplePortfolioItems, generatedAt: new Date().toISOString() }),
-  };
 }
 
 function closeability(record: StoredLeadRecord): CloseabilityScore | undefined {
@@ -74,7 +90,7 @@ function prioritySort(left: StoredLeadRecord, right: StoredLeadRecord): number {
 }
 
 function renderPriorityPage(input: {
-  access: ReturnType<typeof resolveDashboardAccess>;
+  access: PriorityAccess;
   threshold: number;
   topFive: StoredLeadRecord[];
   active: StoredLeadRecord[];
