@@ -1,5 +1,9 @@
 import assert from 'node:assert/strict';
 
+interface RuntimeHandler {
+  fetch(request: Request): Promise<Response>;
+}
+
 async function main(): Promise<void> {
   const originalEnvironment = { ...process.env };
   Object.assign(process.env, {
@@ -46,6 +50,7 @@ async function main(): Promise<void> {
       { id: 're-engagement', path: '/re-engagement', expectedStatus: 401, load: () => import('../api/re-engagement.ts') },
       { id: 'delivery-health', path: '/delivery-health', expectedStatus: 401, load: () => import('../api/delivery-health.ts') },
     ] as const;
+    const loadedDedicatedHandlers = new Map<string, { path: string; handler: RuntimeHandler }>();
 
     for (const dedicated of dedicatedHandlers) {
       const route = contract.resolveRuntimeRoute(dedicated.path, 'GET');
@@ -53,6 +58,7 @@ async function main(): Promise<void> {
       assert.equal(route?.target, 'dedicated');
       const module = await dedicated.load();
       const handler = moduleHandler(module);
+      loadedDedicatedHandlers.set(dedicated.id, { path: dedicated.path, handler });
       const response = await handler.fetch(new Request(`https://local.invalid${dedicated.path}`, {
         method: 'GET',
         headers: { accept: 'text/html' },
@@ -80,13 +86,29 @@ async function main(): Promise<void> {
       assert.equal(body.access?.scope, expected.scope);
     }
 
+    const restrictedDedicatedIds = ['signal-intake', 'linkedin-signals', 're-engagement', 'delivery-health'] as const;
+    for (const actor of ['talha.bashir@codistan.org', 'moiz.khalid@codistan.org'] as const) {
+      const cookie = await syntheticDashboardCookie(actor, process.env.SESSION_SECRET!);
+      for (const id of restrictedDedicatedIds) {
+        const dedicated = loadedDedicatedHandlers.get(id);
+        assert(dedicated, `${id} handler must be loaded`);
+        const response = await dedicated.handler.fetch(new Request(`https://local.invalid${dedicated.path}`, {
+          method: 'GET',
+          headers: { accept: 'application/json', cookie },
+        }));
+        assert.equal(response.status, 403, `${id} must reject authenticated non-admin actor ${actor}`);
+        const body = await response.json() as { error?: string };
+        assert.match(body.error ?? '', /^Forbidden:/, `${id} must return a safe forbidden response`);
+      }
+    }
+
     const sourceControls = contract.resolveRuntimeRoute('/api/source-controls', 'POST');
     assert(sourceControls);
     assert.equal(contract.roleCanAccessRoute(sourceControls, 'admin'), true);
     assert.equal(contract.roleCanAccessRoute(sourceControls, 'team_lead'), false);
     assert.equal(contract.roleCanAccessRoute(sourceControls, 'bd_user'), false);
 
-    for (const adminOnlyId of ['signal-intake', 'linkedin-signals', 're-engagement', 'delivery-health']) {
+    for (const adminOnlyId of restrictedDedicatedIds) {
       const route = contract.runtimeRouteContracts.find((candidate) => candidate.id === adminOnlyId);
       assert(route);
       assert.equal(contract.roleCanAccessRoute(route, 'admin'), true);
@@ -113,17 +135,26 @@ async function main(): Promise<void> {
     assert.equal(htmlBody.includes('private database detail'), false);
     assert.equal(htmlBody.includes(failure.referenceId), true);
 
-    console.log(`Protected route contract verified for ${contract.runtimeRouteContracts.length} route entries and ${dedicatedHandlers.length} dedicated handlers`);
+    console.log(`Protected route contract verified for ${contract.runtimeRouteContracts.length} route entries, ${dedicatedHandlers.length} dedicated handlers and ${restrictedDedicatedIds.length * 2} authenticated forbidden states`);
   } finally {
     restoreEnvironment(originalEnvironment);
   }
 }
 
-function moduleHandler(module: unknown): { fetch(request: Request): Promise<Response> } {
+function moduleHandler(module: unknown): RuntimeHandler {
   const first = (module as { default?: unknown }).default;
   const candidate = (first as { default?: unknown } | undefined)?.default ?? first;
   assert(candidate && typeof (candidate as { fetch?: unknown }).fetch === 'function', 'runtime module must expose a fetch handler');
-  return candidate as { fetch(request: Request): Promise<Response> };
+  return candidate as RuntimeHandler;
+}
+
+async function syntheticDashboardCookie(identifier: string, secret: string): Promise<string> {
+  const { createHmac } = await import('node:crypto');
+  const expiresAt = Math.floor(Date.now() / 1_000) + 60 * 60;
+  const sessionToken = `${expiresAt}.${createHmac('sha256', secret).update(`admin:${expiresAt}`).digest('base64url')}`;
+  const encodedActor = Buffer.from(identifier.trim().toLowerCase(), 'utf8').toString('base64url');
+  const actorToken = `${encodedActor}.${createHmac('sha256', secret).update(`actor:${encodedActor}`).digest('base64url')}`;
+  return `codistan_admin_session=${sessionToken}; codistan_admin_actor=${actorToken}`;
 }
 
 function restoreEnvironment(originalEnvironment: NodeJS.ProcessEnv): void {

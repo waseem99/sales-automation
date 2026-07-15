@@ -70,10 +70,33 @@ The protected-route smoke test verifies:
 - dashboard-routed and dedicated handler module loading;
 - unauthenticated HTML redirects and API rejection;
 - Admin/Waseem, team-lead and BD access classification;
+- synthetic signed team-lead and BD sessions receive direct HTTP 403 responses from every Admin-only dedicated handler;
 - admin-only workspace and mutation permissions;
 - safe HTML and JSON runtime error responses.
 
-A production merge still requires a successful Vercel deployment and manual verification of the key authenticated routes. The test does not connect to production Neon or send external communication.
+## Sanitized production acceptance
+
+After a production deployment, run the credential-driven acceptance runner from a secure local shell:
+
+```bash
+PRODUCTION_ACCEPTANCE_BASE_URL=https://your-production-host \
+PRODUCTION_ACCEPTANCE_ADMIN_PASSWORD='...' \
+PRODUCTION_ACCEPTANCE_TEAM_LEAD_PASSWORD='...' \
+PRODUCTION_ACCEPTANCE_BD_PASSWORD='...' \
+pnpm tsx scripts/production-route-acceptance.ts
+```
+
+The default account identifiers are `admin`, `talha.bashir@codistan.org` and `hibasohail@codistan.org`. Override them only when a different configured account is required:
+
+```text
+PRODUCTION_ACCEPTANCE_ADMIN_IDENTIFIER
+PRODUCTION_ACCEPTANCE_TEAM_LEAD_IDENTIFIER
+PRODUCTION_ACCEPTANCE_BD_IDENTIFIER
+```
+
+The runner verifies login role/scope, session continuity, the shared authenticated workspaces and the Admin-only dedicated workspaces. It prints only role labels, route paths and HTTP status codes. It never prints passwords, account identifiers, cookies, response bodies or lead data. These credentials are temporary shell inputs and must not be committed or added as Vercel project variables.
+
+A production merge still requires a successful Vercel deployment. The automated build smoke does not connect to production Neon or send external communication, and the production acceptance runner performs read-only GET checks after login.
 
 ## Deployment discipline
 
