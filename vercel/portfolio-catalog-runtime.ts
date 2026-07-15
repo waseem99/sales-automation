@@ -1,14 +1,9 @@
-import {
-  archivePortfolioCatalogItem,
-  ensurePortfolioCatalogSeeded,
-  loadPortfolioCatalog,
-  upsertPortfolioCatalogItem,
-  type ManagedPortfolioItem,
-  type PortfolioApprovalStatus,
-  type PortfolioAssetHealth,
+import type {
+  ManagedPortfolioItem,
+  PortfolioApprovalStatus,
+  PortfolioAssetHealth,
 } from '@sales-automation/neon-state/portfolio-catalog';
 import type { CodistanProfile, ServiceCategory } from '@sales-automation/shared';
-import { approvedStarterPortfolioItems } from './approved-portfolio.js';
 
 export interface PortfolioCatalogRuntimeInput {
   request: Request;
@@ -31,15 +26,19 @@ const profiles: CodistanProfile[] = [
 ];
 
 export async function handlePortfolioCatalogRuntime(input: PortfolioCatalogRuntimeInput): Promise<Response> {
-  await ensurePortfolioCatalogSeeded(input.databaseUrl, approvedStarterPortfolioItems);
+  const [portfolioCatalog, starters] = await Promise.all([
+    import('@sales-automation/neon-state/portfolio-catalog'),
+    import('./approved-portfolio.js'),
+  ]);
+  await portfolioCatalog.ensurePortfolioCatalogSeeded(input.databaseUrl, starters.approvedStarterPortfolioItems);
 
   if (input.request.method === 'GET' && input.pathname === '/portfolio') {
-    const items = await loadPortfolioCatalog(input.databaseUrl);
+    const items = await portfolioCatalog.loadPortfolioCatalog(input.databaseUrl);
     return html(renderPortfolioCatalogPage(items, input.actor, input.canManage));
   }
 
   if (input.request.method === 'GET' && input.pathname === '/api/portfolio-catalog') {
-    const items = await loadPortfolioCatalog(input.databaseUrl);
+    const items = await portfolioCatalog.loadPortfolioCatalog(input.databaseUrl);
     return json({ items, canManage: input.canManage });
   }
 
@@ -47,7 +46,7 @@ export async function handlePortfolioCatalogRuntime(input: PortfolioCatalogRunti
 
   if (input.request.method === 'POST' && input.pathname === '/api/portfolio-catalog') {
     const payload = asObject(await parseBody(input.request));
-    const existing = (await loadPortfolioCatalog(input.databaseUrl)).find((item) => item.id === optionalString(payload.id));
+    const existing = (await portfolioCatalog.loadPortfolioCatalog(input.databaseUrl)).find((item) => item.id === optionalString(payload.id));
     const now = new Date().toISOString();
     const approvalStatus = enumValue<PortfolioApprovalStatus>(payload.approvalStatus, 'approvalStatus', ['draft', 'approved', 'archived']);
     const confidentiality = enumValue<ManagedPortfolioItem['confidentiality']>(payload.confidentiality, 'confidentiality', ['public', 'anonymized', 'private']);
@@ -78,14 +77,14 @@ export async function handlePortfolioCatalogRuntime(input: PortfolioCatalogRunti
     };
     if (item.serviceCategories.length === 0) throw new Error('At least one valid service category is required.');
     if (item.bestProfiles.length === 0) item.bestProfiles = ['needs_human_review'];
-    await upsertPortfolioCatalogItem(input.databaseUrl, item);
+    await portfolioCatalog.upsertPortfolioCatalogItem(input.databaseUrl, item);
     return json({ ok: true, item }, existing ? 200 : 201);
   }
 
   if (input.request.method === 'DELETE' && input.pathname === '/api/portfolio-catalog') {
     const payload = asObject(await parseBody(input.request));
     const id = requiredString(payload.id, 'id');
-    const item = await archivePortfolioCatalogItem(input.databaseUrl, id, input.actor);
+    const item = await portfolioCatalog.archivePortfolioCatalogItem(input.databaseUrl, id, input.actor);
     return item ? json({ ok: true, item }) : json({ error: 'Portfolio item not found.' }, 404);
   }
 
@@ -113,7 +112,7 @@ function renderForm(): string {
 }
 
 function managerScript(): string {
-  return `const form=document.getElementById('catalog-form'),statusEl=document.getElementById('status');const split=v=>String(v||'').split(/[\\n,;]+/).map(x=>x.trim()).filter(Boolean);document.querySelectorAll('.edit').forEach(button=>button.addEventListener('click',()=>{const item=items.find(x=>x.id===button.dataset.id);if(!item)return;for(const [key,value] of Object.entries(item)){const field=form.elements.namedItem(key);if(!field)continue;field.value=Array.isArray(value)?value.join('\\n'):value??'';}scrollTo({top:0,behavior:'smooth'});}));document.querySelectorAll('.archive').forEach(button=>button.addEventListener('click',async()=>{if(!confirm('Archive this proof record?'))return;const response=await fetch('/api/portfolio-catalog',{method:'DELETE',headers:{'content-type':'application/json'},body:JSON.stringify({id:button.dataset.id})});const data=await response.json();if(!response.ok)return alert(data.error||'Archive failed');location.reload();}));document.getElementById('reset').addEventListener('click',()=>form.reset());form.addEventListener('submit',async event=>{event.preventDefault();statusEl.textContent='Saving…';const data=Object.fromEntries(new FormData(form));for(const key of ['serviceCategories','techStack','assetUrls','tags','bestProfiles'])data[key]=split(data[key]);const response=await fetch('/api/portfolio-catalog',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(data)});const body=await response.json();if(!response.ok){statusEl.textContent=body.error||'Save failed';return;}statusEl.textContent='Saved';location.reload();});`;
+  return `const form=document.getElementById('catalog-form'),statusEl=document.getElementById('status');const split=v=>String(v||'').split(/[\n,;]+/).map(x=>x.trim()).filter(Boolean);document.querySelectorAll('.edit').forEach(button=>button.addEventListener('click',()=>{const item=items.find(x=>x.id===button.dataset.id);if(!item)return;for(const [key,value] of Object.entries(item)){const field=form.elements.namedItem(key);if(!field)continue;field.value=Array.isArray(value)?value.join('\n'):value??'';}scrollTo({top:0,behavior:'smooth'});}));document.querySelectorAll('.archive').forEach(button=>button.addEventListener('click',async()=>{if(!confirm('Archive this proof record?'))return;const response=await fetch('/api/portfolio-catalog',{method:'DELETE',headers:{'content-type':'application/json'},body:JSON.stringify({id:button.dataset.id})});const data=await response.json();if(!response.ok)return alert(data.error||'Archive failed');location.reload();}));document.getElementById('reset').addEventListener('click',()=>form.reset());form.addEventListener('submit',async event=>{event.preventDefault();statusEl.textContent='Saving…';const data=Object.fromEntries(new FormData(form));for(const key of ['serviceCategories','techStack','assetUrls','tags','bestProfiles'])data[key]=split(data[key]);const response=await fetch('/api/portfolio-catalog',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(data)});const body=await response.json();if(!response.ok){statusEl.textContent=body.error||'Save failed';return;}statusEl.textContent='Saved';location.reload();});`;
 }
 
 async function parseBody(request: Request): Promise<unknown> {
@@ -123,50 +122,15 @@ async function parseBody(request: Request): Promise<unknown> {
   try { return JSON.parse(raw); } catch { return Object.fromEntries(new URLSearchParams(raw)); }
 }
 
-function asObject(value: unknown): Record<string, unknown> {
-  return value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : {};
-}
-
-function requiredString(value: unknown, field: string): string {
-  if (typeof value !== 'string' || !value.trim()) throw new Error(`${field} is required.`);
-  return value.trim();
-}
-
-function optionalString(value: unknown): string | undefined {
-  return typeof value === 'string' && value.trim() ? value.trim() : undefined;
-}
-
-function list(value: unknown): string[] {
-  if (Array.isArray(value)) return value.map(String).map((item) => item.trim()).filter(Boolean);
-  if (typeof value !== 'string') return [];
-  return value.split(/[\n,;]+/).map((item) => item.trim()).filter(Boolean);
-}
-
-function enumValue<T extends string>(value: unknown, field: string, allowed: readonly T[]): T {
-  const result = requiredString(value, field) as T;
-  if (!allowed.includes(result)) throw new Error(`${field} is invalid.`);
-  return result;
-}
-
-function slug(value: string): string {
-  return value.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 100);
-}
-
-function isPublicHttpUrl(value: string): boolean {
-  try { const url = new URL(value); return ['http:', 'https:'].includes(url.protocol) && Boolean(url.hostname); } catch { return false; }
-}
-
-function json(value: unknown, status = 200): Response {
-  return new Response(JSON.stringify(value), { status, headers: { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store' } });
-}
-
-function html(value: string): Response {
-  return new Response(value, { status: 200, headers: { 'content-type': 'text/html; charset=utf-8', 'cache-control': 'no-store', 'x-content-type-options': 'nosniff', 'x-frame-options': 'DENY' } });
-}
-
-function escapeHtml(value: unknown): string {
-  return String(value ?? '').replace(/[&<>"']/g, (character) => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[character] ?? character));
-}
-
+function asObject(value: unknown): Record<string, unknown> { return value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : {}; }
+function requiredString(value: unknown, field: string): string { if (typeof value !== 'string' || !value.trim()) throw new Error(`${field} is required.`); return value.trim(); }
+function optionalString(value: unknown): string | undefined { return typeof value === 'string' && value.trim() ? value.trim() : undefined; }
+function list(value: unknown): string[] { if (Array.isArray(value)) return value.map(String).map((item) => item.trim()).filter(Boolean); if (typeof value !== 'string') return []; return value.split(/[\n,;]+/).map((item) => item.trim()).filter(Boolean); }
+function enumValue<T extends string>(value: unknown, field: string, allowed: readonly T[]): T { const result = requiredString(value, field) as T; if (!allowed.includes(result)) throw new Error(`${field} is invalid.`); return result; }
+function slug(value: string): string { return value.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 100); }
+function isPublicHttpUrl(value: string): boolean { try { const url = new URL(value); return ['http:', 'https:'].includes(url.protocol) && Boolean(url.hostname); } catch { return false; } }
+function json(value: unknown, status = 200): Response { return new Response(JSON.stringify(value), { status, headers: { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store' } }); }
+function html(value: string): Response { return new Response(value, { status: 200, headers: { 'content-type': 'text/html; charset=utf-8', 'cache-control': 'no-store', 'x-content-type-options': 'nosniff', 'x-frame-options': 'DENY' } }); }
+function escapeHtml(value: unknown): string { return String(value ?? '').replace(/[&<>"']/g, (character) => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[character] ?? character)); }
 function escapeAttribute(value: unknown): string { return escapeHtml(value); }
-function escapeScriptJson(value: string): string { return value.replace(/</g, '\\u003c').replace(/>/g, '\\u003e').replace(/&/g, '\\u0026'); }
+function escapeScriptJson(value: string): string { return value.replace(/</g, '\u003c').replace(/>/g, '\u003e').replace(/&/g, '\u0026'); }
