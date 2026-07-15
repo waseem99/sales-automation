@@ -30,10 +30,12 @@ interface MailOptionsLike {
 
 export default {
   async fetch(request: Request): Promise<Response> {
+    const workerStartedAt = new Date().toISOString();
     let phase = 'request_received';
     let databaseUrl: string | undefined;
     let lockToken: string | undefined;
     let neonModule: Awaited<ReturnType<typeof loadNeonModule>> | undefined;
+    let telemetryModule: Awaited<ReturnType<typeof loadTelemetryModule>> | undefined;
 
     try {
       if (request.method !== 'GET') {
@@ -47,21 +49,39 @@ export default {
       }
 
       phase = 'load_runtime_modules';
-      const [{ randomUUID }, loadedNeonModule, nodemailerModule, prospectModule] = await Promise.all([
+      const [
+        { randomUUID },
+        loadedNeonModule,
+        nodemailerModule,
+        prospectModule,
+        loadedTelemetryModule,
+        telemetryExtractor,
+      ] = await Promise.all([
         import('node:crypto'),
         loadNeonModule(),
         import('nodemailer'),
         import('@sales-automation/prospect-discovery'),
+        loadTelemetryModule(),
+        import('../../vercel/outreach-telemetry.js'),
       ]);
       installMandatoryCc(nodemailerModule.default as unknown as { createTransport: (...args: unknown[]) => unknown });
       const outreachModule = await import('@sales-automation/outreach-email');
       neonModule = loadedNeonModule;
+      telemetryModule = loadedTelemetryModule;
 
       phase = 'connect_database';
       databaseUrl = neonModule.requireDatabaseUrl(process.env.DATABASE_URL);
       lockToken = randomUUID();
       const locked = await neonModule.acquireNamedRunLock(databaseUrl, OUTREACH_LOCK_NAME, lockToken, 20);
       if (!locked) {
+        await persistTelemetryWithoutBreakingResponse(telemetryModule, databaseUrl, [{
+          eventType: 'lock_skipped',
+          status: 'skipped',
+          provider: 'outreach',
+          worker: 'hourly-outreach-cron',
+          occurredAt: new Date().toISOString(),
+          details: { reasonCode: 'active_cycle_lock' },
+        }]);
         return Response.json({ ok: true, skipped: true, reason: 'Another outreach cycle is active.' });
       }
 
@@ -93,6 +113,16 @@ export default {
 
       phase = 'persist_application_state';
       await neonModule.persistNeonAppState(databaseUrl, state);
+
+      phase = 'persist_operational_telemetry';
+      const events = telemetryExtractor.extractOutreachOperationalTelemetry(
+        state.repository.listLeads(),
+        report,
+      );
+      await persistTelemetryWithoutBreakingResponse(telemetryModule, databaseUrl, events);
+      await telemetryModule.pruneOperationalTelemetry(databaseUrl, 90).catch((error: unknown) => {
+        console.error('OUTREACH_TELEMETRY_PRUNE_ERROR', normalizeError(error).message);
+      });
 
       return Response.json({
         ok: true,
@@ -128,6 +158,17 @@ export default {
         message: details.message,
         stack: details.stack,
       });
+      if (databaseUrl && telemetryModule) {
+        await persistTelemetryWithoutBreakingResponse(telemetryModule, databaseUrl, [{
+          eventType: 'worker_failure',
+          status: 'failure',
+          provider: 'runtime',
+          worker: 'hourly-outreach-cron',
+          occurredAt: new Date().toISOString(),
+          durationMs: Math.max(0, Date.now() - Date.parse(workerStartedAt)),
+          details: { phase, errorSummary: details.message },
+        }]);
+      }
       return Response.json({
         error: 'Outreach cron failed.',
         phase,
@@ -145,6 +186,22 @@ export default {
 
 async function loadNeonModule() {
   return import('@sales-automation/neon-state');
+}
+
+async function loadTelemetryModule() {
+  return import('@sales-automation/neon-state/operational-telemetry');
+}
+
+async function persistTelemetryWithoutBreakingResponse(
+  telemetryModule: Awaited<ReturnType<typeof loadTelemetryModule>>,
+  databaseUrl: string,
+  events: Parameters<Awaited<ReturnType<typeof loadTelemetryModule>>['persistOperationalTelemetryEvents']>[1],
+): Promise<void> {
+  try {
+    await telemetryModule.persistOperationalTelemetryEvents(databaseUrl, events);
+  } catch (error) {
+    console.error('OUTREACH_TELEMETRY_PERSISTENCE_ERROR', normalizeError(error).message);
+  }
 }
 
 function summarizeReasonCodes(items: Array<{ reasonCodes: string[] }>): Record<string, number> {
