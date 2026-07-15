@@ -1,10 +1,6 @@
-import { loadNeonAppState } from '@sales-automation/neon-state';
-import {
-  isDiscoverySourceKey,
-  loadDiscoverySourceControls,
-  updateDiscoverySourceControl,
-  type DiscoverySourceControl,
-  type DiscoverySourceKey,
+import type {
+  DiscoverySourceControl,
+  DiscoverySourceKey,
 } from '@sales-automation/neon-state/source-controls';
 import type { ProspectDiscoveryRun } from '@sales-automation/prospect-discovery';
 import type { Lead, RepeatRecommendation } from '@sales-automation/shared';
@@ -45,14 +41,19 @@ const finalStatuses = new Set(['won', 'lost', 'rejected', 'archived']);
 const contactReadyStatuses = new Set(['approved_to_contact', 'draft_ready', 'sent_manually', 'replied', 'meeting_booked', 'proposal_sent', 'won']);
 
 export async function handleOperationsRuntime(input: OperationsRuntimeInput): Promise<Response> {
+  const [neonState, sourceControls] = await Promise.all([
+    import('@sales-automation/neon-state'),
+    import('@sales-automation/neon-state/source-controls'),
+  ]);
+
   if (input.request.method === 'POST' && input.pathname === '/api/source-controls') {
     if (!input.canManage) return json({ error: 'Forbidden: source controls are restricted to Admin and Waseem.' }, 403);
     const payload = asObject(await parseBody(input.request));
     const sourceKey = requiredString(payload.sourceKey, 'sourceKey');
-    if (!isDiscoverySourceKey(sourceKey)) return json({ error: 'sourceKey is invalid.' }, 400);
+    if (!sourceControls.isDiscoverySourceKey(sourceKey)) return json({ error: 'sourceKey is invalid.' }, 400);
     const enabled = booleanValue(payload.enabled, 'enabled');
     const reason = requiredString(payload.reason, 'reason');
-    const control = await updateDiscoverySourceControl(input.databaseUrl, {
+    const control = await sourceControls.updateDiscoverySourceControl(input.databaseUrl, {
       sourceKey,
       enabled,
       reason,
@@ -64,8 +65,8 @@ export async function handleOperationsRuntime(input: OperationsRuntimeInput): Pr
   if (input.request.method !== 'GET' || input.pathname !== '/operations') return json({ error: 'Method not allowed.' }, 405);
 
   const [state, controls] = await Promise.all([
-    loadNeonAppState(input.databaseUrl),
-    loadDiscoverySourceControls(input.databaseUrl),
+    neonState.loadNeonAppState(input.databaseUrl),
+    sourceControls.loadDiscoverySourceControls(input.databaseUrl),
   ]);
   const records = state.repository.listLeads();
   const runs = state.runStore.listRuns(30);
@@ -175,6 +176,9 @@ function sourceKey(lead: Lead): string {
   if (source.includes('ppra') || source.includes('epads')) return 'ppra';
   if (source.includes('canadabuys') || source.includes('canada buys')) return 'canadabuys';
   if (source.includes('ungm')) return 'ungm';
+  if (source.includes('upwork saved-search') || source.includes('upwork_saved_search')) return 'upwork_saved_search_inbox';
+  if (source.includes('sales navigator') || source.includes('linkedin notification')) return 'linkedin_signal_inbox';
+  if (source.includes('linkedin public index')) return 'linkedin_public_index';
   if (source.includes('manual') || lead.source === 'manual') return 'manual_intake';
   if (lead.source === 'upwork') return 'upwork_manual';
   if (lead.source === 'linkedin' || lead.source === 'sales_navigator') return 'linkedin_manual';
