@@ -41,13 +41,14 @@ export function isWorkspaceDashboardPath(pathname: string): boolean {
 export async function handleWorkspaceDashboardRuntime(
   input: WorkspaceDashboardRuntimeInput,
 ): Promise<Response> {
-  const [neonState, prospectDiscovery, storage, prospectHandler, portfolioCatalog, workspacePages] = await Promise.all([
+  const [neonState, prospectDiscovery, storage, prospectHandler, portfolioCatalog, workspacePages, partialNavigation] = await Promise.all([
     import('@sales-automation/neon-state'),
     import('@sales-automation/prospect-discovery'),
     import('@sales-automation/storage'),
     import('@sales-automation/web/prospect-handler'),
     import('@sales-automation/neon-state/portfolio-catalog'),
     import('./workspace-pages.js'),
+    import('./prospect-partial-navigation.js'),
   ]);
 
   const url = new URL(input.originalUrl, 'https://local.invalid');
@@ -97,10 +98,18 @@ export async function handleWorkspaceDashboardRuntime(
     await persistChangedRecords(input.databaseUrl, repository.listLeads(), before, neonState.persistLeadRecords);
   }
   const contentType = result.headers['content-type'] ?? '';
-  const body = contentType.includes('text/html')
-    ? workspacePages.applyWorkspacePageChrome(result.body, workspace, built.page.summary)
-    : result.body;
-  return new Response(body, { status: result.status, headers: result.headers });
+  const headers = { ...result.headers };
+  let body = result.body;
+  if (result.status < 400 && contentType.includes('text/html')) {
+    body = workspacePages.applyWorkspacePageChrome(body, workspace, built.page.summary);
+    body = partialNavigation.enhanceProspectPartialNavigation(body, { drawerOpen: Boolean(selectedId) });
+    if (input.request.headers.get('x-prospect-partial') === 'content') {
+      body = partialNavigation.extractProspectPartialContent(body);
+      headers['x-prospect-partial'] = 'content';
+      headers.vary = 'x-prospect-partial';
+    }
+  }
+  return new Response(body, { status: result.status, headers });
 }
 
 function pageQuery(url: URL): ProspectPageQuery {

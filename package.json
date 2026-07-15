@@ -9,8 +9,9 @@
     "build:vercel": "pnpm build && pnpm test:vercel-runtime",
     "test:protected-routes": "tsx scripts/protected-route-contract-smoke.ts",
     "test:dedicated-shells": "tsx scripts/dedicated-shell-smoke.ts",
+    "test:partial-navigation": "tsx scripts/partial-navigation-smoke.ts",
     "acceptance:production-routes": "tsx scripts/production-route-acceptance.ts",
-    "test:vercel-runtime": "tsx scripts/vercel-runtime-smoke.ts && tsx scripts/dashboard-access-smoke.ts && tsx scripts/manual-intake-smoke.ts && tsx scripts/prospect-quality-smoke.ts && tsx scripts/portfolio-catalog-smoke.ts && tsx scripts/closeability-smoke.ts && tsx scripts/campaign-quality-smoke.ts && tsx scripts/operations-observability-smoke.ts && tsx scripts/login-lockout-smoke.ts && tsx scripts/tender-pipeline-smoke.ts && tsx scripts/workspace-runtime-module-boundary-smoke.ts && pnpm test:protected-routes && pnpm test:dedicated-shells && tsx apps/web/src/legacy-boundary.test.ts",
+    "test:vercel-runtime": "tsx scripts/vercel-runtime-smoke.ts && tsx scripts/dashboard-access-smoke.ts && tsx scripts/manual-intake-smoke.ts && tsx scripts/prospect-quality-smoke.ts && tsx scripts/portfolio-catalog-smoke.ts && tsx scripts/closeability-smoke.ts && tsx scripts/campaign-quality-smoke.ts && tsx scripts/operations-observability-smoke.ts && tsx scripts/login-lockout-smoke.ts && tsx scripts/tender-pipeline-smoke.ts && tsx scripts/workspace-runtime-module-boundary-smoke.ts && pnpm test:protected-routes && pnpm test:dedicated-shells && pnpm test:partial-navigation && tsx apps/web/src/legacy-boundary.test.ts",
     "test:delivery-observability": "tsx packages/neon-state/src/operational-telemetry.test.ts && tsx scripts/delivery-telemetry-smoke.ts",
     "dev": "pnpm --filter @sales-automation/web dev",
     "start:web": "pnpm --filter @sales-automation/web start",
@@ -22,7 +23,9 @@
     "test": "pnpm build && pnpm -r --filter \"@sales-automation/*\" --sort test && pnpm test:vercel-runtime && pnpm test:delivery-observability && tsx scripts/release-gate-smoke.ts && tsx scripts/linkedin-warm-signals-smoke.ts && tsx scripts/workspace-navigation-smoke.ts",
     "typecheck": "pnpm build && pnpm -r --filter \"@sales-automation/*\" --sort typecheck && pnpm typecheck:vercel"
   },
-  "engines": { "node": "22.x" },
+  "engines": {
+    "node": "22.x"
+  },
   "dependencies": {
     "@sales-automation/evaluator": "workspace:*",
     "@sales-automation/fixtures": "workspace:*",
