@@ -26,14 +26,19 @@ assert.doesNotMatch(core, /playwright|puppeteer|selenium|linkedin\.com\/voyager|
 assert.match(inbox, /LINKEDIN_SIGNAL_MAILBOX_EMAIL/);
 assert.match(inbox, /LINKEDIN_SIGNAL_MAILBOX_PASSWORD/);
 assert.match(inbox, /configured:\s*Boolean\(mailboxEmail && mailboxPassword\)/);
-assert.match(inbox, /@codistan\\\.org/);
+assert.match(inbox, /internalSenderPattern/);
+assert.match(inbox, /acknowledgeLinkedInSignalInbox/);
 assert.match(inbox, /messageFlagsAdd/);
+assert.doesNotMatch(inbox, /messageFlagsAdd\(message\.uid/);
 
 assert.match(api, /restricted to Admin and Waseem/);
 assert.match(runtime, /externalActionAutomated:\s*false/);
 assert.match(runtime, /No logged-in LinkedIn crawling/);
 assert.match(cron, /collectPublicLinkedInIndexSignals/);
 assert.match(cron, /pollLinkedInSignalInbox/);
+assert.match(cron, /persistNeonAppState/);
+assert.match(cron, /acknowledgeLinkedInSignalInbox/);
+assert.match(cron, /acknowledgeOnlyAfterPersistence:\s*true/);
 assert.match(cron, /automatedExternalMessaging:\s*false/);
 assert.match(cron, /dedicatedMailboxOnly:\s*true/);
 assert.match(cron, /processLinkedInWarmSignalBatch/);
@@ -45,4 +50,4 @@ assert.ok(vercel.functions?.['api/cron/linkedin-signals.ts']);
 assert.ok(vercel.crons?.some((item) => item.path === '/api/cron/linkedin-signals' && item.schedule === '*/30 * * * *'));
 assert.ok(vercel.rewrites?.some((item) => item.source === '/linkedin-signals' && item.destination === '/api/linkedin-signals'));
 
-console.log('LinkedIn warm signal quality, compliance, source-control and deployment contract passed');
+console.log('LinkedIn warm signal quality, compliance, persistence and deployment contract passed');
