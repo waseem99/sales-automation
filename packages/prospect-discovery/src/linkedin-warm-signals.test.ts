@@ -67,6 +67,7 @@ const publicSignal = evaluateLinkedInWarmSignal({
   origin: 'public_index',
   text: 'Can anyone recommend a software development partner to build a mobile app?',
   receivedAt: '2026-07-15T10:00:00.000Z',
+  postedAt: '2026-07-15T08:00:00.000Z',
   sourceUrl: 'https://www.linkedin.com/posts/acme_mobile-app-activity-333',
   companyName: 'Acme Logistics',
 }, portfolio);
