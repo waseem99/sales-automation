@@ -1,15 +1,9 @@
-import { evaluateLead } from '@sales-automation/evaluator';
-import { samplePortfolioItems } from '@sales-automation/fixtures';
 import type { NeonAppState } from '@sales-automation/neon-state';
-import {
-  applyAutomaticAssignment,
-  buildOwnerWorkload,
-  enrichRepositoryContacts,
-  ingestLinkedInWarmSignals,
-  type LinkedInWarmSignalInput,
-  type LinkedInWarmSignalIngestionResult,
+import type {
+  LinkedInWarmSignalInput,
+  LinkedInWarmSignalIngestionResult,
 } from '@sales-automation/prospect-discovery';
-import { auditMissingFirstOutreachGuidance } from '@sales-automation/web';
+import type { auditMissingFirstOutreachGuidance } from '@sales-automation/web';
 
 export interface ProcessLinkedInWarmSignalBatchInput {
   state: NeonAppState;
@@ -43,21 +37,27 @@ export interface ProcessLinkedInWarmSignalBatchResult {
 export async function processLinkedInWarmSignalBatch(
   input: ProcessLinkedInWarmSignalBatchInput,
 ): Promise<ProcessLinkedInWarmSignalBatchResult> {
+  const [evaluator, fixtures, discovery, web] = await Promise.all([
+    import('@sales-automation/evaluator'),
+    import('@sales-automation/fixtures'),
+    import('@sales-automation/prospect-discovery'),
+    import('@sales-automation/web'),
+  ]);
   const generatedAt = input.generatedAt ?? new Date().toISOString();
-  const ingestion = ingestLinkedInWarmSignals({
+  const ingestion = discovery.ingestLinkedInWarmSignals({
     repository: input.state.repository,
-    portfolioItems: samplePortfolioItems,
+    portfolioItems: fixtures.samplePortfolioItems,
     signals: input.signals,
     actor: input.actor,
     generatedAt,
   });
-  const workload = buildOwnerWorkload(input.state.repository.listLeads().map((record) => record.lead));
+  const workload = discovery.buildOwnerWorkload(input.state.repository.listLeads().map((record) => record.lead));
   let assigned = 0;
 
   for (const captured of ingestion.captured) {
     const record = input.state.repository.getLead(captured.leadId);
     if (!record) continue;
-    const applied = applyAutomaticAssignment(record.lead, workload, generatedAt);
+    const applied = discovery.applyAutomaticAssignment(record.lead, workload, generatedAt);
     input.state.repository.saveEvaluation({ ...captured.evaluation, lead: applied.lead }, input.actor);
     input.state.repository.addNote(
       captured.leadId,
@@ -71,9 +71,9 @@ export async function processLinkedInWarmSignalBatch(
     .filter((item) => item.decision.outcome === 'keep')
     .map((item) => item.leadId);
   const guidance = contactReadyCandidates.length > 0
-    ? auditMissingFirstOutreachGuidance({
+    ? web.auditMissingFirstOutreachGuidance({
       repository: input.state.repository,
-      portfolioItems: samplePortfolioItems,
+      portfolioItems: fixtures.samplePortfolioItems,
       actor: input.actor,
       generatedAt,
       leadIds: contactReadyCandidates,
@@ -82,7 +82,7 @@ export async function processLinkedInWarmSignalBatch(
 
   const contactEnrichment = input.enrichContacts === false || ingestion.captured.length === 0
     ? emptyEnrichment()
-    : await enrichRepositoryContacts({
+    : await discovery.enrichRepositoryContacts({
       repository: input.state.repository,
       fetchImpl: input.fetchImpl ?? globalThis.fetch,
       maxRecords: Math.min(50, ingestion.captured.length),
@@ -95,9 +95,9 @@ export async function processLinkedInWarmSignalBatch(
   for (const captured of ingestion.captured) {
     const record = input.state.repository.getLead(captured.leadId);
     if (!record) continue;
-    input.state.repository.saveEvaluation(evaluateLead({
+    input.state.repository.saveEvaluation(evaluator.evaluateLead({
       lead: record.lead,
-      portfolioItems: samplePortfolioItems,
+      portfolioItems: fixtures.samplePortfolioItems,
       generatedAt,
     }), input.actor);
     rescored += 1;
