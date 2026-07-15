@@ -6,6 +6,7 @@
   "buildCommand": "PATH=\"$PWD/.pnpm-cli/bin:$PATH\" pnpm build:vercel",
   "functions": {
     "api/dashboard.ts": { "maxDuration": 300 },
+    "api/operations.ts": { "maxDuration": 300 },
     "api/tenders.ts": { "maxDuration": 300 },
     "api/tender-discovery.ts": { "maxDuration": 300 },
     "api/prospect-cleanup.ts": { "maxDuration": 300 },
@@ -48,7 +49,7 @@
     { "source": "/services/marketing", "destination": "/api/dashboard?__path=/services/marketing" },
     { "source": "/priorities", "destination": "/api/dashboard?__path=/priorities" },
     { "source": "/portfolio", "destination": "/api/dashboard?__path=/portfolio" },
-    { "source": "/operations", "destination": "/api/dashboard?__path=/operations" },
+    { "source": "/operations", "destination": "/api/operations?__path=/operations" },
     { "source": "/lead-signals", "destination": "/api/lead-signals" },
     { "source": "/linkedin-signals", "destination": "/api/linkedin-signals" },
     { "source": "/re-engagement", "destination": "/api/re-engagement" },
@@ -59,7 +60,7 @@
     { "source": "/api/session", "destination": "/api/dashboard?__path=/api/session" },
     { "source": "/api/portfolio-catalog", "destination": "/api/dashboard?__path=/api/portfolio-catalog" },
     { "source": "/api/closeability-rescore", "destination": "/api/dashboard?__path=/api/closeability-rescore" },
-    { "source": "/api/source-controls", "destination": "/api/dashboard?__path=/api/source-controls" },
+    { "source": "/api/source-controls", "destination": "/api/operations?__path=/api/source-controls" },
     { "source": "/api/prospects", "destination": "/api/dashboard?__path=/api/prospects" },
     { "source": "/api/prospect-runs", "destination": "/api/dashboard?__path=/api/prospect-runs" },
     { "source": "/api/prospects/:path*", "destination": "/api/dashboard?__path=/api/prospects/:path*" }
