@@ -144,6 +144,18 @@ export default {
         });
       }
 
+      if (pathname === '/operations' || pathname === '/api/source-controls') {
+        phase = 'load_operations_runtime';
+        const operationsRuntime = await import('../vercel/operations-runtime.js');
+        return operationsRuntime.handleOperationsRuntime({
+          request,
+          databaseUrl,
+          pathname,
+          actor: session.identifier,
+          canManage: access.role === 'admin',
+        });
+      }
+
       phase = 'load_managed_portfolio_catalog';
       await loadApprovedPortfolioIntoRuntime(databaseUrl);
 
