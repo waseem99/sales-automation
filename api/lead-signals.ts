@@ -1,4 +1,7 @@
+import { loadNeonAppState, persistNeonAppState } from '@sales-automation/neon-state';
 import type { LinkedInWarmSignalInput } from '@sales-automation/prospect-discovery';
+import { processLinkedInWarmSignalBatch } from '../vercel/linkedin-warm-signal-engine.js';
+import { processUpworkSavedSearchBatch } from '../vercel/upwork-saved-search-engine.js';
 
 export const maxDuration = 300;
 const SESSION_COOKIE = 'codistan_admin_session';
@@ -17,14 +20,9 @@ export default {
         return Response.json({ error: 'Forbidden: lead-signal intake is restricted to Admin and Waseem.' }, { status: 403 });
       }
 
-      const [neonState, linkedinEngine, upworkEngine] = await Promise.all([
-        import('@sales-automation/neon-state'),
-        import('../vercel/linkedin-warm-signal-engine.js'),
-        import('../vercel/upwork-saved-search-engine.js'),
-      ]);
       const databaseUrl = requireEnvironment('DATABASE_URL');
       await loadApprovedPortfolioIntoRuntime(databaseUrl);
-      const state = await neonState.loadNeonAppState(databaseUrl);
+      const state = await loadNeonAppState(databaseUrl);
       const pathname = new URL(request.url).pathname;
       const wantsHtml = (request.headers.get('accept') ?? '').includes('text/html') || pathname === '/lead-signals';
 
@@ -39,7 +37,7 @@ export default {
       const now = new Date().toISOString();
       let result: unknown;
       if (sourceKind === 'upwork_email') {
-        result = await upworkEngine.processUpworkSavedSearchBatch({
+        result = await processUpworkSavedSearchBatch({
           state,
           emails: [{
             messageId: `manual-upwork-${Date.now()}`,
@@ -74,16 +72,16 @@ export default {
           country: optionalString(payload.country),
           region: optionalString(payload.region),
         };
-        result = await linkedinEngine.processLinkedInWarmSignalBatch({ state, signals: [signal], actor, generatedAt: now, enrichContacts: true });
+        result = await processLinkedInWarmSignalBatch({ state, signals: [signal], actor, generatedAt: now, enrichContacts: true });
       }
-      await neonState.persistNeonAppState(databaseUrl, state);
+      await persistNeonAppState(databaseUrl, state);
       const response = { ok: true, sourceKind, result, safeguards: safeguards() };
       return wantsHtml ? html(renderResult(response)) : Response.json(response, { status: 201 });
     } catch (error) {
       console.error('LEAD_SIGNALS_API_ERROR', error);
       const message = error instanceof Error ? error.message : String(error);
       const wantsHtml = (request.headers.get('accept') ?? '').includes('text/html');
-      return wantsHtml ? html(renderError(message), 500) : Response.json({ error: message }, { status: 500 });
+      return wantsHtml ? html(renderError(message), 400) : Response.json({ error: message }, { status: 400 });
     }
   },
 };
@@ -133,7 +131,7 @@ function renderRecent(items: ReturnType<typeof listRecentSignals>): string {
 function renderResult(input: { sourceKind: string; result: unknown }): string {
   return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Lead Signal Result</title><style>${styles()}</style></head><body><main><p class="eyebrow">Completed</p><h1>Lead signal processed</h1><p>Source: ${escapeHtml(label(input.sourceKind))}</p><pre>${escapeHtml(JSON.stringify(input.result, null, 2))}</pre><nav><a href="/lead-signals">Return to signals</a><a href="/priorities">Priority queue</a></nav></main></body></html>`;
 }
-function renderError(message: string): string { return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Lead Signal Error</title><style>${styles()}</style></head><body><main><h1>Signal intake could not start</h1><pre>${escapeHtml(message)}</pre><nav><a href="/lead-signals">Retry</a><a href="/prospects">Return to prospects</a></nav></main></body></html>`; }
+function renderError(message: string): string { return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Lead Signal Error</title><style>${styles()}</style></head><body><main><h1>Signal could not be processed</h1><pre>${escapeHtml(message)}</pre><a href="/lead-signals">Return</a></main></body></html>`; }
 function safeguards() { return { authenticatedLinkedInScraping: false, automatedLinkedInMessaging: false, automatedUpworkApplication: false, humanReviewRequired: true }; }
 
 async function loadApprovedPortfolioIntoRuntime(databaseUrl: string): Promise<void> {
