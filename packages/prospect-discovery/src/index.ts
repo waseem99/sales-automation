@@ -9,6 +9,7 @@ export * from './tender-runner.js';
 export * from './targeting.js';
 export * from './pseb.js';
 export * from './enrichment.js';
+export * from './verified-enrichment.js';
 export * from './run-store.js';
 export * from './digest.js';
 export * from './assignment.js';
