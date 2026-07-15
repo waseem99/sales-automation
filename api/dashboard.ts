@@ -1,8 +1,11 @@
-import {
-  loadRuntimeBoundary,
-  runtimeErrorResponse,
-  runtimeFailureDetails,
-} from '../vercel/runtime-contract.js';
+type RuntimeContractModule = typeof import('../vercel/runtime-contract.js');
+
+type RuntimeFailure = {
+  referenceId: string;
+  operation: string;
+  message: string;
+  stack?: string;
+};
 
 export const maxDuration = 300;
 
@@ -10,6 +13,7 @@ const SESSION_COOKIE = 'codistan_admin_session';
 const ACTOR_COOKIE = 'codistan_admin_actor';
 const SESSION_LIFETIME_SECONDS = 12 * 60 * 60;
 const loginAttempts = new Map<string, { count: number; firstAttemptAt: number }>();
+let runtimeContractPromise: Promise<RuntimeContractModule> | undefined;
 
 interface DashboardAccount {
   identifier: string;
@@ -43,6 +47,7 @@ const dashboardAccountSpecs: DashboardAccountSpec[] = [
 export default {
   async fetch(request: Request): Promise<Response> {
     let phase = 'request_received';
+    let runtimeContract: RuntimeContractModule | undefined;
     try {
       const originalUrl = getOriginalRequestUrl(request);
       const pathname = new URL(originalUrl, 'https://local.invalid').pathname;
@@ -137,10 +142,12 @@ export default {
 
       const databaseUrl = requireEnvironment('DATABASE_URL');
       const access = accountAccess(session.identifier);
+      phase = 'load_runtime_contract';
+      runtimeContract = await loadRuntimeContract();
 
       if (pathname === '/portfolio' || pathname === '/api/portfolio-catalog') {
         phase = 'load_portfolio_catalog_runtime';
-        const portfolioRuntime = await loadRuntimeBoundary(phase, () => import('../vercel/portfolio-catalog-runtime.js'));
+        const portfolioRuntime = await runtimeContract.loadRuntimeBoundary(phase, () => import('../vercel/portfolio-catalog-runtime.js'));
         return portfolioRuntime.handlePortfolioCatalogRuntime({
           request,
           databaseUrl,
@@ -152,7 +159,7 @@ export default {
 
       if (pathname === '/operations' || pathname === '/api/source-controls') {
         phase = 'load_operations_runtime';
-        const operationsRuntime = await loadRuntimeBoundary(phase, () => import('../vercel/operations-runtime.js'));
+        const operationsRuntime = await runtimeContract.loadRuntimeBoundary(phase, () => import('../vercel/operations-runtime.js'));
         return operationsRuntime.handleOperationsRuntime({
           request,
           databaseUrl,
@@ -163,9 +170,9 @@ export default {
       }
 
       phase = 'load_managed_portfolio_catalog';
-      await loadApprovedPortfolioIntoRuntime(databaseUrl);
+      await loadApprovedPortfolioIntoRuntime(databaseUrl, runtimeContract);
 
-      const workspaceRuntime = await loadRuntimeBoundary('load_workspace_route_contract', () => import('../vercel/workspace-dashboard-runtime.js'));
+      const workspaceRuntime = await runtimeContract.loadRuntimeBoundary('load_workspace_route_contract', () => import('../vercel/workspace-dashboard-runtime.js'));
       if (request.method === 'GET' && workspaceRuntime.isWorkspaceDashboardPath(pathname)) {
         phase = 'load_workspace_dashboard_runtime';
         return workspaceRuntime.handleWorkspaceDashboardRuntime({
@@ -180,31 +187,40 @@ export default {
 
       if (pathname === '/priorities' || pathname === '/api/closeability-rescore') {
         phase = 'load_priority_queue_runtime';
-        const priorityRuntime = await loadRuntimeBoundary(phase, () => import('../vercel/priority-queue-runtime.js'));
+        const priorityRuntime = await runtimeContract.loadRuntimeBoundary(phase, () => import('../vercel/priority-queue-runtime.js'));
         return priorityRuntime.handlePriorityQueueRuntime({ request, databaseUrl, pathname, session });
       }
 
       phase = 'load_scoped_dashboard_runtime';
-      const runtime = await loadRuntimeBoundary(phase, () => import('./dashboard-runtime.js'));
+      const runtime = await runtimeContract.loadRuntimeBoundary(phase, () => import('./dashboard-runtime.js'));
       return runtime.handleAuthenticatedDashboardRequest({ request, originalUrl, session, adminPassword, sessionSecret });
     } catch (error) {
-      const failure = runtimeFailureDetails(error, phase);
+      const failure = runtimeContract
+        ? runtimeContract.runtimeFailureDetails(error, phase)
+        : fallbackRuntimeFailureDetails(error, phase);
       console.error('VERCEL_DASHBOARD_RUNTIME_ERROR', {
         referenceId: failure.referenceId,
         operation: failure.operation,
         message: failure.message,
         stack: failure.stack,
       });
-      return runtimeErrorResponse(request, failure);
+      return runtimeContract
+        ? runtimeContract.runtimeErrorResponse(request, failure)
+        : fallbackRuntimeErrorResponse(request, failure);
     }
   },
 };
 
-async function loadApprovedPortfolioIntoRuntime(databaseUrl: string): Promise<void> {
+function loadRuntimeContract(): Promise<RuntimeContractModule> {
+  runtimeContractPromise ??= import('../vercel/runtime-contract.js');
+  return runtimeContractPromise;
+}
+
+async function loadApprovedPortfolioIntoRuntime(databaseUrl: string, runtimeContract: RuntimeContractModule): Promise<void> {
   const [catalog, starters, fixtures] = await Promise.all([
-    loadRuntimeBoundary('load_portfolio_catalog_package', () => import('@sales-automation/neon-state/portfolio-catalog')),
-    loadRuntimeBoundary('load_approved_portfolio_seed', () => import('../vercel/approved-portfolio.js')),
-    loadRuntimeBoundary('load_portfolio_fixtures_package', () => import('@sales-automation/fixtures')),
+    runtimeContract.loadRuntimeBoundary('load_portfolio_catalog_package', () => import('@sales-automation/neon-state/portfolio-catalog')),
+    runtimeContract.loadRuntimeBoundary('load_approved_portfolio_seed', () => import('../vercel/approved-portfolio.js')),
+    runtimeContract.loadRuntimeBoundary('load_portfolio_fixtures_package', () => import('@sales-automation/fixtures')),
   ]);
   await catalog.ensurePortfolioCatalogSeeded(databaseUrl, starters.approvedStarterPortfolioItems);
   const approved = await catalog.loadApprovedPortfolioCatalog(databaseUrl);
@@ -304,6 +320,34 @@ async function safeEqual(left: string, right: string): Promise<boolean> {
   return leftBuffer.length === rightBuffer.length && timingSafeEqual(leftBuffer, rightBuffer);
 }
 
+function fallbackRuntimeFailureDetails(error: unknown, operation: string): RuntimeFailure {
+  const details = error instanceof Error ? { message: error.message, stack: error.stack } : { message: String(error), stack: undefined };
+  return {
+    referenceId: `rt-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 14)}`,
+    operation,
+    message: details.message,
+    stack: details.stack,
+  };
+}
+
+function fallbackRuntimeErrorResponse(request: Request, failure: RuntimeFailure): Response {
+  const headers = {
+    ...securityHeaders(),
+    'cache-control': 'no-store',
+    'x-runtime-reference': failure.referenceId,
+  };
+  if (!(request.headers.get('accept')?.includes('text/html') ?? false)) {
+    return new Response(JSON.stringify({ error: 'Application runtime failed.', operation: failure.operation, referenceId: failure.referenceId }), {
+      status: 500,
+      headers: { ...headers, 'content-type': 'application/json; charset=utf-8' },
+    });
+  }
+  return new Response(`<!doctype html><html><body style="font-family:system-ui;background:#f8fafc;padding:40px"><main style="max-width:760px;margin:auto;background:#fff;padding:28px;border-radius:16px"><h1>Prospect Desk could not complete this request</h1><p>The failure occurred during <strong>${escapeHtml(failure.operation)}</strong>.</p><p>Retry or return to <a href="/prospects">Prospect Desk</a>.</p><p>Reference: <code>${escapeHtml(failure.referenceId)}</code></p></main></body></html>`, {
+    status: 500,
+    headers: { ...headers, 'content-type': 'text/html; charset=utf-8' },
+  });
+}
+
 function buildSessionCookie(token: string): string { return `${SESSION_COOKIE}=${token}; Path=/; HttpOnly; SameSite=Strict; Max-Age=${SESSION_LIFETIME_SECONDS}; Secure`; }
 function buildActorCookie(token: string): string { return `${ACTOR_COOKIE}=${token}; Path=/; HttpOnly; SameSite=Strict; Max-Age=${SESSION_LIFETIME_SECONDS}; Secure`; }
 function parseCookies(value: string | undefined): Record<string, string> { const cookies: Record<string,string> = {}; for (const part of value?.split(';') ?? []) { const [name,...rest]=part.trim().split('='); if(name) cookies[name]=rest.join('='); } return cookies; }
@@ -320,3 +364,4 @@ function asObject(value: unknown): Record<string, unknown> { return value&&typeo
 function securityHeaders(): Record<string,string> { return {'x-content-type-options':'nosniff','x-frame-options':'DENY','referrer-policy':'same-origin','content-security-policy':"default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'"}; }
 function html(body: string,status=200): Response { return new Response(body,{status,headers:{...securityHeaders(),'content-type':'text/html; charset=utf-8','cache-control':'no-store'}}); }
 function json(value: unknown,status=200,additionalHeaders: Record<string,string> = {}): Response { return new Response(JSON.stringify(value),{status,headers:{...securityHeaders(),...additionalHeaders,'content-type':'application/json; charset=utf-8','cache-control':'no-store'}}); }
+function escapeHtml(value: string): string { return value.replace(/[&<>"']/g,(character)=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'})[character]??character); }

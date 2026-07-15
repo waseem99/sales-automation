@@ -1,5 +1,5 @@
 export type RuntimeRole = 'public' | 'admin' | 'team_lead' | 'bd_user';
-export type RuntimeTarget = 'auth' | 'portfolio' | 'operations' | 'workspace' | 'priorities' | 'dashboard';
+export type RuntimeTarget = 'auth' | 'portfolio' | 'operations' | 'workspace' | 'priorities' | 'dashboard' | 'dedicated';
 export type RuntimeResponseKind = 'html' | 'json' | 'redirect';
 
 export interface RuntimeRouteContract {
@@ -25,13 +25,13 @@ export const runtimeRouteContracts: readonly RuntimeRouteContract[] = [
   { id: 'priorities', method: 'GET', samplePath: '/priorities', pattern: /^\/priorities\/?$/, target: 'priorities', response: 'html', access: AUTHENTICATED_ROLES },
   { id: 'lead-workspaces', method: 'GET', samplePath: '/leads/linkedin', pattern: /^\/leads\/(?:linkedin|upwork|rfq|rfp|eoi|rfi|tenders|research|partnerships)\/?$/, target: 'workspace', response: 'html', access: AUTHENTICATED_ROLES },
   { id: 'service-workspaces', method: 'GET', samplePath: '/services/software', pattern: /^\/services(?:\/(?:ai|software|cybersecurity|immersive|marketing))?\/?$/, target: 'workspace', response: 'html', access: AUTHENTICATED_ROLES },
-  { id: 'signal-intake', method: 'GET', samplePath: '/lead-signals', pattern: /^\/lead-signals\/?$/, target: 'dashboard', response: 'html', access: AUTHENTICATED_ROLES },
-  { id: 'linkedin-signals', method: 'GET', samplePath: '/linkedin-signals', pattern: /^\/linkedin-signals\/?$/, target: 'dashboard', response: 'html', access: AUTHENTICATED_ROLES },
-  { id: 'tenders', method: 'GET', samplePath: '/tenders', pattern: /^\/tenders\/?$/, target: 'dashboard', response: 'html', access: AUTHENTICATED_ROLES },
+  { id: 'signal-intake', method: 'GET', samplePath: '/lead-signals', pattern: /^\/lead-signals\/?$/, target: 'dedicated', response: 'html', access: ADMIN_ONLY },
+  { id: 'linkedin-signals', method: 'GET', samplePath: '/linkedin-signals', pattern: /^\/linkedin-signals\/?$/, target: 'dedicated', response: 'html', access: ADMIN_ONLY },
+  { id: 'tenders', method: 'GET', samplePath: '/tenders', pattern: /^\/tenders\/?$/, target: 'dedicated', response: 'html', access: AUTHENTICATED_ROLES },
   { id: 'portfolio', method: 'GET', samplePath: '/portfolio', pattern: /^\/portfolio\/?$/, target: 'portfolio', response: 'html', access: AUTHENTICATED_ROLES },
-  { id: 're-engagement', method: 'GET', samplePath: '/re-engagement', pattern: /^\/re-engagement\/?$/, target: 'dashboard', response: 'html', access: AUTHENTICATED_ROLES },
+  { id: 're-engagement', method: 'GET', samplePath: '/re-engagement', pattern: /^\/re-engagement\/?$/, target: 'dedicated', response: 'html', access: ADMIN_ONLY },
   { id: 'operations', method: 'GET', samplePath: '/operations', pattern: /^\/operations\/?$/, target: 'operations', response: 'html', access: AUTHENTICATED_ROLES },
-  { id: 'delivery-health', method: 'GET', samplePath: '/delivery-health', pattern: /^\/delivery-health\/?$/, target: 'dashboard', response: 'html', access: AUTHENTICATED_ROLES },
+  { id: 'delivery-health', method: 'GET', samplePath: '/delivery-health', pattern: /^\/delivery-health\/?$/, target: 'dedicated', response: 'html', access: ADMIN_ONLY },
   { id: 'portfolio-catalog-api', method: 'GET', samplePath: '/api/portfolio-catalog', pattern: /^\/api\/portfolio-catalog\/?$/, target: 'portfolio', response: 'json', access: AUTHENTICATED_ROLES },
   { id: 'portfolio-catalog-mutation', method: 'POST', samplePath: '/api/portfolio-catalog', pattern: /^\/api\/portfolio-catalog\/?$/, target: 'portfolio', response: 'json', access: ADMIN_ONLY },
   { id: 'source-controls-mutation', method: 'POST', samplePath: '/api/source-controls', pattern: /^\/api\/source-controls\/?$/, target: 'operations', response: 'json', access: ADMIN_ONLY },
