@@ -69,6 +69,8 @@ export interface DiscoveryRuntimeSourceControls {
   greenhouse?: boolean;
   lever?: boolean;
   generic_rss?: boolean;
+  linkedin_signal_inbox?: boolean;
+  linkedin_public_index?: boolean;
   ppra?: boolean;
   canadabuys?: boolean;
   ungm?: boolean;

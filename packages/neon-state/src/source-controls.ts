@@ -6,6 +6,8 @@ export type DiscoverySourceKey =
   | 'greenhouse'
   | 'lever'
   | 'generic_rss'
+  | 'linkedin_signal_inbox'
+  | 'linkedin_public_index'
   | 'ppra'
   | 'canadabuys'
   | 'ungm'
@@ -26,6 +28,8 @@ const sourceKeys: DiscoverySourceKey[] = [
   'greenhouse',
   'lever',
   'generic_rss',
+  'linkedin_signal_inbox',
+  'linkedin_public_index',
   'ppra',
   'canadabuys',
   'ungm',
@@ -39,6 +43,8 @@ const safeDefaults: Record<DiscoverySourceKey, boolean> = {
   greenhouse: false,
   lever: false,
   generic_rss: false,
+  linkedin_signal_inbox: true,
+  linkedin_public_index: true,
   ppra: true,
   canadabuys: true,
   ungm: true,
@@ -148,6 +154,8 @@ function defaultReason(sourceKey: DiscoverySourceKey): string {
   if (sourceKey === 'remoteok') return 'Disabled because employee vacancies are not direct sales opportunities.';
   if (['greenhouse', 'lever'].includes(sourceKey)) return 'Disabled by default; job feeds are research signals only when explicitly required.';
   if (sourceKey === 'generic_rss') return 'Disabled until each feed is approved with valid and invalid regression examples.';
+  if (sourceKey === 'linkedin_signal_inbox') return 'Enabled for a dedicated LinkedIn/Sales Navigator alert mailbox only; no outreach reply mailbox fallback.';
+  if (sourceKey === 'linkedin_public_index') return 'Enabled for public search snippets pointing to LinkedIn posts; every result remains research-only until human verification.';
   return 'Enabled as an approved production discovery source.';
 }
 

@@ -9,13 +9,17 @@
     ".": {
       "types": "./dist/index.d.ts",
       "default": "./dist/index.js"
+    },
+    "./linkedin-signal-inbox": {
+      "types": "./dist/linkedin-signal-inbox.d.ts",
+      "default": "./dist/linkedin-signal-inbox.js"
     }
   },
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "lint": "tsc -p tsconfig.json --noEmit",
-    "test": "tsx src/index.test.ts"
+    "test": "tsx src/index.test.ts && tsx src/linkedin-signal-inbox.test.ts"
   },
   "dependencies": {
     "@sales-automation/engagement-guidance": "workspace:*",
