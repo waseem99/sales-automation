@@ -13,8 +13,26 @@ export type {
 
 import type { WorkspacePageDefinition } from './workspace-page-model.js';
 
-const SHELL_CSS = '/assets/prospect-desk-shell.v1.css';
-const SHELL_JS = '/assets/prospect-desk-shell.v1.js';
+const SHELL_CSS = '/assets/prospect-desk-shell.v2.css';
+const SHELL_JS = '/assets/prospect-desk-shell.v2.js';
+
+export interface WorkspaceSidebarSummary {
+  total: number;
+  totalLabel?: string;
+  detail?: string;
+  followUpsDue?: number;
+  unassigned?: number;
+}
+
+export interface SpecializedPageShellOptions {
+  activeRoute: string;
+  eyebrow: string;
+  title: string;
+  description: string;
+  actor: string;
+  scopeLabel: string;
+  summary?: WorkspaceSidebarSummary;
+}
 
 interface NavigationLink {
   href: string;
@@ -109,16 +127,44 @@ export function applyWorkspacePageChrome(
     `<tr><td colspan="7" class="empty">${escapeHtml(page.emptyMessage)}</td></tr>`,
   );
   output = output.replace(/<section class="lower-grid"[\s\S]*?<\/section>\s*<section class="panel runs-panel">[\s\S]*?<\/section>/, '');
-  output = injectVersionedAssets(output);
-  return output;
+  return injectVersionedAssets(output);
 }
 
-export function renderWorkspaceSidebar(activeRoute: string, summary?: ProspectPageResult['summary']): string {
-  const queue = summary
-    ? `<div class="sidebar-card" aria-label="Current workspace summary"><span>Current workspace</span><strong>${summary.total} visible</strong><small>${summary.followUpsDue} follow-ups due · ${summary.unassigned} unassigned</small></div>`
-    : '';
+export function applySpecializedPageShell(html: string, options: SpecializedPageShellOptions): string {
+  let output = replaceSpecializedHeader(html, options);
+  output = output.replace(
+    '<body><main class="shell">',
+    `<body><div class="app-shell">${renderWorkspaceSidebar(options.activeRoute, options.summary, options.scopeLabel)}<main class="main specialized-main"><div class="specialized-content">`,
+  );
+  output = output.replace(/<\/main>(?=(?:<script>|<\/body>))/, '</div></main></div>');
+  return injectVersionedAssets(output);
+}
+
+export function renderWorkspaceSidebar(
+  activeRoute: string,
+  summary?: WorkspaceSidebarSummary,
+  scopeLabel = 'Human-reviewed BD',
+): string {
+  const queue = summary ? renderSidebarSummary(summary) : '';
   const groups = navigationGroups.map((group) => renderNavigationGroup(group, activeRoute)).join('');
-  return `<aside class="sidebar" id="workspace-sidebar" aria-label="Prospect Desk navigation"><div class="brand"><div class="brand-mark" aria-hidden="true">C</div><div><strong>Codistan</strong><span>Prospect Desk</span></div><button id="sidebar-close" class="sidebar-close" type="button" aria-label="Close navigation">×</button></div><div class="workspace-scope"><span>Internal workspace</span><strong>Human-reviewed BD</strong></div><nav class="workspace-nav">${groups}</nav>${queue}<button id="logout-button" class="ghost full">Log out</button></aside>`;
+  return `<aside class="sidebar" id="workspace-sidebar" aria-label="Prospect Desk navigation"><div class="brand"><div class="brand-mark" aria-hidden="true">C</div><div><strong>Codistan</strong><span>Prospect Desk</span></div><button id="sidebar-close" class="sidebar-close" type="button" aria-label="Close navigation">×</button></div><div class="workspace-scope"><span>Current scope</span><strong>${escapeHtml(scopeLabel)}</strong></div><nav class="workspace-nav">${groups}</nav>${queue}<button id="logout-button" class="ghost full" type="button" data-shell-logout>Log out</button></aside>`;
+}
+
+function replaceSpecializedHeader(html: string, options: SpecializedPageShellOptions): string {
+  const headerPattern = /<header><div>[\s\S]*?<\/div><div class="actions">([\s\S]*?)<\/div><\/header>/;
+  const sectionPattern = /<section class="top"><div>[\s\S]*?<\/div><div class="actions">([\s\S]*?)<\/div><\/section>/;
+  const match = html.match(headerPattern) ?? html.match(sectionPattern);
+  const actions = match?.[1] ?? '';
+  const replacement = `<header class="topbar specialized-topbar"><div class="topbar-copy"><button id="sidebar-toggle" class="sidebar-toggle" type="button" aria-label="Open navigation" aria-controls="workspace-sidebar" aria-expanded="false">☰</button><nav class="breadcrumbs" aria-label="Breadcrumb"><a href="/prospects">Prospect Desk</a><span>/</span><span aria-current="page">${escapeHtml(options.title)}</span></nav><p class="eyebrow">${escapeHtml(options.eyebrow)}</p><h1>${escapeHtml(options.title)}</h1><p>${escapeHtml(options.description)}</p><small class="signed-in">Signed in as ${escapeHtml(options.actor)} · ${escapeHtml(options.scopeLabel)}</small></div><div class="actions top-actions">${actions}</div></header>`;
+  if (headerPattern.test(html)) return html.replace(headerPattern, replacement);
+  if (sectionPattern.test(html)) return html.replace(sectionPattern, replacement);
+  return html;
+}
+
+function renderSidebarSummary(summary: WorkspaceSidebarSummary): string {
+  const totalLabel = summary.totalLabel ?? 'visible';
+  const detail = summary.detail ?? `${summary.followUpsDue ?? 0} follow-ups due · ${summary.unassigned ?? 0} unassigned`;
+  return `<div class="sidebar-card" aria-label="Current workspace summary"><span>Current workspace</span><strong>${summary.total} ${escapeHtml(totalLabel)}</strong><small>${escapeHtml(detail)}</small></div>`;
 }
 
 function renderNavigationGroup(group: NavigationGroup, activeRoute: string): string {
@@ -128,12 +174,8 @@ function renderNavigationGroup(group: NavigationGroup, activeRoute: string): str
 
 function injectVersionedAssets(html: string): string {
   let output = html;
-  if (!output.includes(SHELL_CSS)) {
-    output = output.replace('</head>', `<link rel="stylesheet" href="${SHELL_CSS}" /></head>`);
-  }
-  if (!output.includes(SHELL_JS)) {
-    output = output.replace('</body>', `<script src="${SHELL_JS}" defer></script></body>`);
-  }
+  if (!output.includes(SHELL_CSS)) output = output.replace('</head>', `<link rel="stylesheet" href="${SHELL_CSS}" /></head>`);
+  if (!output.includes(SHELL_JS)) output = output.replace('</body>', `<script src="${SHELL_JS}" defer></script></body>`);
   return output;
 }
 

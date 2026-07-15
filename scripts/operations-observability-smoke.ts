@@ -4,6 +4,7 @@ import { readFileSync } from 'node:fs';
 const vercel = JSON.parse(readFileSync(new URL('../vercel.json', import.meta.url), 'utf8')) as {
   rewrites?: Array<{ source: string; destination: string }>;
 };
+const dashboard = readFileSync(new URL('../api/dashboard.ts', import.meta.url), 'utf8');
 const operations = readFileSync(new URL('../vercel/operations-runtime.ts', import.meta.url), 'utf8');
 const dashboardRuntime = readFileSync(new URL('../api/dashboard-runtime.ts', import.meta.url), 'utf8');
 const discoveryCron = readFileSync(new URL('../api/cron/prospect-discovery.ts', import.meta.url), 'utf8');
@@ -14,6 +15,9 @@ const qualityTest = readFileSync(new URL('../packages/prospect-discovery/src/qua
 
 assert.equal(vercel.rewrites?.find((rewrite) => rewrite.source === '/operations')?.destination, '/api/dashboard?__path=/operations');
 assert.equal(vercel.rewrites?.find((rewrite) => rewrite.source === '/api/source-controls')?.destination, '/api/dashboard?__path=/api/source-controls');
+assert.match(dashboard, /apply_operations_shell/);
+assert.match(dashboard, /activeRoute: '\/operations'/);
+assert.match(dashboard, /load_specialized_shell_renderer/);
 
 assert.match(operations, /Performance by source/);
 assert.match(operations, /sourceRecommendation/);
@@ -50,4 +54,4 @@ assert.match(qualityTest, /source controls, campaign selection and final run per
 assert.match(qualityTest, /controlled\.bingRssEnabled, false/);
 assert.match(qualityTest, /sourceStats, \[\]/);
 
-console.log('Source quality, audited controls, deployment and outreach observability contracts passed');
+console.log('Source quality, shared shell, audited controls, deployment and outreach observability contracts passed');
