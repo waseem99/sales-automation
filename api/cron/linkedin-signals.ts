@@ -3,6 +3,7 @@ import { samplePortfolioItems } from '@sales-automation/fixtures';
 import {
   acquireNamedRunLock,
   loadNeonAppState,
+  persistDiscoveryRuns,
   persistNeonAppState,
   releaseNamedRunLock,
   requireDatabaseUrl,
@@ -12,9 +13,11 @@ import {
   sourceControlMap,
 } from '@sales-automation/neon-state/source-controls';
 import {
+  acknowledgeLinkedInSignalInbox,
   loadLinkedInSignalInboxConfig,
   pollLinkedInSignalInbox,
 } from '@sales-automation/outreach-email/linkedin-signal-inbox';
+import { parseLinkedInSignal } from '@sales-automation/parsers';
 import {
   collectPublicLinkedInIndexSignals,
   LINKEDIN_PUBLIC_INDEX_QUERIES,
@@ -67,14 +70,7 @@ export default {
         : { configured: inboxConfig.configured, checked: 0, accepted: 0, messages: [], errors: [] as string[] };
       if (inboxEnabled && !inbox.configured) warnings.push('Dedicated LinkedIn signal mailbox is not configured; email ingestion was skipped.');
       errors.push(...inbox.errors.map((error) => `linkedin_signal_inbox: ${error}`));
-      signals.push(...inbox.messages.map((message) => ({
-        origin: message.origin,
-        text: message.text,
-        receivedAt: message.receivedAt,
-        subject: message.subject,
-        messageId: message.messageId,
-        sourceUrl: message.sourceUrl,
-      })));
+      signals.push(...inbox.messages.map((message) => enrichInboxSignal(message)));
 
       const publicQueries = splitQueries(process.env.LINKEDIN_PUBLIC_INDEX_QUERIES);
       const publicIndex: PublicLinkedInIndexCollection = publicIndexEnabled
@@ -96,7 +92,6 @@ export default {
         generatedAt: startedAt,
         enrichContacts: true,
       });
-      const alert = await sendPriorityAlert(processed.priorityALeadIds, state, startedAt).catch((error) => ({ status: 'failed' as const, message: errorMessage(error) }));
       const completedAt = new Date().toISOString();
       const run: ProspectDiscoveryRun = {
         id: `linkedin-warm-${Date.parse(startedAt)}`,
@@ -124,13 +119,28 @@ export default {
             error: publicIndex.error,
           },
         ],
-        emailStatus: alert.status,
-        emailMessage: alert.message,
+        emailStatus: 'skipped',
+        emailMessage: 'Priority A alert pending after persistence.',
         errors,
         newLeadIds: processed.ingestion.captured.map((item) => item.leadId),
       };
       state.runStore.saveRun(run);
       await persistNeonAppState(databaseUrl, state);
+
+      const acknowledged = await acknowledgeLinkedInSignalInbox(
+        inboxConfig,
+        inbox.messages.map((message) => message.uid),
+      ).catch((error) => {
+        warnings.push(`LinkedIn signal messages were persisted but could not be marked read: ${errorMessage(error)}`);
+        return 0;
+      });
+
+      const alert = await sendPriorityAlert(processed.priorityALeadIds, state, startedAt)
+        .catch((error) => ({ status: 'failed' as const, message: errorMessage(error) }));
+      run.emailStatus = alert.status;
+      run.emailMessage = alert.message;
+      state.runStore.saveRun(run);
+      await persistDiscoveryRuns(databaseUrl, state.runStore.listRuns(180));
 
       return Response.json({
         ok: true,
@@ -141,6 +151,7 @@ export default {
           configured: inbox.configured,
           checked: inbox.checked,
           accepted: inbox.accepted,
+          acknowledgedAfterPersistence: acknowledged,
         },
         publicIndex: {
           enabled: publicIndexEnabled,
@@ -153,6 +164,7 @@ export default {
           authenticatedLinkedInScraping: false,
           automatedExternalMessaging: false,
           dedicatedMailboxOnly: true,
+          acknowledgeOnlyAfterPersistence: true,
           publicIndexContactReadyWithoutVerification: false,
         },
       });
@@ -166,6 +178,34 @@ export default {
     }
   },
 };
+
+function enrichInboxSignal(message: {
+  origin: 'sales_navigator_email' | 'linkedin_notification_email';
+  messageId: string;
+  subject?: string;
+  text: string;
+  sourceUrl?: string;
+  receivedAt: string;
+}): LinkedInWarmSignalInput {
+  const parsed = parseLinkedInSignal({
+    text: `${message.subject ?? ''}\n${message.text}`,
+    capturedAt: message.receivedAt,
+    sourceUrl: message.sourceUrl,
+  });
+  return {
+    origin: message.origin,
+    text: message.text,
+    receivedAt: message.receivedAt,
+    subject: message.subject,
+    messageId: message.messageId,
+    sourceUrl: message.sourceUrl,
+    authorName: parsed.contactName,
+    authorRole: parsed.contactRole,
+    companyName: parsed.companyName,
+    country: parsed.country,
+    region: parsed.region,
+  };
+}
 
 async function sendPriorityAlert(leadIds: string[], state: Awaited<ReturnType<typeof loadNeonAppState>>, generatedAt: string): Promise<{ status: 'sent' | 'skipped' | 'failed'; message?: string }> {
   if (!leadIds.length) return { status: 'skipped', message: 'No new Priority A LinkedIn signals.' };
