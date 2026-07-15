@@ -52,7 +52,8 @@ assert.match(specialized, /id="workspace-sidebar"/);
 assert.match(specialized, /id="rescore"/);
 assert.match(specialized, /Talha Bashir · Talha team leads/);
 assert.match(specialized, /prospect-desk-shell\.v2\.css/);
-assert.match(specialized, /prospect-desk-shell\.v1\.js/);
+assert.match(specialized, /prospect-desk-shell\.v2\.js/);
+assert.match(specialized, /data-shell-logout/);
 assert.match(specialized, /class="specialized-content"/);
 
 console.log('Closeability scoring, scoped priority workspace, shared shell and duplicate-free rescore deployment contracts passed');

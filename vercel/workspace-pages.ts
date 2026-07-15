@@ -14,7 +14,7 @@ export type {
 import type { WorkspacePageDefinition } from './workspace-page-model.js';
 
 const SHELL_CSS = '/assets/prospect-desk-shell.v2.css';
-const SHELL_JS = '/assets/prospect-desk-shell.v1.js';
+const SHELL_JS = '/assets/prospect-desk-shell.v2.js';
 
 export interface WorkspaceSidebarSummary {
   total: number;
@@ -147,7 +147,7 @@ export function renderWorkspaceSidebar(
 ): string {
   const queue = summary ? renderSidebarSummary(summary) : '';
   const groups = navigationGroups.map((group) => renderNavigationGroup(group, activeRoute)).join('');
-  return `<aside class="sidebar" id="workspace-sidebar" aria-label="Prospect Desk navigation"><div class="brand"><div class="brand-mark" aria-hidden="true">C</div><div><strong>Codistan</strong><span>Prospect Desk</span></div><button id="sidebar-close" class="sidebar-close" type="button" aria-label="Close navigation">×</button></div><div class="workspace-scope"><span>Current scope</span><strong>${escapeHtml(scopeLabel)}</strong></div><nav class="workspace-nav">${groups}</nav>${queue}<button id="logout-button" class="ghost full">Log out</button></aside>`;
+  return `<aside class="sidebar" id="workspace-sidebar" aria-label="Prospect Desk navigation"><div class="brand"><div class="brand-mark" aria-hidden="true">C</div><div><strong>Codistan</strong><span>Prospect Desk</span></div><button id="sidebar-close" class="sidebar-close" type="button" aria-label="Close navigation">×</button></div><div class="workspace-scope"><span>Current scope</span><strong>${escapeHtml(scopeLabel)}</strong></div><nav class="workspace-nav">${groups}</nav>${queue}<button id="logout-button" class="ghost full" type="button" data-shell-logout>Log out</button></aside>`;
 }
 
 function replaceSpecializedHeader(html: string, options: SpecializedPageShellOptions): string {
