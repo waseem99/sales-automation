@@ -1,8 +1,11 @@
 [qualification]
-version = "2026-07-16.v3"
-proposal_ready_score = 80
-contact_ready_score = 68
-qualified_score = 55
+version = "2026-07-16.v4"
+proposal_ready_score = 82
+contact_ready_score = 72
+qualified_score = 60
+bd_review_score = 45
+priority_a_score = 72
+priority_b_score = 45
 prohibited_terms = [
   "academic assignment",
   "exam help",
@@ -16,9 +19,12 @@ id = "software-saas"
 business_unit = "Codistan"
 keywords = [
   "saas", "react", "react native", "next.js", "node.js", "python",
-  "marketplace", "mobile app", "desktop application", "web application",
-  "browser extension", "portal", "subscription", "full stack", "full-stack",
-  "software architecture", "technical lead", "enterprise platform", "api integration"
+  "marketplace", "mobile app", "desktop application", "windows application",
+  "macos application", "web application", "browser extension", "portal",
+  "subscription", "full stack", "full-stack", "software architecture",
+  "system design", "technical lead", "enterprise platform", "api integration",
+  "real-time application", "event-driven", "latency-sensitive", "mvp",
+  "product development", "backend", "frontend"
 ]
 minimum_budget_usd = 3000
 remote_delivery = true
@@ -30,10 +36,13 @@ business_unit = "Hilarious AI"
 keywords = [
   "ai agent", "ai assistant", "ai architect", "ai engineer", "ai expert",
   "artificial intelligence", "machine learning", "generative ai", "applied ai",
-  "rag", "llm", "large language model", "automation", "workflow automation",
-  "n8n", "retool", "chatbot", "document intelligence", "voice ai",
-  "voice receptionist", "ai receptionist", "prompt engineering", "copilot",
-  "natural language query", "natural language queries", "ai implementation"
+  "rag", "retrieval augmented generation", "llm", "large language model",
+  "automation", "workflow automation", "n8n", "retool", "chatbot",
+  "document intelligence", "voice ai", "ai voice", "voice assistant",
+  "voice receptionist", "ai receptionist", "conversational ai",
+  "prompt engineering", "copilot", "natural language query",
+  "natural language queries", "semantic search", "vector database",
+  "ai implementation", "ai workflow", "ai automation"
 ]
 minimum_budget_usd = 3000
 remote_delivery = true
@@ -45,7 +54,8 @@ business_unit = "Cytas"
 keywords = [
   "vapt", "penetration testing", "soc 2", "iso 27001", "hipaa", "cmmc",
   "iam", "identity access management", "cloud security", "security assessment",
-  "compliance readiness", "siem", "incident response"
+  "compliance readiness", "siem", "incident response", "vulnerability assessment",
+  "security audit", "zero trust", "microsoft purview", "azure ad"
 ]
 minimum_budget_usd = 2000
 remote_delivery = true
@@ -57,7 +67,7 @@ business_unit = "Motionly"
 keywords = [
   "3d animation", "3d modeling", "unity", "unreal", "augmented reality",
   "virtual reality", "ar experience", "vr training", "webxr", "metaverse",
-  "character animation", "cgi"
+  "character animation", "cgi", "vfx", "blender", "maya"
 ]
 minimum_budget_usd = 1500
 remote_delivery = true
@@ -68,8 +78,10 @@ id = "digital-growth"
 business_unit = "Digital Marketing"
 keywords = [
   "website redesign", "seo", "search engine optimization", "aeo", "geo",
-  "performance marketing", "analytics", "social media", "brand strategy",
-  "google ads", "meta ads", "content marketing", "growth marketing"
+  "generative engine optimization", "performance marketing", "analytics",
+  "social media", "brand strategy", "google ads", "meta ads",
+  "content marketing", "growth marketing", "conversion optimization",
+  "ga4", "technical seo", "local seo"
 ]
 minimum_budget_usd = 1500
 remote_delivery = true
