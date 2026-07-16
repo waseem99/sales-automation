@@ -26,12 +26,13 @@ assert.match(runtimeSource, /source_record\.evidence\.source must be upwork/);
 assert.match(runtimeSource, /must be an HTTPS Upwork URL/);
 assert.match(runtimeSource, /handleManualIntakeRuntime/);
 assert.match(runtimeSource, /loadNeonAppState/);
-assert.match(runtimeSource, /persistLeadRecords/);
 assert.match(runtimeSource, /manual-intake-runtime/);
+assert.match(runtimeSource, /Acquisition idempotency key/);
+assert.match(runtimeSource, /Acquisition priority/);
+assert.match(runtimeSource, /External action performed: false/);
 assert.match(runtimeSource, /humanReviewRequired: true/);
 assert.match(runtimeSource, /externalActionAutomated: false/);
 assert.match(runtimeSource, /idempotencyKey/);
-assert.match(runtimeSource, /acquisition::upwork_scheduled/);
 assert.match(runtimeSource, /cache-control/);
 assert.match(runtimeSource, /content-security-policy/);
 
