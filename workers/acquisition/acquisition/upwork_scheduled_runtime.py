@@ -2,9 +2,15 @@ from __future__ import annotations
 
 from typing import Any
 
-from .models import SourceEvidence
+from .models import OpportunityRecord, SourceEvidence
+from .qualification import QualificationDecision
+from .upwork_market import annotate_profile_and_market, apply_market_policy
 from .upwork_pilot import HumanActionRequired, extract_job_evidence, utc_now_iso
 from . import upwork_scheduled as _base
+
+
+_original_card_evidence = _base._card_evidence
+_original_qualify = _base.qualify
 
 
 def _has_value(value: object) -> bool:
@@ -13,6 +19,18 @@ def _has_value(value: object) -> bool:
     if isinstance(value, (list, tuple, set, dict)) and not value:
         return False
     return True
+
+
+def _policy_card_evidence(raw: dict[str, Any], *, segment: str) -> SourceEvidence:
+    evidence = _original_card_evidence(raw, segment=segment)
+    annotated = annotate_profile_and_market(evidence, segment)
+    annotated.validate()
+    return annotated
+
+
+def _policy_qualify(record: OpportunityRecord, config: Any) -> QualificationDecision:
+    decision = _original_qualify(record, config)
+    return apply_market_policy(record, decision)
 
 
 def _safe_enrich_from_detail(
@@ -67,6 +85,7 @@ def _safe_enrich_from_detail(
             segment=segment,
             attributes=attributes,
         )
+        evidence = annotate_profile_and_market(evidence, segment)
         evidence.validate()
         return evidence
     except HumanActionRequired:
@@ -80,10 +99,12 @@ def _safe_enrich_from_detail(
             pass
 
 
-# Keep the main implementation in one module while replacing the enrichment
-# helper before the scheduled runner executes. This avoids any browser-side
-# behavioral change and only fixes local evidence merging.
+# Keep the main implementation in one module while replacing only local
+# evidence enrichment, profile annotation and qualification-policy hooks.
+# Browser navigation behavior and the no-external-action boundary are unchanged.
+_base._card_evidence = _policy_card_evidence
 _base._enrich_from_detail = _safe_enrich_from_detail
+_base.qualify = _policy_qualify
 
 AutomationSettings = _base.AutomationSettings
 ScheduledRunResult = _base.ScheduledRunResult
