@@ -55,6 +55,7 @@ function Connect-AccountProfile {
     param(
         [Parameter(Mandatory = $true)][string]$Name,
         [Parameter(Mandatory = $true)][string]$ProfileFolder,
+        [Parameter(Mandatory = $true)][string]$CanonicalMarkerName,
         [Parameter(Mandatory = $true)][string]$Url
     )
 
@@ -90,16 +91,18 @@ function Connect-AccountProfile {
         completed_at = (Get-Date).ToString("o")
         verification = "User confirmed the authorized account page was visible in a native browser. Live adapter validation is still required."
     }
-    $Marker | ConvertTo-Json | Set-Content -Path (Join-Path $StateRoot "$ProfileFolder.connected.json") -Encoding UTF8
+    $MarkerJson = $Marker | ConvertTo-Json
+    $MarkerJson | Set-Content -Path (Join-Path $StateRoot "$ProfileFolder.connected.json") -Encoding UTF8
+    $MarkerJson | Set-Content -Path (Join-Path $StateRoot $CanonicalMarkerName) -Encoding UTF8
     Write-Host "$Name profile saved locally." -ForegroundColor Green
 }
 
 if ($Account -in @("Both", "Upwork")) {
-    Connect-AccountProfile -Name "Upwork" -ProfileFolder "upwork-browser-v2" -Url "https://www.upwork.com/nx/find-work/"
+    Connect-AccountProfile -Name "Upwork" -ProfileFolder "upwork-browser-v2" -CanonicalMarkerName "upwork.connected.json" -Url "https://www.upwork.com/nx/find-work/"
 }
 
 if ($Account -in @("Both", "LinkedIn")) {
-    Connect-AccountProfile -Name "LinkedIn Sales Navigator" -ProfileFolder "linkedin-sales-navigator-browser-v2" -Url "https://www.linkedin.com/sales/home"
+    Connect-AccountProfile -Name "LinkedIn Sales Navigator" -ProfileFolder "linkedin-sales-navigator-browser-v2" -CanonicalMarkerName "linkedin-sales-navigator.connected.json" -Url "https://www.linkedin.com/sales/home"
 }
 
 Write-Step "Account connection step completed"
