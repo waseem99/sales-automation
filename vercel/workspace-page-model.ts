@@ -1,4 +1,4 @@
-import type { ProspectPageQuery, ProspectPageResult } from '@sales-automation/neon-state';
+import type { ProspectPageQuery, ProspectPageResult, ProspectWorkspaceScope } from '@sales-automation/neon-state';
 import type { Lead, PipelineStatus, ServiceCategory } from '@sales-automation/shared';
 import type { StoredLeadRecord } from '@sales-automation/storage';
 
@@ -17,6 +17,7 @@ export interface WorkspacePageDefinition {
   listTitle: string;
   listDescription: string;
   emptyMessage: string;
+  queryScope: ProspectWorkspaceScope;
   match: (lead: Lead) => boolean;
 }
 
@@ -70,7 +71,23 @@ export function buildWorkspacePage(records: StoredLeadRecord[], query: ProspectP
 }
 
 function workspace(id: WorkspacePageId, route: string, navigationLabel: string, eyebrow: string, title: string, description: string, listTitle: string, listDescription: string, emptyMessage: string, match: (lead: Lead) => boolean): WorkspacePageDefinition {
-  return { id, route, navigationLabel, eyebrow, title, description, listTitle, listDescription, emptyMessage, match };
+  return { id, route, navigationLabel, eyebrow, title, description, listTitle, listDescription, emptyMessage, queryScope: queryScopeFor(id), match };
+}
+
+function queryScopeFor(id: WorkspacePageId): ProspectWorkspaceScope {
+  if (id === 'all') return {};
+  if (id === 'linkedin') return { sources: ['linkedin', 'sales_navigator'], leadTypes: ['linkedin_warm_post', 'linkedin_sales_nav_alert'] };
+  if (id === 'upwork') return { sources: ['upwork'], leadTypes: ['upwork_job'] };
+  if (id === 'rfq' || id === 'rfp' || id === 'eoi' || id === 'rfi') return { tenderOpportunityTypes: [id] };
+  if (id === 'tenders') return { sources: ['public_procurement'], hasTender: true };
+  if (id === 'research') return { pipelineStatuses: ['needs_research'] };
+  if (id === 'partnerships') return { sources: ['partner_research'], leadTypes: ['partner_prospect'], prospectStages: ['partner_prospect'], opportunityStatuses: ['partnership_target'] };
+  if (id === 'services') return { requireKnownService: true };
+  if (id === 'ai') return { serviceCategories: aiServices };
+  if (id === 'software') return { serviceCategories: softwareServices };
+  if (id === 'cybersecurity') return { serviceCategories: ['cybersecurity_compliance'] };
+  if (id === 'immersive') return { serviceCategories: ['ar_3d_unity_unreal'] };
+  return { serviceCategories: ['website_portal'] };
 }
 
 function normalizeWorkspacePageQuery(query: ProspectPageQuery): { page: number; pageSize: ProspectPageResult['pageSize']; filters: ProspectPageResult['query'] } {
