@@ -1,0 +1,193 @@
+from __future__ import annotations
+
+from dataclasses import replace
+from typing import Any
+
+from .models import OpportunityRecord, SourceEvidence
+from .qualification import QualificationDecision
+
+
+PROFILE_METADATA: dict[str, dict[str, str]] = {
+    "ai-jobs": {
+        "search_name": "AI Jobs",
+        "profile_name": "AI Jobs Profile",
+        "profile_url": "https://www.upwork.com/freelancers/~016e9a7bda2340dcd9",
+        "service_lane": "ai-automation",
+    },
+    "roshana-2d-3d": {
+        "search_name": "2D/3D Modeling & Animations",
+        "profile_name": "Roshana",
+        "profile_url": "https://www.upwork.com/freelancers/~01323536ddaffbbd34",
+        "service_lane": "2d-3d-animation",
+    },
+    "nadir-game-ar-vr": {
+        "search_name": "Game Development & AR/VR",
+        "profile_name": "Nadir",
+        "profile_url": "https://www.upwork.com/freelancers/~0116e2d98cb771724e",
+        "service_lane": "game-ar-vr",
+    },
+}
+
+_EXCLUDED_COUNTRIES = {
+    "pakistan",
+    "united arab emirates",
+    "saudi arabia",
+    "qatar",
+    "kuwait",
+    "bahrain",
+    "oman",
+}
+
+_COUNTRY_ALIASES = {
+    "usa": "united states",
+    "u.s.": "united states",
+    "u.s.a.": "united states",
+    "united states of america": "united states",
+    "uae": "united arab emirates",
+}
+
+_ALLOWED_HOURLY_DURATIONS = {"3 to 6 months", "more than 6 months"}
+
+
+def annotate_profile_and_market(evidence: SourceEvidence, segment: str) -> SourceEvidence:
+    attributes = dict(evidence.attributes)
+    profile = PROFILE_METADATA.get(segment, {})
+    attributes.update(profile)
+
+    country = _country(attributes.get("client_country"))
+    commercial_status, commercial_reason = _commercial_filter(attributes)
+    market_scopes: list[str] = []
+    market_status = "eligible"
+    market_reason = "Worldwide commercial filter is eligible."
+
+    if country in _EXCLUDED_COUNTRIES:
+        market_status = "excluded_country"
+        market_reason = f"Client country is excluded from acquisition focus: {country}."
+    elif country == "united states":
+        market_scopes = ["us_only", "worldwide"]
+        market_reason = "Matches both US-only and worldwide market presets."
+    elif country:
+        market_scopes = ["worldwide"]
+        market_reason = "Matches the worldwide market preset."
+    else:
+        market_scopes = ["worldwide_pending_country"]
+        market_status = "country_unverified"
+        market_reason = "Client country is not visible; worldwide eligibility requires BD confirmation."
+
+    if commercial_status == "fail":
+        market_status = "commercial_filter_failed"
+    elif commercial_status == "unknown" and market_status == "eligible":
+        market_status = "commercial_unverified"
+
+    attributes.update(
+        {
+            "market_scopes": market_scopes,
+            "market_policy_status": market_status,
+            "market_policy_reason": market_reason,
+            "commercial_filter_status": commercial_status,
+            "commercial_filter_reason": commercial_reason,
+            "commercial_filter_fixed_min_usd": 1000,
+            "commercial_filter_hourly_min_hours_per_week": 30,
+            "commercial_filter_hourly_durations": ["3 to 6 months", "more than 6 months"],
+            "excluded_market_countries": sorted(_EXCLUDED_COUNTRIES),
+        }
+    )
+    return SourceEvidence(
+        source=evidence.source,
+        source_id=evidence.source_id,
+        source_url=evidence.source_url,
+        captured_at=evidence.captured_at,
+        title=evidence.title,
+        body=evidence.body,
+        segment=evidence.segment,
+        attributes=attributes,
+    )
+
+
+def apply_market_policy(record: OpportunityRecord, decision: QualificationDecision) -> QualificationDecision:
+    attributes = record.evidence.attributes
+    status = str(attributes.get("market_policy_status") or "").strip()
+    commercial = str(attributes.get("commercial_filter_status") or "").strip()
+    reason = str(attributes.get("market_policy_reason") or "").strip()
+    commercial_reason = str(attributes.get("commercial_filter_reason") or "").strip()
+
+    if status in {"excluded_country", "commercial_filter_failed"} or commercial == "fail":
+        risks = _append(decision.risks, reason, commercial_reason)
+        reasons = _append(decision.reasons, "Opportunity is outside the approved acquisition filters.")
+        return replace(
+            decision,
+            disposition="reject",
+            priority="C",
+            score=min(decision.score, 35),
+            reasons=reasons,
+            risks=risks,
+            recommended_action="Archive: outside approved country or commercial engagement filters.",
+        )
+
+    if status in {"country_unverified", "commercial_unverified"} or commercial == "unknown":
+        missing = _append(decision.missing_evidence, "market_or_commercial_filter_evidence")
+        risks = _append(decision.risks, reason, commercial_reason)
+        return replace(
+            decision,
+            disposition="bd_review" if decision.disposition != "reject" else decision.disposition,
+            priority="B" if decision.priority == "A" else decision.priority,
+            score=min(decision.score, 74),
+            missing_evidence=missing,
+            risks=risks,
+            recommended_action=(
+                "Confirm client country and the $1,000+ fixed-price or 30+ hours/week, "
+                "3-6 month / 6+ month hourly engagement filter before pursuit."
+            ),
+        )
+
+    return decision
+
+
+def _commercial_filter(attributes: dict[str, Any]) -> tuple[str, str]:
+    fixed = _number(attributes.get("fixed_budget_usd"))
+    hourly_min = _number(attributes.get("hourly_min_usd"))
+    hourly_max = _number(attributes.get("hourly_max_usd"))
+    weekly_hours = _number(attributes.get("estimated_hours_per_week"))
+    duration = str(attributes.get("duration") or "").strip().casefold()
+
+    if fixed is not None:
+        if fixed >= 1000:
+            return "pass", f"Fixed-price budget is ${fixed:,.0f}, meeting the $1,000+ filter."
+        return "fail", f"Fixed-price budget is ${fixed:,.0f}, below the $1,000 minimum."
+
+    if hourly_min is not None or hourly_max is not None:
+        if weekly_hours is None or not duration:
+            return "unknown", "Hourly rate is visible, but duration or weekly hours are missing."
+        if weekly_hours >= 30 and duration in _ALLOWED_HOURLY_DURATIONS:
+            return "pass", f"Hourly engagement is {weekly_hours:,.0f}+ hours/week for {duration}."
+        return "fail", (
+            f"Hourly engagement does not match 30+ hours/week and the approved 3-6 month "
+            f"or 6+ month duration filter (hours={weekly_hours}, duration={duration or 'missing'})."
+        )
+
+    return "unknown", "Fixed budget and qualifying hourly engagement evidence are not visible."
+
+
+def _country(value: object) -> str:
+    text = str(value or "").strip().casefold()
+    return _COUNTRY_ALIASES.get(text, text)
+
+
+def _number(value: object) -> float | None:
+    if value is None or value == "":
+        return None
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def _append(values: tuple[str, ...], *items: str) -> tuple[str, ...]:
+    result = list(values)
+    seen = {value.casefold() for value in result}
+    for item in items:
+        text = item.strip()
+        if text and text.casefold() not in seen:
+            result.append(text)
+            seen.add(text.casefold())
+    return tuple(result)
