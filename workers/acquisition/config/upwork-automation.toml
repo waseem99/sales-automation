@@ -25,13 +25,13 @@ retention_days = 30
 cadence_minutes = 30
 start_offset_minutes = 7
 
-# Covers the US working day from 08:00 Eastern through 18:00 Pacific.
+# Covers the US working day from 07:00 Eastern through 18:00 Pacific.
 # Eastern and Pacific daylight-saving transitions occur together, so 21:00
 # Eastern consistently corresponds to 18:00 Pacific.
 [[schedule.windows]]
 id = "us-east-through-pacific"
 timezone = "America/New_York"
-start_local = "08:00"
+start_local = "07:00"
 end_local = "21:00"
 days = ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"]
 
