@@ -1,5 +1,7 @@
 [CmdletBinding()]
-param()
+param(
+    [switch]$Force
+)
 
 $ErrorActionPreference = "Stop"
 Set-StrictMode -Version Latest
@@ -15,6 +17,7 @@ $ConfigPath = Join-Path $WorkerRoot "config\upwork-automation.toml"
 $QualificationPath = Join-Path $WorkerRoot "config\qualification.example.toml"
 $SecretsPath = Join-Path $StateRoot "secrets\prospect-desk.json"
 $StatusPath = Join-Path $StateRoot "upwork-automation-status.json"
+$SchedulerLogPath = Join-Path $LogRoot "scheduler.log"
 
 if (-not (Test-Path $VenvPython)) {
     throw "The acquisition worker is not installed. Run INSTALL-UPWORK-AUTOMATION.cmd once."
@@ -27,6 +30,20 @@ if (-not (Test-Path $ConfigPath)) {
 }
 
 New-Item -ItemType Directory -Force -Path $OutputRoot, $LogRoot, (Split-Path $CheckpointPath -Parent) | Out-Null
+
+if (-not $Force) {
+    $ScheduleOutput = @(& $VenvPython -m acquisition upwork-schedule-check --config $ConfigPath --state-directory $StateRoot 2>&1)
+    $ScheduleExit = $LASTEXITCODE
+    $ScheduleLine = "[$(Get-Date -Format o)] schedule_exit=$ScheduleExit $($ScheduleOutput -join ' ')"
+    Add-Content -Path $SchedulerLogPath -Value $ScheduleLine
+    if ($ScheduleExit -eq 10) {
+        exit 0
+    }
+    if ($ScheduleExit -ne 0) {
+        throw "The target-market schedule could not be evaluated."
+    }
+}
+
 $RunId = Get-Date -Format "yyyyMMdd-HHmmss"
 $RunDirectory = Join-Path $OutputRoot $RunId
 $LogPath = Join-Path $LogRoot "$RunId.log"
