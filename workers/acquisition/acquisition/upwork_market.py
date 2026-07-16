@@ -122,7 +122,7 @@ def annotate_profile_and_market(
             "commercial_filter_status": commercial_status,
             "commercial_filter_reason": commercial_reason,
             "commercial_filter_fixed_min_usd": 1000,
-            "commercial_filter_hourly_min_hours_per_week": 30,
+            "commercial_filter_hourly_requirement": "more_than_30_hours_per_week",
             "commercial_filter_hourly_durations": ["3 to 6 months", "more than 6 months"],
             "excluded_market_countries": sorted(_EXCLUDED_COUNTRIES),
         }
@@ -170,7 +170,7 @@ def apply_market_policy(record: OpportunityRecord, decision: QualificationDecisi
             missing_evidence=missing,
             risks=risks,
             recommended_action=(
-                "Confirm client country and the $1,000+ fixed-price or 30+ hours/week, "
+                "Confirm client country and the $1,000+ fixed-price or more-than-30-hours/week, "
                 "3-6 month / 6+ month hourly engagement filter before pursuit."
             ),
         )
@@ -183,6 +183,7 @@ def _commercial_filter(attributes: dict[str, Any]) -> tuple[str, str]:
     hourly_min = _number(attributes.get("hourly_min_usd"))
     hourly_max = _number(attributes.get("hourly_max_usd"))
     weekly_hours = _number(attributes.get("estimated_hours_per_week"))
+    weekly_basis = str(attributes.get("weekly_hours_basis") or "").strip().casefold()
     duration = str(attributes.get("duration") or "").strip().casefold()
 
     if fixed is not None:
@@ -193,11 +194,14 @@ def _commercial_filter(attributes: dict[str, Any]) -> tuple[str, str]:
     if hourly_min is not None or hourly_max is not None:
         if weekly_hours is None or not duration:
             return "unknown", "Hourly rate is visible, but duration or weekly hours are missing."
-        if weekly_hours >= 30 and duration in _ALLOWED_HOURLY_DURATIONS:
-            return "pass", f"Hourly engagement is {weekly_hours:,.0f}+ hours/week for {duration}."
+        more_than_30 = weekly_hours > 30 or (weekly_basis == "more_than" and weekly_hours >= 30)
+        if more_than_30 and duration in _ALLOWED_HOURLY_DURATIONS:
+            hours_label = f"More than {weekly_hours:,.0f}" if weekly_basis == "more_than" else f"{weekly_hours:,.0f}"
+            return "pass", f"Hourly engagement is {hours_label} hours/week for {duration}."
         return "fail", (
-            f"Hourly engagement does not match 30+ hours/week and the approved 3-6 month "
-            f"or 6+ month duration filter (hours={weekly_hours}, duration={duration or 'missing'})."
+            f"Hourly engagement does not match more than 30 hours/week and the approved 3-6 month "
+            f"or 6+ month duration filter (hours={weekly_hours}, basis={weekly_basis or 'missing'}, "
+            f"duration={duration or 'missing'})."
         )
 
     return "unknown", "Fixed budget and qualifying hourly engagement evidence are not visible."
