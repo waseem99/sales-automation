@@ -46,7 +46,7 @@ function Find-Python312 {
     return $null
 }
 
-if (-not $IsWindows -and $PSVersionTable.PSEdition -eq "Core") {
+if ($env:OS -ne "Windows_NT") {
     throw "This setup script is intended for Windows."
 }
 
