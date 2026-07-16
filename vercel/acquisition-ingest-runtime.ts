@@ -1,8 +1,3 @@
-import { timingSafeEqual } from 'node:crypto';
-import { loadNeonAppState, persistLeadRecords, requireDatabaseUrl } from '@sales-automation/neon-state';
-import type { StoredLeadRecord } from '@sales-automation/storage';
-import { handleManualIntakeRuntime } from './manual-intake-runtime.js';
-
 const MAX_BODY_BYTES = 1_000_000;
 const ACTOR = 'acquisition-worker';
 
@@ -50,7 +45,7 @@ export async function handleAcquisitionIngest(request: Request): Promise<Respons
     return responseJson({ error: 'Acquisition ingestion is not configured.' }, 503);
   }
   const suppliedToken = bearerToken(request.headers.get('authorization'));
-  if (!suppliedToken || !safeTokenEqual(suppliedToken, configuredToken)) {
+  if (!suppliedToken || !(await safeTokenEqual(suppliedToken, configuredToken))) {
     return responseJson({ error: 'Authentication required.' }, 401, {
       'www-authenticate': 'Bearer realm="prospect-desk-acquisition"',
     });
@@ -63,52 +58,39 @@ export async function handleAcquisitionIngest(request: Request): Promise<Respons
 
   try {
     const payload = validatePayload(await request.json());
-    const databaseUrl = requireDatabaseUrl(process.env.DATABASE_URL);
-    const state = await loadNeonAppState(databaseUrl);
-    const manualResponse = await handleManualIntakeRuntime({
+    const neon = await import('@sales-automation/neon-state');
+    const databaseUrl = neon.requireDatabaseUrl(process.env.DATABASE_URL);
+    const state = await neon.loadNeonAppState(databaseUrl);
+    const manualIntake = await import('./manual-intake-runtime.js');
+    const intakeResponse = await manualIntake.handleManualIntakeRuntime({
       body: toManualIntake(payload),
       databaseUrl,
       actor: ACTOR,
       state,
     });
-    const manualResult = await readResponseObject(manualResponse);
+    const intakeResult = await responseObject(intakeResponse);
 
-    if (!manualResponse.ok) {
+    if (!intakeResponse.ok) {
       return responseJson({
         error: 'Prospect Desk rejected the acquisition record.',
-        intakeStatus: manualResponse.status,
+        intakeStatus: intakeResponse.status,
         humanReviewRequired: true,
         externalActionAutomated: false,
-      }, manualResponse.status >= 500 ? 502 : 400);
-    }
-
-    const createdLeadIds = stringArray(manualResult.createdLeadIds);
-    const duplicateLeadIds = stringArray(manualResult.duplicateLeadIds);
-    if (createdLeadIds.length > 0) {
-      const note = qualificationNote(payload);
-      for (const leadId of createdLeadIds) {
-        state.repository.addNote(leadId, note, ACTOR);
-      }
-      const changed = createdLeadIds
-        .map((leadId) => state.repository.getLead(leadId))
-        .filter((record): record is StoredLeadRecord => Boolean(record));
-      await persistLeadRecords(databaseUrl, changed);
+      }, intakeResponse.status >= 500 ? 502 : 400);
     }
 
     return responseJson({
+      ...intakeResult,
       ok: true,
       accepted: true,
       idempotencyKey: payload.idempotency_key,
-      priority: payload.qualification.priority,
-      score: payload.qualification.score,
-      created: createdLeadIds.length,
-      duplicates: duplicateLeadIds.length,
-      createdLeadIds,
-      duplicateLeadIds,
-      prospectUrl: typeof manualResult.prospectUrl === 'string' ? manualResult.prospectUrl : undefined,
+      acquisitionPriority: payload.qualification.priority,
+      acquisitionScore: payload.qualification.score,
+      acquisitionBusinessUnit: payload.qualification.business_unit ?? null,
+      acquisitionService: payload.qualification.service_id ?? null,
       humanReviewRequired: true,
       externalActionAutomated: false,
-    }, createdLeadIds.length > 0 ? 201 : 200);
+    }, intakeResponse.status);
   } catch (error) {
     return responseJson({
       error: error instanceof IntakeValidationError ? error.message : 'Acquisition ingestion failed.',
@@ -132,27 +114,23 @@ function validatePayload(value: unknown): WorkerPayload {
     throw new IntakeValidationError('external_action_performed must be false.');
   }
 
-  const idempotencyKey = requiredText(payload.idempotency_key, 'idempotency_key', 256);
-  const headerKey = idempotencyKey;
   const sourceRecord = asObject(payload.source_record, 'source_record');
   const evidenceValue = asObject(sourceRecord.evidence, 'source_record.evidence');
-  const attributes = optionalObject(evidenceValue.attributes);
-  const sourceUrl = requiredText(evidenceValue.source_url, 'source_record.evidence.source_url', 2_000);
-  validateUpworkUrl(sourceUrl);
   if (evidenceValue.source !== 'upwork') {
     throw new IntakeValidationError('source_record.evidence.source must be upwork.');
   }
+  const sourceUrl = requiredText(evidenceValue.source_url, 'source_record.evidence.source_url', 2_000);
+  validateUpworkUrl(sourceUrl);
 
   const qualificationValue = asObject(payload.qualification, 'qualification');
   const priority = qualificationValue.priority;
   if (priority !== 'A' && priority !== 'B') {
     throw new IntakeValidationError('Only Priority A and B opportunities may be ingested.');
   }
-  const score = numericScore(qualificationValue.score);
 
   return {
     schema_version: 'prospect-desk-opportunity.v1',
-    idempotency_key: headerKey,
+    idempotency_key: requiredText(payload.idempotency_key, 'idempotency_key', 256),
     source: 'upwork_scheduled_chrome',
     external_action_performed: false,
     source_record: {
@@ -165,12 +143,12 @@ function validatePayload(value: unknown): WorkerPayload {
         title: requiredText(evidenceValue.title, 'source_record.evidence.title', 500),
         body: requiredText(evidenceValue.body, 'source_record.evidence.body', 20_000),
         segment: optionalText(evidenceValue.segment, 128),
-        attributes,
+        attributes: optionalObject(evidenceValue.attributes),
       },
     },
     qualification: {
       priority,
-      score,
+      score: numericScore(qualificationValue.score),
       disposition: optionalText(qualificationValue.disposition, 128),
       business_unit: optionalText(qualificationValue.business_unit, 128),
       service_id: optionalText(qualificationValue.service_id, 128),
@@ -183,6 +161,7 @@ function validatePayload(value: unknown): WorkerPayload {
 
 function toManualIntake(payload: WorkerPayload): Record<string, unknown> {
   const evidence = payload.source_record.evidence;
+  const qualification = payload.qualification;
   const attributes = evidence.attributes;
   const skills = Array.isArray(attributes.skills)
     ? attributes.skills.map((item) => String(item).trim()).filter(Boolean).slice(0, 30)
@@ -191,10 +170,15 @@ function toManualIntake(payload: WorkerPayload): Record<string, unknown> {
     evidence.title,
     evidence.body,
     `Upwork job ID: ${evidence.source_id}`,
-    `Acquisition priority: ${payload.qualification.priority}`,
-    `Acquisition score: ${payload.qualification.score}`,
-    payload.qualification.business_unit ? `Business unit: ${payload.qualification.business_unit}` : '',
-    payload.qualification.service_id ? `Service route: ${payload.qualification.service_id}` : '',
+    `Acquisition idempotency key: ${payload.idempotency_key}`,
+    `Acquisition priority: ${qualification.priority}`,
+    `Acquisition score: ${qualification.score}`,
+    valueLine('Acquisition disposition', qualification.disposition),
+    valueLine('Business unit', qualification.business_unit),
+    valueLine('Service route', qualification.service_id),
+    valueLine('Confidence', qualification.confidence),
+    valueLine('Recommended human action', qualification.recommended_action),
+    valueLine('Qualification version', qualification.configuration_version),
     valueLine('Budget USD', attributes.budget_usd),
     valueLine('Hourly minimum USD', attributes.hourly_min_usd),
     valueLine('Hourly maximum USD', attributes.hourly_max_usd),
@@ -204,6 +188,7 @@ function toManualIntake(payload: WorkerPayload): Record<string, unknown> {
     valueLine('Proposal activity', attributes.proposal_activity),
     valueLine('Client country', attributes.client_country),
     skills.length > 0 ? `Skills: ${skills.join(', ')}` : '',
+    'External action performed: false',
   ].filter(Boolean).join('\n\n');
 
   return {
@@ -214,21 +199,6 @@ function toManualIntake(payload: WorkerPayload): Record<string, unknown> {
     companyName: 'Upwork Client',
     country: typeof attributes.client_country === 'string' ? attributes.client_country : undefined,
   };
-}
-
-function qualificationNote(payload: WorkerPayload): string {
-  const qualification = payload.qualification;
-  return [
-    'acquisition::upwork_scheduled',
-    `idempotency=${payload.idempotency_key}`,
-    `priority=${qualification.priority}`,
-    `score=${qualification.score}`,
-    `business_unit=${qualification.business_unit ?? 'unrouted'}`,
-    `service=${qualification.service_id ?? 'unrouted'}`,
-    `disposition=${qualification.disposition ?? 'unknown'}`,
-    `confidence=${qualification.confidence ?? 'unknown'}`,
-    'external_action=false',
-  ].join('::');
 }
 
 function validateUpworkUrl(value: string): void {
@@ -251,7 +221,8 @@ function bearerToken(value: string | null): string | undefined {
   return match?.[1]?.trim() || undefined;
 }
 
-function safeTokenEqual(left: string, right: string): boolean {
+async function safeTokenEqual(left: string, right: string): Promise<boolean> {
+  const { timingSafeEqual } = await import('node:crypto');
   const leftBuffer = Buffer.from(left);
   const rightBuffer = Buffer.from(right);
   return leftBuffer.length === rightBuffer.length && timingSafeEqual(leftBuffer, rightBuffer);
@@ -294,10 +265,10 @@ function optionalText(value: unknown, maximum: number): string | undefined {
 
 function valueLine(label: string, value: unknown): string {
   if (value === undefined || value === null || value === '') return '';
-  return `${label}: ${String(value).slice(0, 200)}`;
+  return `${label}: ${String(value).slice(0, 1_000)}`;
 }
 
-async function readResponseObject(response: Response): Promise<Record<string, unknown>> {
+async function responseObject(response: Response): Promise<Record<string, unknown>> {
   try {
     const value = await response.json();
     return value && typeof value === 'object' && !Array.isArray(value)
@@ -306,12 +277,6 @@ async function readResponseObject(response: Response): Promise<Record<string, un
   } catch {
     return {};
   }
-}
-
-function stringArray(value: unknown): string[] {
-  return Array.isArray(value)
-    ? value.map((item) => String(item).trim()).filter(Boolean).slice(0, 100)
-    : [];
 }
 
 function responseJson(
