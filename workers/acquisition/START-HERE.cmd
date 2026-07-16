@@ -5,21 +5,27 @@ cd /d "%~dp0"
 
 set "STATE_ROOT=%LOCALAPPDATA%\Codistan\Acquisition"
 set "UPWORK_MARKER=%STATE_ROOT%\upwork.connected.json"
-set "LINKEDIN_MARKER=%STATE_ROOT%\linkedin-sales-navigator.connected.json"
+set "LINKEDIN_MARKER_PRIMARY=%STATE_ROOT%\linkedin-sales-navigator.connected.json"
+set "LINKEDIN_MARKER_LEGACY=%STATE_ROOT%\linkedin.connected.json"
+set "LINKEDIN_MARKER_ALT=%STATE_ROOT%\linkedin-sales.connected.json"
 
 echo ============================================================
 echo   CODISTAN ACQUISITION WORKER - GUIDED SETUP
- echo ============================================================
+echo ============================================================
 echo.
 echo This installs or updates the required local tools, runs safety
- echo tests, and then connects or validates Upwork and LinkedIn.
+echo tests, and then connects or validates Upwork and LinkedIn.
 echo.
 
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File "%~dp0scripts\windows\setup-worker.ps1"
 if errorlevel 1 goto :failed
 
-if exist "%UPWORK_MARKER%" if exist "%LINKEDIN_MARKER%" goto :validate
+if not exist "%UPWORK_MARKER%" goto :connect
+if exist "%LINKEDIN_MARKER_PRIMARY%" goto :validate
+if exist "%LINKEDIN_MARKER_LEGACY%" goto :validate
+if exist "%LINKEDIN_MARKER_ALT%" goto :validate
 
+:connect
 echo.
 echo Saved account confirmations were not found. Starting account connection.
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File "%~dp0scripts\windows\connect-accounts.ps1" -Account Both
