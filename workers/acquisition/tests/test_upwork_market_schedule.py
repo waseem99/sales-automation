@@ -121,6 +121,26 @@ class UpworkMarketScheduleTests(unittest.TestCase):
         self.assertEqual(decision.priority, "B")
         self.assertEqual(decision.disposition, "bd_review")
 
+    def test_description_country_mentions_do_not_override_visible_client_location(self) -> None:
+        evidence = SourceEvidence(
+            source="upwork",
+            source_id="~012345678901234567890",
+            source_url="https://www.upwork.com/jobs/Test_~012345678901234567890/",
+            captured_at="2026-07-16T00:00:00Z",
+            title="US platform rollout",
+            body="The United States client needs a platform that will later serve teams in Pakistan and the UAE.",
+            segment="ai-jobs",
+            attributes={"fixed_budget_usd": 5000, "client_country": "United States"},
+        )
+        annotated = annotate_profile_and_market(
+            evidence,
+            "ai-jobs",
+            visible_client_card_text="Payment verified $20K spent United States",
+        )
+        self.assertEqual(annotated.attributes["client_country"], "united states")
+        self.assertEqual(annotated.attributes["market_scopes"], ["us_only", "worldwide"])
+        self.assertEqual(annotated.attributes["market_policy_status"], "eligible")
+
 
 def _evidence(*, segment: str, country: str, attributes: dict[str, object]) -> SourceEvidence:
     values = dict(attributes)
