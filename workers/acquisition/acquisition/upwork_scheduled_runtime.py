@@ -1,16 +1,19 @@
 from __future__ import annotations
 
+import json
+from pathlib import Path
 from typing import Any
 
 from .models import OpportunityRecord, SourceEvidence
 from .qualification import QualificationDecision
 from .upwork_market import annotate_profile_and_market, apply_market_policy
-from .upwork_pilot import HumanActionRequired, extract_job_evidence, utc_now_iso
+from .upwork_pilot import HumanActionRequired, PilotItem, PilotSummary, extract_job_evidence, utc_now_iso
 from . import upwork_scheduled as _base
 
 
 _original_card_evidence = _base._card_evidence
 _original_qualify = _base.qualify
+_original_write_pilot_outputs = _base.write_pilot_outputs
 
 
 def _has_value(value: object) -> bool:
@@ -31,6 +34,28 @@ def _policy_card_evidence(raw: dict[str, Any], *, segment: str) -> SourceEvidenc
 def _policy_qualify(record: OpportunityRecord, config: Any) -> QualificationDecision:
     decision = _original_qualify(record, config)
     return apply_market_policy(record, decision)
+
+
+def _policy_write_pilot_outputs(
+    *,
+    output_directory: Path,
+    summary: PilotSummary,
+    items: list[PilotItem],
+    config_version: str,
+) -> None:
+    _original_write_pilot_outputs(
+        output_directory=output_directory,
+        summary=summary,
+        items=items,
+        config_version=config_version,
+    )
+    ready_path = output_directory / "dashboard-ready.jsonl"
+    with ready_path.open("w", encoding="utf-8") as handle:
+        for item in items:
+            if item.qualification.priority not in {"A", "B"}:
+                continue
+            handle.write(json.dumps(item.to_dict(), ensure_ascii=False, sort_keys=True))
+            handle.write("\n")
 
 
 def _safe_enrich_from_detail(
@@ -100,11 +125,12 @@ def _safe_enrich_from_detail(
 
 
 # Keep the main implementation in one module while replacing only local
-# evidence enrichment, profile annotation and qualification-policy hooks.
-# Browser navigation behavior and the no-external-action boundary are unchanged.
+# evidence enrichment, profile annotation, qualification-policy and A/B output
+# hooks. Browser navigation and the no-external-action boundary are unchanged.
 _base._card_evidence = _policy_card_evidence
 _base._enrich_from_detail = _safe_enrich_from_detail
 _base.qualify = _policy_qualify
+_base.write_pilot_outputs = _policy_write_pilot_outputs
 
 AutomationSettings = _base.AutomationSettings
 ScheduledRunResult = _base.ScheduledRunResult
