@@ -18,6 +18,7 @@ from .session_validation import validate_session
 from .storage import HttpIngestionSink, JsonlSink
 from .upwork_assisted import AssistedCaptureStopped, run_upwork_assisted_pilot
 from .upwork_pilot import HumanActionRequired, PilotNoData, run_upwork_pilot
+from .upwork_scheduled import run_upwork_scheduled
 
 
 class _SanitizingFormatter(logging.Formatter):
@@ -78,6 +79,14 @@ def build_parser() -> argparse.ArgumentParser:
         help="Capture visible Upwork job cards after explicit human navigation",
     )
     _add_upwork_arguments(assisted)
+
+    scheduled = subparsers.add_parser(
+        "upwork-scheduled",
+        help="Run the visible scheduled Chrome worker with safe verification pauses",
+    )
+    _add_upwork_arguments(scheduled)
+    scheduled.add_argument("--state-directory", type=Path, required=True)
+    scheduled.add_argument("--enable-ingestion", action="store_true", default=False)
     return parser
 
 
@@ -108,6 +117,24 @@ def main(argv: list[str] | None = None) -> int:
             args.output.parent.mkdir(parents=True, exist_ok=True)
             args.output.write_text(rendered + "\n", encoding="utf-8")
         return 0 if result.authenticated else 3
+    if args.command == "upwork-scheduled":
+        profile = validate_external_profile_path(args.profile, args.repository_root)
+        result = run_upwork_scheduled(
+            profile_path=profile,
+            repository_root=args.repository_root,
+            config_path=args.config,
+            qualification_config_path=args.qualification_config,
+            output_directory=args.output_directory,
+            checkpoint_path=args.checkpoint,
+            state_directory=args.state_directory,
+            enable_ingestion=args.enable_ingestion,
+        )
+        print(json.dumps(result.to_dict(), indent=2, sort_keys=True))
+        if result.human_action_required:
+            return 4
+        if result.status == "failed":
+            return 2
+        return 0
     if args.command in {"upwork-pilot", "upwork-assisted"}:
         profile = validate_external_profile_path(args.profile, args.repository_root)
         try:
