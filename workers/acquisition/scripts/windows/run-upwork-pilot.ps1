@@ -61,8 +61,14 @@ $RunId = Get-Date -Format "yyyyMMdd-HHmmss"
 $RunDirectory = Join-Path $OutputRoot $RunId
 
 Write-Step "Preparing the Upwork dry-run pilot"
-Write-Host "The pilot will open a visible browser, review at most 20 recent job links," -ForegroundColor Yellow
-Write-Host "create a local report, and perform no proposal, message, or dashboard write." -ForegroundColor Yellow
+Write-Host "The pilot uses one visible Upwork tab and reviews at most 10 recent job links." -ForegroundColor Yellow
+Write-Host "It creates a local report and performs no proposal, message, application, or dashboard write." -ForegroundColor Yellow
+Write-Host ""
+Write-Host "If Upwork or Cloudflare asks for human verification:" -ForegroundColor Yellow
+Write-Host "1. Complete the verification in the open browser yourself."
+Write-Host "2. Do NOT close the browser."
+Write-Host "3. Wait until a normal Upwork page is fully visible."
+Write-Host "4. Return to this command window and press Enter only when prompted."
 Write-Host ""
 Write-Host "Close any dedicated Upwork browser window before continuing."
 Read-Host "Press Enter when the dedicated Upwork window is closed"
@@ -82,7 +88,10 @@ try {
 }
 
 if ($PilotExit -eq 4) {
-    throw "Upwork requested login, identity verification, or a security check. Complete it manually in the open browser, close that browser, and run the pilot again."
+    throw "Upwork verification did not clear after the guided human steps. No report was accepted. Wait a few minutes and rerun the pilot."
+}
+if ($PilotExit -eq 5) {
+    throw "The pilot did not collect a trustworthy opportunity sample, so it refused to create another zero-result report. Share this message in the project chat."
 }
 if ($PilotExit -ne 0) {
     throw "The Upwork pilot stopped with exit code $PilotExit. Share the visible non-sensitive error text in the project chat."
@@ -94,7 +103,7 @@ if (-not (Test-Path $ReportPath)) {
 }
 
 $Latest = [ordered]@{
-    schema_version = "codistan-upwork-pilot-latest.v1"
+    schema_version = "codistan-upwork-pilot-latest.v2"
     completed_at = (Get-Date).ToString("o")
     run_directory = $RunDirectory
     report_path = $ReportPath
