@@ -11,6 +11,7 @@ from typing import Any
 from urllib.parse import urlparse
 
 from .models import OpportunityRecord, SourceEvidence
+from .pilot_v2_output import write_pilot_v2_outputs, write_recoverable_snapshot
 from .qualification import load_qualification_config, qualify
 from .upwork_card import (
     canonical_visible_job_url,
@@ -26,7 +27,6 @@ from .upwork_pilot import (
     external_job_id,
     load_upwork_pilot_config,
     utc_now_iso,
-    write_pilot_outputs,
 )
 
 MAX_REQUEST_BYTES = 1_000_000
@@ -69,7 +69,7 @@ class CollectorState:
         rejected = 0
         with self.lock:
             if self.finished:
-                raise ValueError("This capture session is already finished.")
+                return {**self._result_payload(), "accepted": 0, "duplicates": 0, "rejected": 0}
 
             remaining = max(0, self.pilot_config.max_jobs_total - self.summary.reviewed)
             for raw in raw_cards[: min(10, remaining)]:
@@ -114,7 +114,7 @@ class CollectorState:
                             ] if isinstance(raw.get("skills", []), list) else [],
                             "captured_from": "manual_chrome_extension_visible_card",
                             "capture_mode": "human_navigated_visible_results",
-                            "pilot_schema_version": "upwork-extension-evidence.v2",
+                            "pilot_schema_version": "upwork-extension-evidence.v3",
                         }
                     )
 
@@ -135,22 +135,28 @@ class CollectorState:
                     )
                     decision = qualify(record, self.qualification_config)
                     self.items.append(PilotItem(record=record, qualification=decision))
-                    self.seen.add(source_id)
                     self.session_seen.add(source_id)
-                    _save_seen(self.checkpoint_path, self.seen)
                     self.summary.extracted += 1
                     accepted += 1
                 except Exception:
                     self.summary.failed += 1
                     rejected += 1
 
-        return {
-            "accepted": accepted,
-            "duplicates": duplicates,
-            "rejected": rejected,
-            "total_extracted": self.summary.extracted,
-            "remaining_capacity": max(0, self.pilot_config.max_jobs_total - self.summary.reviewed),
-        }
+            write_recoverable_snapshot(self.output_directory, self.summary, self.items)
+            should_finish = self.summary.reviewed >= self.pilot_config.max_jobs_total and self.summary.extracted > 0
+            response = {
+                "accepted": accepted,
+                "duplicates": duplicates,
+                "rejected": rejected,
+                "total_extracted": self.summary.extracted,
+                "remaining_capacity": max(0, self.pilot_config.max_jobs_total - self.summary.reviewed),
+                "auto_finished": False,
+            }
+
+        if should_finish:
+            response.update(self.finish())
+            response["auto_finished"] = True
+        return response
 
     def finish(self) -> dict[str, Any]:
         with self.lock:
@@ -161,11 +167,13 @@ class CollectorState:
             self.finished = True
             self.summary.status = "completed"
             self.summary.completed_at = utc_now_iso()
-            write_pilot_outputs(
+            self.seen.update(self.session_seen)
+            _save_seen(self.checkpoint_path, self.seen)
+            write_pilot_v2_outputs(
                 output_directory=self.output_directory,
                 summary=self.summary,
                 items=self.items,
-                config_version=f"{self.pilot_config.version}.manual-extension.v2",
+                config_version=f"{self.pilot_config.version}.manual-extension-v3",
             )
             result = self._result_payload()
             (self.output_directory / "collector-result.json").write_text(
@@ -185,21 +193,23 @@ class CollectorState:
                 "duplicates": self.summary.duplicates,
                 "failed": self.summary.failed,
                 "max_jobs_total": self.pilot_config.max_jobs_total,
+                "remaining_capacity": max(0, self.pilot_config.max_jobs_total - self.summary.reviewed),
             }
 
     def _result_payload(self) -> dict[str, Any]:
+        priority_counts = {"A": 0, "B": 0, "C": 0}
+        for item in self.items:
+            priority = item.qualification.priority
+            priority_counts[priority] = priority_counts.get(priority, 0) + 1
         return {
             "finished": True,
             "total_extracted": self.summary.extracted,
-            "qualified_or_better": sum(
-                1
-                for item in self.items
-                if item.qualification.disposition in {"qualified", "contact_ready", "proposal_ready"}
-            ),
+            "priority_counts": priority_counts,
+            "dashboard_eligible": priority_counts.get("A", 0) + priority_counts.get("B", 0),
             "report_path": str(self.output_directory / "report.html"),
             "dashboard_ready_path": str(self.output_directory / "dashboard-ready.jsonl"),
             "dashboard_ingestion_enabled": False,
-            "capture_mode": "manual_chrome_extension_visible_cards_v2",
+            "capture_mode": "manual_chrome_extension_visible_cards_v3",
         }
 
 
@@ -228,7 +238,10 @@ class CollectorHandler(BaseHTTPRequestHandler):
         try:
             payload = self._read_json()
             if self.path == "/capture":
-                self._send_json(200, self.server.state.capture(payload))
+                result = self.server.state.capture(payload)
+                self._send_json(200, result)
+                if result.get("auto_finished"):
+                    threading.Thread(target=self._shutdown_soon, daemon=True).start()
                 return
             if self.path == "/finish":
                 result = self.server.state.finish()
@@ -238,8 +251,11 @@ class CollectorHandler(BaseHTTPRequestHandler):
             self._send_json(404, {"error": "Not found"})
         except ValueError as error:
             self._send_json(422, {"error": str(error)})
-        except Exception:
-            self._send_json(500, {"error": "The local collector could not process this request."})
+        except Exception as error:
+            self._send_json(500, {
+                "error": "The local collector could not process this request.",
+                "error_type": error.__class__.__name__,
+            })
 
     def _read_json(self) -> dict[str, Any]:
         content_length = int(self.headers.get("Content-Length", "0") or "0")
@@ -295,10 +311,10 @@ def main(argv: list[str] | None = None) -> int:
     )
     server = CollectorServer(("127.0.0.1", args.port), CollectorHandler)
     server.state = state
-    print("CODISTAN UPWORK MANUAL CAPTURE COLLECTOR")
+    print("CODISTAN UPWORK MANUAL CAPTURE COLLECTOR V2")
     print(f"Local collector ready at http://127.0.0.1:{args.port}")
-    print("Use the Chrome extension on normal Upwork saved-search pages.")
-    print("Click 'Finish and create report' in the extension when done.\n")
+    print("Capture up to 25 opportunities across the five service categories.")
+    print("The report is generated automatically at capacity, or use Finish in the extension.\n")
     try:
         server.serve_forever(poll_interval=0.25)
     except KeyboardInterrupt:
