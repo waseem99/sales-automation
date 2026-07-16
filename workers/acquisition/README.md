@@ -17,6 +17,24 @@ See [SETUP-WINDOWS.md](SETUP-WINDOWS.md) for the full operator-safe guide. Brows
 
 The validator records only expected domain/path state, boolean authentication status and the names of known navigation markers. It does not store messages, job descriptions, contacts, cookies, credentials or private page content.
 
+## One-click Upwork dry-run pilot
+
+After the Upwork session is validated, double-click `RUN-UPWORK-PILOT.cmd`.
+
+The pilot:
+
+- opens the dedicated authorized Upwork profile in a visible installed browser;
+- reviews at most 20 recent job links across five configured service segments;
+- opens job detail pages conservatively and pauses on login or security challenges;
+- captures original job evidence, budget, buyer-quality and proposal-activity signals where visible;
+- deduplicates previously reviewed source IDs;
+- applies the deterministic portfolio-aware qualification rules;
+- creates local HTML, JSON and CSV reports under `%LOCALAPPDATA%\Codistan\Acquisition\output\upwork-pilot`;
+- creates `dashboard-ready.jsonl` containing only qualified, contact-ready and proposal-ready records;
+- does not submit proposals, send messages or write to Prospect Desk.
+
+Dashboard ingestion remains disabled until the first report is explicitly approved. The report itself states this boundary and the runner records `dashboard_ingestion_enabled=false`.
+
 ## Requirements
 
 - Python 3.12+
@@ -32,7 +50,7 @@ python -m venv .venv
 # Windows: .venv\Scripts\activate
 # Linux/macOS: source .venv/bin/activate
 python -m pip install --upgrade pip
-python -m pip install -e ".[browser]"
+python -m pip install -e "[browser]"
 playwright install chromium
 ```
 
