@@ -13,7 +13,7 @@ import {
   type ProspectPageResult,
   type ProspectVisibility,
   type ProspectWorkspaceScope,
-} from './prospect-query-legacy.js';
+} from './prospect-query.js';
 import {
   bindNamedQuery,
   isStoredRecord,

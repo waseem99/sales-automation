@@ -305,3 +305,7 @@ function chunk<T>(items: T[], size: number): T[][] {
 }
 
 export * from './prospect-query.js';
+export {
+  loadNeonProspectPage,
+  loadNeonProspectPageWithMetrics,
+} from './prospect-page-query.js';
