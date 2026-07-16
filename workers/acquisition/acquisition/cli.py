@@ -18,7 +18,7 @@ from .session_validation import validate_session
 from .storage import HttpIngestionSink, JsonlSink
 from .upwork_assisted import AssistedCaptureStopped, run_upwork_assisted_pilot
 from .upwork_pilot import HumanActionRequired, PilotNoData, run_upwork_pilot
-from .upwork_scheduled import run_upwork_scheduled
+from .upwork_scheduled_runtime import run_upwork_scheduled
 
 
 class _SanitizingFormatter(logging.Formatter):
