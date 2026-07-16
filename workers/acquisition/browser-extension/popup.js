@@ -2,7 +2,7 @@
   "use strict";
 
   const COLLECTOR = "http://127.0.0.1:8765";
-  const CALIBRATION_JOBS_PER_SEARCH = 2;
+  const JOBS_PER_CAPTURE = 5;
   const captureButton = document.getElementById("capture");
   const finishButton = document.getElementById("finish");
   const segmentSelect = document.getElementById("segment");
@@ -42,12 +42,12 @@
 
   captureButton.addEventListener("click", async () => {
     setBusy(true);
-    setStatus(`Reading up to ${CALIBRATION_JOBS_PER_SEARCH} visible job cards on this page…`);
+    setStatus(`Reading up to ${JOBS_PER_CAPTURE} visible job cards on this page…`);
     try {
       const tab = await activeTab();
       const result = await chrome.tabs.sendMessage(tab.id, {
         type: "CODISTAN_CAPTURE_VISIBLE_UPWORK_CARDS",
-        limit: CALIBRATION_JOBS_PER_SEARCH
+        limit: JOBS_PER_CAPTURE
       });
       if (!result || !result.ok) {
         throw new Error(result && result.error ? result.error : "The Upwork page could not be read.");
@@ -61,10 +61,12 @@
         page_title: result.page_title,
         cards: result.cards
       });
-      setStatus(
-        `Captured ${response.accepted} new job(s) for this search. ` +
-        `Total sample: ${response.total_extracted}/10. Continue with the next service search.`
-      );
+      if (response.auto_finished) {
+        setStatus(`Pilot complete. Report created with ${response.total_extracted} records: ${response.priority_counts.A || 0} A, ${response.priority_counts.B || 0} B, ${response.priority_counts.C || 0} C.`);
+        window.setTimeout(() => window.close(), 1800);
+        return;
+      }
+      setStatus(`Captured ${response.accepted} new job(s). Total: ${response.total_extracted}. Remaining capacity: ${response.remaining_capacity}.`);
     } catch (error) {
       setStatus(error instanceof Error ? error.message : String(error));
     } finally {
@@ -74,11 +76,11 @@
 
   finishButton.addEventListener("click", async () => {
     setBusy(true);
-    setStatus("Creating the local qualification report…");
+    setStatus("Creating the BD-priority qualification report…");
     try {
       const response = await postJson("/finish", {});
-      setStatus(`Report created with ${response.total_extracted} opportunity record(s). It will open automatically.`);
-      window.setTimeout(() => window.close(), 1200);
+      setStatus(`Report created: ${response.total_extracted} records, ${response.priority_counts.A || 0} A, ${response.priority_counts.B || 0} B, ${response.priority_counts.C || 0} C.`);
+      window.setTimeout(() => window.close(), 1600);
     } catch (error) {
       setStatus(error instanceof Error ? error.message : String(error));
       setBusy(false);
@@ -87,6 +89,14 @@
 
   fetch(`${COLLECTOR}/status`)
     .then((response) => response.json())
-    .then((data) => setStatus(`Collector ready. Captured so far: ${data.extracted || 0}/10. Capture two jobs from each service search.`))
+    .then((data) => {
+      if (data.finished) {
+        setStatus("This capture session is complete. The report has already been created.");
+        captureButton.disabled = true;
+        finishButton.disabled = true;
+        return;
+      }
+      setStatus(`Collector ready. Captured: ${data.extracted || 0}. Remaining capacity: ${data.remaining_capacity ?? data.max_jobs_total ?? 0}.`);
+    })
     .catch(() => setStatus("Start the Codistan capture launcher before using this extension."));
 })();
