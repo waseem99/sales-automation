@@ -9,6 +9,49 @@ function Write-Step([string]$Message) {
     Write-Host "==> $Message" -ForegroundColor Cyan
 }
 
+function Resolve-SavedProfile {
+    param(
+        [Parameter(Mandatory = $true)][string]$StateRoot,
+        [Parameter(Mandatory = $true)][string]$ProfileRoot,
+        [Parameter(Mandatory = $true)][string[]]$CandidateFolders,
+        [Parameter(Mandatory = $true)][string[]]$CandidateMarkers,
+        [Parameter(Mandatory = $true)][string]$DisplayName
+    )
+
+    foreach ($markerName in $CandidateMarkers) {
+        $markerPath = Join-Path $StateRoot $markerName
+        if (-not (Test-Path $markerPath)) {
+            continue
+        }
+
+        try {
+            $marker = Get-Content -Raw -Path $markerPath | ConvertFrom-Json
+            if ($marker.profile_folder) {
+                $markedProfile = Join-Path $ProfileRoot ([string]$marker.profile_folder)
+                if (Test-Path $markedProfile) {
+                    return $markedProfile
+                }
+            }
+        } catch {
+            Write-Host "Ignoring an unreadable $DisplayName connection marker: $markerName" -ForegroundColor Yellow
+        }
+    }
+
+    foreach ($folderName in $CandidateFolders) {
+        $candidate = Join-Path $ProfileRoot $folderName
+        if (Test-Path $candidate) {
+            return $candidate
+        }
+    }
+
+    $availableFolders = @()
+    if (Test-Path $ProfileRoot) {
+        $availableFolders = @(Get-ChildItem -Path $ProfileRoot -Directory -ErrorAction SilentlyContinue | Select-Object -ExpandProperty Name)
+    }
+    $folderText = if ($availableFolders.Count -gt 0) { $availableFolders -join ", " } else { "none" }
+    throw "The saved $DisplayName profile was not found. Available local profile folders: $folderText. Do not log in again yet; share this exact error in the project chat."
+}
+
 $WorkerRoot = (Resolve-Path (Join-Path $PSScriptRoot "..\..")).Path
 $RepositoryRoot = (Resolve-Path (Join-Path $WorkerRoot "..\..")).Path
 $SetupScript = Join-Path $PSScriptRoot "setup-worker.ps1"
@@ -16,8 +59,6 @@ $VenvPython = Join-Path $WorkerRoot ".venv\Scripts\python.exe"
 $StateRoot = Join-Path $env:LOCALAPPDATA "Codistan\Acquisition"
 $ProfileRoot = Join-Path $StateRoot "profiles"
 $OutputRoot = Join-Path $StateRoot "output"
-$UpworkProfile = Join-Path $ProfileRoot "upwork"
-$LinkedInProfile = Join-Path $ProfileRoot "linkedin-sales-navigator"
 $UpworkResult = Join-Path $OutputRoot "upwork-session-check.json"
 $LinkedInResult = Join-Path $OutputRoot "linkedin-session-check.json"
 $CombinedResult = Join-Path $OutputRoot "account-session-validation.json"
@@ -30,12 +71,19 @@ if (-not (Test-Path $VenvPython)) {
     }
 }
 
-if (-not (Test-Path $UpworkProfile)) {
-    throw "The saved Upwork profile was not found. Run CONNECT-ACCOUNTS.cmd first."
-}
-if (-not (Test-Path $LinkedInProfile)) {
-    throw "The saved LinkedIn profile was not found. Run CONNECT-ACCOUNTS.cmd first."
-}
+$UpworkProfile = Resolve-SavedProfile `
+    -StateRoot $StateRoot `
+    -ProfileRoot $ProfileRoot `
+    -CandidateFolders @("upwork") `
+    -CandidateMarkers @("upwork.connected.json") `
+    -DisplayName "Upwork"
+
+$LinkedInProfile = Resolve-SavedProfile `
+    -StateRoot $StateRoot `
+    -ProfileRoot $ProfileRoot `
+    -CandidateFolders @("linkedin-sales-navigator", "linkedin", "linkedin-sales") `
+    -CandidateMarkers @("linkedin-sales-navigator.connected.json", "linkedin.connected.json", "linkedin-sales.connected.json") `
+    -DisplayName "LinkedIn"
 
 New-Item -ItemType Directory -Force -Path $OutputRoot | Out-Null
 
