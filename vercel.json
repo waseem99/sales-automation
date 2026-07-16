@@ -6,7 +6,6 @@
   "buildCommand": "PATH=\"$PWD/.pnpm-cli/bin:$PATH\" pnpm build:vercel",
   "functions": {
     "api/dashboard.ts": { "maxDuration": 300 },
-    "api/acquisition-ingest.ts": { "maxDuration": 300 },
     "api/tenders.ts": { "maxDuration": 300 },
     "api/tender-discovery.ts": { "maxDuration": 300 },
     "api/prospect-cleanup.ts": { "maxDuration": 300 },
@@ -55,6 +54,7 @@
     { "source": "/re-engagement", "destination": "/api/re-engagement" },
     { "source": "/delivery-health", "destination": "/api/delivery-health" },
     { "source": "/tenders", "destination": "/api/tenders" },
+    { "source": "/api/acquisition-ingest", "destination": "/api/lead-signals?__acquisition=1" },
     { "source": "/api/login", "destination": "/api/dashboard?__path=/api/login" },
     { "source": "/api/logout", "destination": "/api/dashboard?__path=/api/logout" },
     { "source": "/api/session", "destination": "/api/dashboard?__path=/api/session" },
