@@ -49,11 +49,15 @@ $ExtensionSource = Join-Path $WorkerRoot "browser-extension"
 $ExtensionTarget = Join-Path $StateRoot "upwork-capture-extension"
 $ExtensionMarker = Join-Path $StateRoot "upwork-extension-installed.txt"
 $CollectorPort = 8765
+$ChromeExecutable = Resolve-ChromeExecutable
 
 Write-Step "Updating and testing the acquisition worker"
 & powershell.exe -NoProfile -ExecutionPolicy Bypass -File $SetupScript
 if ($LASTEXITCODE -ne 0) { throw "Worker setup or tests failed." }
 
+if (-not $ChromeExecutable) {
+    throw "Google Chrome was not found. The capture extension must run in Chrome, not the Windows default browser."
+}
 if (-not (Test-Path $ExtensionSource)) {
     throw "The Upwork capture extension files were not found after the update."
 }
@@ -78,13 +82,8 @@ if (-not (Test-Path $ExtensionMarker)) {
 }
 
 if ($InstallChoice -eq "i") {
-    $ChromeExecutable = Resolve-ChromeExecutable
     Start-Process explorer.exe -ArgumentList "`"$ExtensionTarget`"" | Out-Null
-    if ($ChromeExecutable) {
-        Start-Process -FilePath $ChromeExecutable -ArgumentList "chrome://extensions/" | Out-Null
-    } else {
-        Start-Process "chrome://extensions/" | Out-Null
-    }
+    Start-Process -FilePath $ChromeExecutable -ArgumentList "chrome://extensions/" | Out-Null
 
     Write-Host ""
     Write-Host "ONE-TIME EXTENSION INSTALLATION" -ForegroundColor Green
@@ -108,7 +107,7 @@ $RunDirectory = Join-Path $OutputRoot $RunId
 New-Item -ItemType Directory -Force -Path $RunDirectory | Out-Null
 
 Write-Step "Starting the local opportunity collector"
-Write-Host "A normal Upwork page will open in your default browser." -ForegroundColor Yellow
+Write-Host "A normal Upwork page will open explicitly in Google Chrome." -ForegroundColor Yellow
 Write-Host "For each saved search:" -ForegroundColor Yellow
 Write-Host "  1. Open the search normally."
 Write-Host "  2. Wait until the job cards are visible."
@@ -118,7 +117,7 @@ Write-Host "When finished, click Finish and create report in the extension." -Fo
 Write-Host ""
 Write-Host "No proposal, message, application, job-detail navigation, or dashboard write is automated." -ForegroundColor Green
 
-Start-Process "https://www.upwork.com/nx/find-work/" | Out-Null
+Start-Process -FilePath $ChromeExecutable -ArgumentList "https://www.upwork.com/nx/find-work/" | Out-Null
 Start-Sleep -Seconds 2
 
 Push-Location $WorkerRoot
@@ -163,7 +162,7 @@ $Latest = [ordered]@{
 $Latest | ConvertTo-Json -Depth 3 | Set-Content -Path (Join-Path $StateRoot "latest-upwork-pilot.json") -Encoding UTF8
 
 Write-Step "Opening the local opportunity report"
-Start-Process $ReportPath | Out-Null
+Start-Process -FilePath $ChromeExecutable -ArgumentList "`"$ReportPath`"" | Out-Null
 Write-Host "Report: $ReportPath" -ForegroundColor Green
 Write-Host "Dashboard-ready file: $($Result.dashboard_ready_path)" -ForegroundColor Green
 Write-Host "Captured opportunities: $($Result.total_extracted)" -ForegroundColor Green
