@@ -4,10 +4,6 @@ title Codistan Acquisition Setup
 cd /d "%~dp0"
 
 set "STATE_ROOT=%LOCALAPPDATA%\Codistan\Acquisition"
-set "UPWORK_MARKER=%STATE_ROOT%\upwork.connected.json"
-set "LINKEDIN_MARKER_PRIMARY=%STATE_ROOT%\linkedin-sales-navigator.connected.json"
-set "LINKEDIN_MARKER_LEGACY=%STATE_ROOT%\linkedin.connected.json"
-set "LINKEDIN_MARKER_ALT=%STATE_ROOT%\linkedin-sales.connected.json"
 
 echo ============================================================
 echo   CODISTAN ACQUISITION WORKER - GUIDED SETUP
@@ -20,10 +16,9 @@ echo.
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File "%~dp0scripts\windows\setup-worker.ps1"
 if errorlevel 1 goto :failed
 
-if not exist "%UPWORK_MARKER%" goto :connect
-if exist "%LINKEDIN_MARKER_PRIMARY%" goto :validate
-if exist "%LINKEDIN_MARKER_LEGACY%" goto :validate
-if exist "%LINKEDIN_MARKER_ALT%" goto :validate
+if not exist "%STATE_ROOT%\upwork*.connected.json" goto :connect
+if not exist "%STATE_ROOT%\linkedin*.connected.json" goto :connect
+goto :validate
 
 :connect
 echo.
