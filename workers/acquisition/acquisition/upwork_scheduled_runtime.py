@@ -26,7 +26,11 @@ def _has_value(value: object) -> bool:
 
 def _policy_card_evidence(raw: dict[str, Any], *, segment: str) -> SourceEvidence:
     evidence = _original_card_evidence(raw, segment=segment)
-    annotated = annotate_profile_and_market(evidence, segment)
+    annotated = annotate_profile_and_market(
+        evidence,
+        segment,
+        visible_client_card_text=str(raw.get("card_text", "")),
+    )
     annotated.validate()
     return annotated
 
