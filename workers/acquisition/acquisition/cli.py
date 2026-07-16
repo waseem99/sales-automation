@@ -14,6 +14,7 @@ from .models import OpportunityRecord
 from .qualification import load_qualification_config, qualify
 from .redaction import sanitize_log_text
 from .runner import AcquisitionRunner
+from .session_validation import validate_session
 from .storage import HttpIngestionSink, JsonlSink
 
 
@@ -55,6 +56,14 @@ def build_parser() -> argparse.ArgumentParser:
     browser.add_argument("--profile", type=Path, required=True)
     browser.add_argument("--url", required=True)
     browser.add_argument("--repository-root", type=Path, default=Path.cwd())
+
+    session_check = subparsers.add_parser(
+        "session-check", help="Validate a saved account session without capturing private page content"
+    )
+    session_check.add_argument("--profile", type=Path, required=True)
+    session_check.add_argument("--account", choices=["upwork", "linkedin"], required=True)
+    session_check.add_argument("--repository-root", type=Path, default=Path.cwd())
+    session_check.add_argument("--output", type=Path)
     return parser
 
 
@@ -66,6 +75,16 @@ def main(argv: list[str] | None = None) -> int:
         profile = validate_external_profile_path(args.profile, args.repository_root)
         bootstrap_authorized_profile(profile, args.url)
         return 0
+    if args.command == "session-check":
+        profile = validate_external_profile_path(args.profile, args.repository_root)
+        result = validate_session(profile, args.account)
+        payload = result.to_dict()
+        rendered = json.dumps(payload, indent=2, sort_keys=True)
+        print(rendered)
+        if args.output:
+            args.output.parent.mkdir(parents=True, exist_ok=True)
+            args.output.write_text(rendered + "\n", encoding="utf-8")
+        return 0 if result.authenticated else 3
     if args.command == "qualify":
         return run_qualification_file(args.input, args.config, args.output)
 
