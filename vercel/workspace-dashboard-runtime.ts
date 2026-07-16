@@ -42,13 +42,14 @@ export async function handleWorkspaceDashboardRuntime(
   input: WorkspaceDashboardRuntimeInput,
 ): Promise<Response> {
   const startedAt = performance.now();
-  const [neonState, prospectDiscovery, storage, prospectHandler, portfolioCatalog, workspacePages, partialNavigation] = await Promise.all([
+  const [neonState, prospectDiscovery, storage, prospectHandler, portfolioCatalog, workspacePages, workflowUi, partialNavigation] = await Promise.all([
     import('@sales-automation/neon-state'),
     import('@sales-automation/prospect-discovery'),
     import('@sales-automation/storage'),
     import('@sales-automation/web/prospect-handler'),
     import('@sales-automation/neon-state/portfolio-catalog'),
     import('./workspace-pages.js'),
+    import('./prospect-workflow-ui.js'),
     import('./prospect-partial-navigation.js'),
   ]);
 
@@ -109,6 +110,22 @@ export async function handleWorkspaceDashboardRuntime(
   let body = result.body;
   if (result.status < 400 && contentType.includes('text/html')) {
     body = workspacePages.applyWorkspacePageChrome(body, workspace, built.page.summary);
+    try {
+      body = workflowUi.enhanceProspectWorkflowUi(body, {
+        activeRoute: pathname,
+        records: built.page.records,
+        selected: built.selected,
+        generatedAt,
+        page: built.page.page,
+        pageSize: built.page.pageSize,
+        query: built.page.query,
+      });
+    } catch (error) {
+      console.error('PROSPECT_WORKFLOW_UI_ERROR', {
+        route: pathname,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
     body = partialNavigation.enhanceProspectPartialNavigation(body, {
       activeRoute: pathname,
       drawerOpen: Boolean(selectedId),
