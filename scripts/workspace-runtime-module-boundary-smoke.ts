@@ -1,140 +1,42 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { matchesProspectWorkspaceScope } from '@sales-automation/neon-state';
-import type { Lead } from '@sales-automation/shared';
-import { WORKSPACE_PAGES } from '../vercel/workspace-page-model.ts';
+import './workspace-runtime-module-boundary-legacy-smoke.ts';
+import { PROSPECT_QUERY_INDEX_NAMES } from '../packages/neon-state/src/prospect-query-indexes.ts';
 
-const runtimeSource = readFileSync(new URL('../vercel/workspace-dashboard-runtime.ts', import.meta.url), 'utf8');
-const pageSource = readFileSync(new URL('../vercel/workspace-pages.ts', import.meta.url), 'utf8');
-const modelSource = readFileSync(new URL('../vercel/workspace-page-model.ts', import.meta.url), 'utf8');
-const neonStateSource = readFileSync(new URL('../packages/neon-state/src/index.ts', import.meta.url), 'utf8');
-const prospectQuerySource = readFileSync(new URL('../packages/neon-state/src/prospect-query.ts', import.meta.url), 'utf8');
-const staticSalesAutomationImport = /import\s+(?!type\b)[\s\S]*?from\s+['"]@sales-automation\//m;
+const facade = readFileSync(new URL('../packages/neon-state/src/prospect-query.ts', import.meta.url), 'utf8');
+const pageQuery = readFileSync(new URL('../packages/neon-state/src/prospect-page-query.ts', import.meta.url), 'utf8');
+const pageSql = [1, 2, 3, 4].map((part) => readFileSync(new URL(`../packages/neon-state/src/prospect-page-query-sql-${part}.ts`, import.meta.url), 'utf8')).join('');
+const indexes = readFileSync(new URL('../packages/neon-state/src/prospect-query-indexes.ts', import.meta.url), 'utf8');
+const audit = readFileSync(new URL('../docs/prospect-query-index-audit.md', import.meta.url), 'utf8');
+const rollback = readFileSync(new URL('../packages/neon-state/migrations/20260716_01_prospect_query_indexes.rollback.sql', import.meta.url), 'utf8');
 
-assert.equal(staticSalesAutomationImport.test(runtimeSource), false);
-assert.equal(staticSalesAutomationImport.test(pageSource), false);
-assert.equal(staticSalesAutomationImport.test(modelSource), false);
-assert.equal(runtimeSource.includes("import('@sales-automation/neon-state')"), true);
-assert.equal(runtimeSource.includes("import('@sales-automation/prospect-discovery')"), true);
-assert.equal(runtimeSource.includes("import('@sales-automation/storage')"), true);
-assert.equal(runtimeSource.includes("import('@sales-automation/web/prospect-handler')"), true);
-assert.equal(runtimeSource.includes("import('@sales-automation/neon-state/portfolio-catalog')"), false);
-assert.equal(runtimeSource.includes('loadNeonDiscoveryRuns'), false);
-assert.equal(runtimeSource.includes('loadApprovedPortfolioCatalog'), false);
-assert.equal(runtimeSource.includes('persistLeadRecords'), false);
-assert.equal(runtimeSource.includes('loadNeonScopedRecordsWithMetrics'), false);
-assert.equal(runtimeSource.includes('buildWorkspacePage('), false);
-assert.match(runtimeSource, /loadNeonProspectPageWithMetrics/);
-assert.match(runtimeSource, /loadNeonProspectRecordWithMetrics/);
-assert.match(runtimeSource, /workspace\.queryScope/);
-assert.match(runtimeSource, /selectedId\s*\?\s*await neonState\.loadNeonProspectRecordWithMetrics/);
-assert.match(runtimeSource, /new prospectDiscovery\.InMemoryProspectDiscoveryRunStore\(\)/);
-assert.match(runtimeSource, /portfolioItems: \[\]/);
-assert.match(runtimeSource, /x-prospect-query-count/);
-assert.match(runtimeSource, /x-prospect-schema-query-count/);
-assert.match(runtimeSource, /x-prospect-data-query-count/);
-assert.match(runtimeSource, /x-prospect-page-query-count/);
-assert.match(runtimeSource, /x-prospect-detail-query-count/);
-assert.match(runtimeSource, /x-prospect-support-query-count/);
-assert.match(runtimeSource, /x-prospect-schema-cache/);
-assert.match(runtimeSource, /x-prospect-runtime-state/);
-assert.match(runtimeSource, /PROSPECT_WORKSPACE_TIMING/);
-assert.match(runtimeSource, /leadDetailRequested: Boolean\(selectedId\)/);
-assert.match(runtimeSource, /prospect_modules/);
-assert.match(runtimeSource, /prospect_page/);
-assert.match(runtimeSource, /prospect_detail/);
-assert.match(runtimeSource, /prospect_render/);
-assert.match(runtimeSource, /prospect_total/);
-assert.match(neonStateSource, /schemaReadiness/);
-assert.match(neonStateSource, /ensureNeonSchemaWithMetrics/);
-assert.match(neonStateSource, /SCHEMA_QUERY_COUNT = 5/);
-assert.match(neonStateSource, /cacheState: 'cold' \| 'warm'/);
-assert.match(neonStateSource, /schemaReadiness\.delete/);
-assert.match(prospectQuerySource, /ProspectWorkspaceScope/);
-assert.match(prospectQuerySource, /loadNeonProspectPageWithMetrics/);
-assert.match(prospectQuerySource, /loadNeonProspectRecordWithMetrics/);
-assert.match(prospectQuerySource, /queryCount: schema\.queryCount \+ 4/);
-assert.match(prospectQuerySource, /dataQueryCount: 4/);
-assert.match(prospectQuerySource, /queryCount: schema\.queryCount \+ 1/);
-assert.match(prospectQuerySource, /dataQueryCount: 1/);
-assert.match(prospectQuerySource, /requireKnownService/);
-assert.match(prospectQuerySource, /jsonb_typeof\(record->'lead'->'tender'\)/);
-assert.match(prospectQuerySource, /LOWER\(record::text\)/);
-assert.match(prospectQuerySource, /follow_up_at\(record\)/);
-assert.match(modelSource, /queryScope: ProspectWorkspaceScope/);
-assert.match(modelSource, /queryScopeFor/);
-assert.equal(pageSource.includes("from './workspace-page-model.js'"), true);
-assert.equal(modelSource.includes('normalizeWorkspacePageQuery'), true);
-assert.equal(modelSource.includes('normalizeProspectPageQuery'), false);
-
-const samples = workspaceSamples();
-for (const page of WORKSPACE_PAGES) {
-  for (const lead of samples) {
-    assert.equal(
-      matchesProspectWorkspaceScope(lead, page.queryScope),
-      page.match(lead),
-      `${page.id} query scope must match the established in-memory predicate for ${lead.id}`,
-    );
-  }
+assert.match(facade, /from '\.\/prospect-query-legacy\.js'/);
+assert.match(facade, /from '\.\/prospect-page-query\.js'/);
+assert.match(pageQuery, /ensureProspectQueryIndexesWithMetrics/);
+assert.match(pageQuery, /sql\.query\(boundQuery\.text, boundQuery\.params\)/);
+assert.match(pageSql, /WITH visible AS MATERIALIZED/);
+assert.match(pageSql, /filtered AS NOT MATERIALIZED/);
+assert.match(pageSql, /jsonb_agg\(owner ORDER BY owner\)/);
+assert.match(pageSql, /jsonb_agg\([\s\S]*record[\s\S]*ORDER BY/);
+assert.match(pageSql, /\{\{pageSize\}\}::int/);
+assert.match(pageSql, /\{\{requestedPage\}\}::int/);
+assert.equal(pageQuery.includes('sql.transaction(['), false);
+assert.match(pageQuery, /queryCount: schemaQueryCount \+ 1/);
+assert.match(pageQuery, /dataQueryCount: 1/);
+assert.match(indexes, /PROSPECT_QUERY_INDEX_MIGRATION_VERSION = '20260716_01'/);
+assert.match(indexes, /pg_advisory_xact_lock/);
+assert.match(indexes, /prospect_schema_migrations/);
+assert.match(indexes, /ANALYZE prospect_records/);
+assert.equal(PROSPECT_QUERY_INDEX_NAMES.length, 9);
+assert.equal(new Set(PROSPECT_QUERY_INDEX_NAMES).size, PROSPECT_QUERY_INDEX_NAMES.length);
+for (const indexName of PROSPECT_QUERY_INDEX_NAMES) {
+  assert.match(indexes, new RegExp(`CREATE INDEX IF NOT EXISTS ${indexName}`));
+  assert.match(rollback, new RegExp(`DROP INDEX IF EXISTS ${indexName}`));
 }
+assert.match(audit, /warm list request: \*\*1 data statement\*\*/);
+assert.match(audit, /warm request with `leadId`: \*\*2 data statements\*\*/);
+assert.match(audit, /follow-up timestamp \| defer/);
+assert.match(audit, /closeability band \| defer/);
+assert.match(audit, /does not claim production latency or planner usage/);
 
-console.log('Neon-native workspace pagination keeps dynamic boundaries, uses four warm list statements plus optional detail, and matches established workspace predicates');
-
-function workspaceSamples(): Lead[] {
-  return [
-    lead('generic'),
-    lead('linkedin-source', { source: 'linkedin' }),
-    lead('sales-nav-source', { source: 'sales_navigator' }),
-    lead('linkedin-type', { leadType: 'linkedin_warm_post' }),
-    lead('sales-nav-type', { leadType: 'linkedin_sales_nav_alert' }),
-    lead('upwork-source', { source: 'upwork' }),
-    lead('upwork-type', { leadType: 'upwork_job' }),
-    lead('rfq', { tender: tender('rfq') }),
-    lead('rfp', { tender: tender('rfp') }),
-    lead('eoi', { tender: tender('eoi') }),
-    lead('rfi', { tender: tender('rfi') }),
-    lead('itt', { tender: tender('itt') }),
-    lead('public-procurement', { source: 'public_procurement' }),
-    lead('research', { pipelineStatus: 'needs_research' }),
-    lead('partner-stage', { prospectStage: 'partner_prospect' }),
-    lead('partner-status', { opportunityStatus: 'partnership_target' }),
-    lead('partner-type', { leadType: 'partner_prospect' }),
-    lead('partner-source', { source: 'partner_research' }),
-    lead('ai', { serviceCategory: 'ai_automation' }),
-    lead('rag', { serviceCategory: 'rag_document_intelligence' }),
-    lead('ai-saas', { serviceCategory: 'ai_saas_mvp' }),
-    lead('voice-ai', { serviceCategory: 'voice_ai_agent' }),
-    lead('fullstack', { serviceCategory: 'fullstack_web_app' }),
-    lead('nextjs', { serviceCategory: 'nextjs_python_app' }),
-    lead('enterprise', { serviceCategory: 'enterprise_systems' }),
-    lead('cybersecurity', { serviceCategory: 'cybersecurity_compliance' }),
-    lead('immersive', { serviceCategory: 'ar_3d_unity_unreal' }),
-    lead('marketing', { serviceCategory: 'website_portal' }),
-    lead('unknown-service', { serviceCategory: 'unknown' }),
-  ];
-}
-
-function lead(id: string, overrides: Partial<Lead> = {}): Lead {
-  return {
-    id,
-    source: 'public_web',
-    sourceUrl: `https://example.com/${id}`,
-    leadType: 'public_opportunity',
-    title: id,
-    description: id,
-    companyName: id,
-    serviceCategory: 'unknown',
-    pipelineStatus: 'new',
-    capturedAt: '2026-07-16T00:00:00.000Z',
-    createdAt: '2026-07-16T00:00:00.000Z',
-    updatedAt: '2026-07-16T00:00:00.000Z',
-    ...overrides,
-  } as Lead;
-}
-
-function tender(opportunityType: NonNullable<Lead['tender']>['opportunityType']): NonNullable<Lead['tender']> {
-  return {
-    opportunityType,
-    sector: 'public',
-  } as NonNullable<Lead['tender']>;
-}
+console.log('Prospect aggregate consolidation and reversible query-index migration contract passed');
