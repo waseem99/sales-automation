@@ -16,7 +16,7 @@ from .redaction import sanitize_log_text
 from .runner import AcquisitionRunner
 from .session_validation import validate_session
 from .storage import HttpIngestionSink, JsonlSink
-from .upwork_pilot import HumanActionRequired, run_upwork_pilot
+from .upwork_pilot import HumanActionRequired, PilotNoData, run_upwork_pilot
 
 
 class _SanitizingFormatter(logging.Formatter):
@@ -111,6 +111,9 @@ def main(argv: list[str] | None = None) -> int:
         except HumanActionRequired as error:
             logging.getLogger("acquisition.worker").warning("human_action_required reason=%s", str(error))
             return 4
+        except PilotNoData as error:
+            logging.getLogger("acquisition.worker").warning("pilot_no_data reason=%s", str(error))
+            return 5
         payload = {
             "summary": summary.to_dict(),
             "report": str(args.output_directory / "report.html"),
