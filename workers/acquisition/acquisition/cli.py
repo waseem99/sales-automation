@@ -10,6 +10,8 @@ from .adapters.fixture import FixtureHtmlAdapter
 from .browser import bootstrap_authorized_profile, validate_external_profile_path
 from .checkpoints import CheckpointStore
 from .config import load_worker_config
+from .models import OpportunityRecord
+from .qualification import load_qualification_config, qualify
 from .redaction import sanitize_log_text
 from .runner import AcquisitionRunner
 from .storage import HttpIngestionSink, JsonlSink
@@ -44,6 +46,11 @@ def build_parser() -> argparse.ArgumentParser:
     run.add_argument("--ingest-url")
     run.add_argument("--dry-run", action="store_true", default=False)
 
+    qualify_parser = subparsers.add_parser("qualify", help="Qualify a reviewed opportunity JSONL file")
+    qualify_parser.add_argument("--input", type=Path, required=True)
+    qualify_parser.add_argument("--config", type=Path, required=True)
+    qualify_parser.add_argument("--output", type=Path, required=True)
+
     browser = subparsers.add_parser("browser", help="Bootstrap a user-authorized Chromium profile")
     browser.add_argument("--profile", type=Path, required=True)
     browser.add_argument("--url", required=True)
@@ -59,6 +66,8 @@ def main(argv: list[str] | None = None) -> int:
         profile = validate_external_profile_path(args.profile, args.repository_root)
         bootstrap_authorized_profile(profile, args.url)
         return 0
+    if args.command == "qualify":
+        return run_qualification_file(args.input, args.config, args.output)
 
     config = load_worker_config(args.config)
     if args.ingest_url and args.dry_run:
@@ -74,6 +83,37 @@ def main(argv: list[str] | None = None) -> int:
     summary = runner.run(limit=config.max_items, enabled_segments=config.enabled_segment_ids())
     print(json.dumps(summary.to_dict(), indent=2, sort_keys=True))
     return 0 if summary.failed == 0 else 2
+
+
+def run_qualification_file(input_path: Path, config_path: Path, output_path: Path) -> int:
+    config = load_qualification_config(config_path)
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    processed = 0
+    failed = 0
+    with input_path.open("r", encoding="utf-8") as source, output_path.open("w", encoding="utf-8") as target:
+        for line_number, line in enumerate(source, start=1):
+            if not line.strip():
+                continue
+            try:
+                value = json.loads(line)
+                if not isinstance(value, dict):
+                    raise ValueError("JSONL item must be an object")
+                record = OpportunityRecord.from_dict(value)
+                decision = qualify(record, config)
+                target.write(json.dumps({
+                    "dedupe_key": record.dedupe_key,
+                    "qualification": decision.to_dict(),
+                    "schema_version": "acquisition-qualification.v1",
+                }, ensure_ascii=False, sort_keys=True))
+                target.write("\n")
+                processed += 1
+            except (ValueError, json.JSONDecodeError) as error:
+                failed += 1
+                logging.getLogger("acquisition.worker").warning(
+                    "qualification_rejected line=%s reason=%s", line_number, error.__class__.__name__
+                )
+    print(json.dumps({"processed": processed, "failed": failed}, indent=2, sort_keys=True))
+    return 0 if failed == 0 else 2
 
 
 if __name__ == "__main__":

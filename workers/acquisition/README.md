@@ -76,3 +76,16 @@ Do not use ingestion mode until the receiving API and #204 qualification contrac
 - Pause for human action when login or verification is required.
 - Do not automate Upwork applications, LinkedIn connections, messages or InMails.
 - Never commit browser profiles, cookies, tokens, storage state or extracted private page archives.
+
+## Qualification preview
+
+The deterministic #204 configuration is stored in `config/qualification.example.toml`.
+
+```python
+from acquisition.qualification import load_qualification_config, qualify
+
+config = load_qualification_config(Path("config/qualification.example.toml"))
+decision = qualify(record, config)
+```
+
+The decision includes disposition, score, confidence, business unit, service, dimension scores, missing evidence, risks, approved proof IDs, next action and configuration version. It never sends an external message or application.
