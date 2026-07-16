@@ -17,8 +17,7 @@
   const TITLE_LINK_SELECTORS = [
     'a[data-test="job-tile-title-link"]',
     'a[data-test*="title-link"]',
-    'a[href*="/jobs/"]',
-    'a[href*="/freelance-jobs/apply/"]',
+    'a[href*="~"]',
     'h2 a',
     'h3 a'
   ];
@@ -29,6 +28,7 @@
     '[data-test="job-description-text"]',
     '[data-test*="description"]',
     '[class*="description"]',
+    '[class*="line-clamp"]',
     'p'
   ];
 
@@ -45,6 +45,7 @@
     'posted ',
     'proposal',
     'payment verified',
+    'payment unverified',
     'est. budget',
     'hourly',
     'fixed-price',
@@ -52,6 +53,22 @@
     'intermediate',
     'expert',
     'entry level'
+  ];
+
+  const JUNK_MARKERS = [
+    'job feedback',
+    'just not interested',
+    'vague description',
+    'unrealistic expectations',
+    'too many applicants',
+    'job posted too long ago',
+    'poor reviews about the client',
+    "doesn't match skills",
+    'i am overqualified',
+    'budget too low',
+    'not in my preferred location',
+    'the client will not be notified',
+    'your feedback helps us improve job search'
   ];
 
   function isVisible(element) {
@@ -63,6 +80,15 @@
 
   function normalizeText(value) {
     return String(value || "").replace(/\s+/g, " ").trim();
+  }
+
+  function cutJunkTail(value) {
+    const text = normalizeText(value);
+    const lowered = text.toLowerCase();
+    const indexes = JUNK_MARKERS
+      .map(marker => lowered.indexOf(marker))
+      .filter(index => index >= 0);
+    return indexes.length ? text.slice(0, Math.min(...indexes)).trim() : text;
   }
 
   function firstMatch(root, selectors) {
@@ -77,7 +103,8 @@
     try {
       const url = new URL(href, "https://www.upwork.com");
       if (!['upwork.com', 'www.upwork.com'].includes(url.hostname)) return null;
-      if (!url.pathname.includes('/jobs/') && !url.pathname.includes('/freelance-jobs/apply/')) return null;
+      if (!url.pathname.startsWith('/jobs/') && !url.pathname.startsWith('/freelance-jobs/apply/')) return null;
+      if (!/~[A-Za-z0-9_-]{8,}/.test(url.pathname)) return null;
       return `https://www.upwork.com${url.pathname}`;
     } catch (_error) {
       return null;
@@ -107,21 +134,40 @@
     return JOB_CARD_CUES.reduce((count, cue) => count + (lowered.includes(cue) ? 1 : 0), 0);
   }
 
+  function uniqueJobUrls(node) {
+    return new Set(
+      Array.from(node.querySelectorAll('a[href]'))
+        .map(anchor => canonicalJobUrl(anchor.getAttribute('href')))
+        .filter(Boolean)
+    );
+  }
+
   function deriveCardFromLink(link) {
     let node = link;
     let best = null;
-    for (let depth = 0; depth < 10 && node && node !== document.body; depth += 1) {
+    let bestScore = Number.NEGATIVE_INFINITY;
+
+    for (let depth = 0; depth < 12 && node && node !== document.body; depth += 1) {
       node = node.parentElement;
       if (!node || !isVisible(node)) continue;
       const text = normalizeText(node.textContent);
-      if (text.length < 80 || text.length > 15000) continue;
+      if (text.length < 100 || text.length > 12000) continue;
+
+      const urls = uniqueJobUrls(node);
+      if (urls.size !== 1) continue;
+
       const cues = cueCount(text);
-      const hasSingleJobLink = Array.from(node.querySelectorAll('a[href]'))
-        .map(anchor => canonicalJobUrl(anchor.getAttribute('href')))
-        .filter(Boolean).length <= 3;
-      if (cues >= 2 && hasSingleJobLink) {
+      if (cues < 2) continue;
+
+      const lowered = text.toLowerCase();
+      const junkPenalty = JUNK_MARKERS.some(marker => lowered.includes(marker)) ? 30 : 0;
+      const semanticBonus = node.matches('article, section, [data-test*="job" i], [class*="job" i]') ? 12 : 0;
+      const lengthPenalty = Math.max(0, text.length - 5000) / 250;
+      const score = cues * 10 + semanticBonus - junkPenalty - lengthPenalty;
+
+      if (score > bestScore) {
         best = node;
-        if (node.matches('article, section, [data-test*="job" i], [class*="job" i]')) break;
+        bestScore = score;
       }
     }
     return best;
@@ -133,7 +179,7 @@
 
     for (const selector of CARD_SELECTORS) {
       for (const node of document.querySelectorAll(selector)) {
-        if (!nodeSet.has(node) && isVisible(node)) {
+        if (!nodeSet.has(node) && isVisible(node) && uniqueJobUrls(node).size === 1) {
           nodeSet.add(node);
           cardNodes.push(node);
         }
@@ -161,6 +207,34 @@
     return null;
   }
 
+  function isUsefulDescription(value, title) {
+    const text = cutJunkTail(value);
+    if (text.length < 80 || text.split(/\s+/).length < 14) return false;
+    if (title && text.toLowerCase() === title.toLowerCase()) return false;
+    const lowered = text.toLowerCase();
+    return !JUNK_MARKERS.some(marker => lowered.includes(marker));
+  }
+
+  function extractDescription(card, title) {
+    const candidates = [];
+    const seen = new Set();
+
+    for (const selector of DESCRIPTION_SELECTORS) {
+      for (const node of card.querySelectorAll(selector)) {
+        if (!isVisible(node)) continue;
+        const value = cutJunkTail(node.textContent);
+        const key = value.toLowerCase();
+        if (!seen.has(key) && isUsefulDescription(value, title)) {
+          seen.add(key);
+          candidates.push(value);
+        }
+      }
+    }
+
+    candidates.sort((a, b) => b.length - a.length);
+    return candidates[0] || '';
+  }
+
   function extractCards(limit = 10) {
     const cardNodes = collectCandidateCards();
     const cards = [];
@@ -178,9 +252,9 @@
         const heading = firstMatch(card, ['h1', 'h2', 'h3', 'h4', '[role="heading"]']);
         title = normalizeText(heading ? heading.textContent : '');
       }
-      const descriptionNode = firstMatch(card, DESCRIPTION_SELECTORS);
-      const description = normalizeText(descriptionNode ? descriptionNode.textContent : "");
-      const cardText = normalizeText(card.textContent).slice(0, 12000);
+
+      const description = extractDescription(card, title);
+      const cardText = cutJunkTail(card.textContent).slice(0, 12000);
       if (!title || !cardText || cueCount(cardText) < 1) continue;
 
       seenUrls.add(sourceUrl);
