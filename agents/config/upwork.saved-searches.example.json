@@ -1,0 +1,53 @@
+{
+  "version": 1,
+  "searches": [
+    {
+      "id": "ai-automation",
+      "url": "https://www.upwork.com/nx/search/jobs/?q=ai%20automation%20rag%20n8n&sort=recency",
+      "business_unit_hint": "hilarious_ai",
+      "service_hint": "ai_automation",
+      "keywords": ["ai automation", "rag", "n8n", "ai agent", "workflow"],
+      "exclusions": ["homework", "academic", "unpaid test"],
+      "min_fixed_budget": 2000,
+      "min_hourly_rate": 20,
+      "max_pages": 2,
+      "delay_seconds": 4
+    },
+    {
+      "id": "software-saas",
+      "url": "https://www.upwork.com/nx/search/jobs/?q=saas%20nextjs%20react%20native&sort=recency",
+      "business_unit_hint": "codistan",
+      "service_hint": "fullstack_web_app",
+      "keywords": ["saas", "next.js", "react native", "node.js", "marketplace"],
+      "exclusions": ["wordpress data entry", "homework", "unpaid test"],
+      "min_fixed_budget": 3000,
+      "min_hourly_rate": 25,
+      "max_pages": 2,
+      "delay_seconds": 4
+    },
+    {
+      "id": "cybersecurity-compliance",
+      "url": "https://www.upwork.com/nx/search/jobs/?q=soc%202%20iso%2027001%20vapt%20iam&sort=recency",
+      "business_unit_hint": "cytas",
+      "service_hint": "cybersecurity_compliance",
+      "keywords": ["soc 2", "iso 27001", "vapt", "iam", "cloud security"],
+      "exclusions": ["exam", "certification dump", "homework"],
+      "min_fixed_budget": 2000,
+      "min_hourly_rate": 30,
+      "max_pages": 2,
+      "delay_seconds": 4
+    },
+    {
+      "id": "immersive-3d",
+      "url": "https://www.upwork.com/nx/search/jobs/?q=unity%20unreal%203d%20ar%20vr&sort=recency",
+      "business_unit_hint": "motionly",
+      "service_hint": "ar_3d_unity_unreal",
+      "keywords": ["unity", "unreal", "3d", "ar", "vr", "product animation"],
+      "exclusions": ["asset flip", "unpaid test"],
+      "min_fixed_budget": 1500,
+      "min_hourly_rate": 20,
+      "max_pages": 2,
+      "delay_seconds": 4
+    }
+  ]
+}

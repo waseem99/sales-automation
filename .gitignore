@@ -6,3 +6,10 @@ dist/
 .data/
 *.log
 .DS_Store
+
+# Local acquisition-worker state and browser profiles.
+agents/.venv/
+agents/.state/
+agents/**/__pycache__/
+agents/**/*.pyc
+agents/browser-profiles/

@@ -1,0 +1,23 @@
+[build-system]
+requires = ["setuptools>=75", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "codistan-acquisition-worker"
+version = "0.1.0"
+description = "Local browser-assisted opportunity research worker for the Codistan Sales Automation platform."
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+  "playwright>=1.48,<2",
+]
+
+[project.optional-dependencies]
+dev = []
+
+[project.scripts]
+acquisition-worker = "acquisition_worker.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["acquisition_worker*"]

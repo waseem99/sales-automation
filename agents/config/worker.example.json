@@ -1,0 +1,13 @@
+{
+  "state_directory": ".state",
+  "browser": {
+    "profile_path": "/absolute/path/outside/repository/upwork-profile",
+    "headless": false,
+    "slow_mo_ms": 150
+  },
+  "safety": {
+    "external_actions_automated": false,
+    "pause_on_account_challenge": true,
+    "dry_run_default": true
+  }
+}
