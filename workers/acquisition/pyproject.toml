@@ -1,0 +1,26 @@
+[build-system]
+requires = ["setuptools>=75", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "codistan-acquisition-worker"
+version = "0.1.0"
+description = "Local-first, human-controlled acquisition worker foundation for Codistan sales automation."
+readme = "README.md"
+requires-python = ">=3.12"
+authors = [{ name = "Codistan" }]
+dependencies = []
+
+[project.optional-dependencies]
+browser = ["playwright>=1.49,<2"]
+dev = []
+
+[project.scripts]
+acquisition-worker = "acquisition.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["acquisition*"]
+
+[tool.setuptools.package-data]
+acquisition = ["py.typed"]

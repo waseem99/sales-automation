@@ -6,3 +6,13 @@ dist/
 .data/
 *.log
 .DS_Store
+
+# Python acquisition worker
+__pycache__/
+*.py[cod]
+.venv/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+workers/acquisition/.profiles/
+workers/acquisition/browser-profiles/

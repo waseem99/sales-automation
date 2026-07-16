@@ -1,0 +1,39 @@
+[worker]
+name = "codistan-acquisition-local"
+max_items = 100
+request_delay_seconds = 2.5
+
+[[segments]]
+id = "software-saas"
+enabled = true
+keywords = ["saas", "react native", "next.js", "marketplace", "mvp"]
+excluded_keywords = ["unpaid test", "academic assignment"]
+minimum_budget_usd = 3000
+
+[[segments]]
+id = "ai-automation"
+enabled = true
+keywords = ["ai agent", "rag", "automation", "llm", "voice ai"]
+excluded_keywords = ["data entry"]
+minimum_budget_usd = 3000
+
+[[segments]]
+id = "cybersecurity"
+enabled = true
+keywords = ["vapt", "soc 2", "iso 27001", "cloud security", "iam"]
+excluded_keywords = ["exam help"]
+minimum_budget_usd = 2000
+
+[[segments]]
+id = "immersive"
+enabled = true
+keywords = ["3d animation", "unity", "unreal", "ar", "vr"]
+excluded_keywords = ["nft collection"]
+minimum_budget_usd = 1500
+
+[[segments]]
+id = "digital-growth"
+enabled = true
+keywords = ["website redesign", "seo", "analytics", "performance marketing"]
+excluded_keywords = ["commission only"]
+minimum_budget_usd = 1500
