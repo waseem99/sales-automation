@@ -70,7 +70,7 @@ class UpworkMarketScheduleTests(unittest.TestCase):
         self.assertEqual(annotated.attributes["commercial_filter_status"], "pass")
         self.assertEqual(annotated.attributes["profile_url"], "https://www.upwork.com/freelancers/~016e9a7bda2340dcd9")
 
-    def test_worldwide_hourly_job_requires_duration_and_30_hours(self) -> None:
+    def test_worldwide_hourly_job_requires_more_than_30_hours_and_duration(self) -> None:
         evidence = _evidence(
             segment="nadir-game-ar-vr",
             country="Australia",
@@ -78,12 +78,29 @@ class UpworkMarketScheduleTests(unittest.TestCase):
                 "hourly_min_usd": 35,
                 "hourly_max_usd": 60,
                 "estimated_hours_per_week": 30,
+                "weekly_hours_basis": "more_than",
                 "duration": "3 to 6 months",
             },
         )
         annotated = annotate_profile_and_market(evidence, "nadir-game-ar-vr")
         self.assertEqual(annotated.attributes["market_scopes"], ["worldwide"])
         self.assertEqual(annotated.attributes["commercial_filter_status"], "pass")
+
+        exactly_thirty = annotate_profile_and_market(
+            _evidence(
+                segment="nadir-game-ar-vr",
+                country="Australia",
+                attributes={
+                    "hourly_min_usd": 35,
+                    "hourly_max_usd": 60,
+                    "estimated_hours_per_week": 30,
+                    "weekly_hours_basis": "range_maximum",
+                    "duration": "3 to 6 months",
+                },
+            ),
+            "nadir-game-ar-vr",
+        )
+        self.assertEqual(exactly_thirty.attributes["commercial_filter_status"], "fail")
 
     def test_pakistan_gcc_and_low_budget_jobs_are_archived(self) -> None:
         for country in ("Pakistan", "UAE", "Saudi Arabia", "Qatar", "Kuwait", "Bahrain", "Oman"):
