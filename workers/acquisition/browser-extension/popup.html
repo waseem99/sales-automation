@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Codistan Capture</title>
+  <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+  <main>
+    <h1>Codistan Capture</h1>
+    <p class="hint">Open an Upwork saved-search results page, choose the service category, then capture the visible cards.</p>
+
+    <label for="segment">Service category</label>
+    <select id="segment">
+      <option value="software-saas">Software &amp; SaaS</option>
+      <option value="ai-automation">AI &amp; Automation</option>
+      <option value="cybersecurity">Cybersecurity</option>
+      <option value="immersive">3D / AR / VR / Animation</option>
+      <option value="digital-growth">Digital Marketing &amp; Websites</option>
+    </select>
+
+    <button id="capture" class="primary">Capture visible jobs</button>
+    <button id="finish" class="secondary">Finish and create report</button>
+
+    <div id="status" role="status" aria-live="polite">Local collector must be running.</div>
+    <p class="safety">No proposal, message, application, or automatic navigation is performed.</p>
+  </main>
+  <script src="popup.js"></script>
+</body>
+</html>
