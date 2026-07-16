@@ -3,10 +3,11 @@ setlocal
 title Codistan Upwork Automation - Run Now
 
 echo Starting one automatic Upwork acquisition run now.
+echo This explicit run bypasses only the time-window gate.
 echo Keep Chrome available. No proposal or message will be sent.
 echo.
 
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File "%~dp0scripts\windows\run-upwork-automation.ps1"
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File "%~dp0scripts\windows\run-upwork-automation.ps1" -Force
 set EXITCODE=%ERRORLEVEL%
 
 echo.
