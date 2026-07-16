@@ -44,7 +44,7 @@ $CheckpointRoot = Join-Path $StateRoot "checkpoints"
 $OutputRoot = Join-Path $StateRoot "output\upwork-extension-pilot"
 $ConfigPath = Join-Path $WorkerRoot "config\upwork-pilot.toml"
 $QualificationPath = Join-Path $WorkerRoot "config\qualification.example.toml"
-$CheckpointPath = Join-Path $CheckpointRoot "upwork-extension-seen.json"
+$CheckpointPath = Join-Path $CheckpointRoot "upwork-extension-seen-v2.json"
 $ExtensionSource = Join-Path $WorkerRoot "browser-extension"
 $ExtensionTarget = Join-Path $StateRoot "upwork-capture-extension"
 $ExtensionMarker = Join-Path $StateRoot "upwork-extension-installed.txt"
@@ -62,6 +62,11 @@ if (-not (Test-Path $ExtensionSource)) {
     throw "The Upwork capture extension files were not found after the update."
 }
 
+$ManifestPath = Join-Path $ExtensionSource "manifest.json"
+$ExtensionVersion = [string]((Get-Content -Raw -Path $ManifestPath | ConvertFrom-Json).version)
+$InstalledMarker = if (Test-Path $ExtensionMarker) { Get-Content -Raw -Path $ExtensionMarker } else { "" }
+$NeedsExtensionReload = -not $InstalledMarker.Contains("version=$ExtensionVersion")
+
 New-Item -ItemType Directory -Force -Path $StateRoot, $CheckpointRoot, $OutputRoot | Out-Null
 if (Test-Path $ExtensionTarget) {
     Remove-Item -Recurse -Force $ExtensionTarget
@@ -74,28 +79,26 @@ Write-Host "no special Upwork launch flags, and no automatic navigation." -Foreg
 Write-Host "You will browse Upwork normally and click the Codistan extension to capture visible job cards." -ForegroundColor Yellow
 Write-Host ""
 
-$InstallChoice = ""
-if (-not (Test-Path $ExtensionMarker)) {
-    $InstallChoice = "i"
-} else {
-    $InstallChoice = (Read-Host "Press Enter if the Codistan Capture extension is installed, or type I to install/reload it").Trim().ToLowerInvariant()
-}
-
-if ($InstallChoice -eq "i") {
+if ($NeedsExtensionReload) {
     Start-Process explorer.exe -ArgumentList "`"$ExtensionTarget`"" | Out-Null
     Start-Process -FilePath $ChromeExecutable -ArgumentList "chrome://extensions/" | Out-Null
 
-    Write-Host ""
-    Write-Host "ONE-TIME EXTENSION INSTALLATION" -ForegroundColor Green
-    Write-Host "1. On the Chrome Extensions page, turn ON Developer mode (top-right)."
-    Write-Host "2. Click Load unpacked."
-    Write-Host "3. Select this folder:" -ForegroundColor Yellow
+    Write-Host "EXTENSION UPDATE REQUIRED - VERSION $ExtensionVersion" -ForegroundColor Green
+    Write-Host "1. On chrome://extensions, find 'Codistan Upwork Opportunity Capture'."
+    Write-Host "2. If it is already installed, click its circular Reload icon."
+    Write-Host "3. If it is not installed, turn on Developer mode, click Load unpacked, and select:" -ForegroundColor Yellow
     Write-Host "   $ExtensionTarget" -ForegroundColor Yellow
-    Write-Host "4. Click Chrome's puzzle-piece icon and pin 'Codistan Upwork Opportunity Capture'."
-    Write-Host "5. Install it in the same ordinary Chrome profile you use for Upwork."
+    Write-Host "4. Keep the extension pinned in the Chrome toolbar."
     Write-Host ""
-    Read-Host "Press Enter only after the extension icon is visible in Chrome"
-    "Installed or confirmed: $(Get-Date -Format o)" | Set-Content -Path $ExtensionMarker -Encoding UTF8
+    Read-Host "Press Enter only after extension version $ExtensionVersion is loaded"
+    "version=$ExtensionVersion confirmed=$(Get-Date -Format o)" | Set-Content -Path $ExtensionMarker -Encoding UTF8
+} else {
+    $InstallChoice = (Read-Host "Extension $ExtensionVersion is current. Press Enter to continue, or type R to reload it").Trim().ToLowerInvariant()
+    if ($InstallChoice -eq "r") {
+        Start-Process explorer.exe -ArgumentList "`"$ExtensionTarget`"" | Out-Null
+        Start-Process -FilePath $ChromeExecutable -ArgumentList "chrome://extensions/" | Out-Null
+        Read-Host "Click the extension Reload icon, then press Enter"
+    }
 }
 
 if (Test-LocalPort -Port $CollectorPort) {
@@ -151,9 +154,9 @@ if (-not $ReportPath -or -not (Test-Path $ReportPath)) {
 }
 
 $Latest = [ordered]@{
-    schema_version = "codistan-upwork-extension-latest.v1"
+    schema_version = "codistan-upwork-extension-latest.v2"
     completed_at = (Get-Date).ToString("o")
-    capture_mode = "manual_chrome_extension_visible_cards"
+    capture_mode = "manual_chrome_extension_visible_cards_v2"
     run_directory = $RunDirectory
     report_path = $ReportPath
     dashboard_ready_path = [string]$Result.dashboard_ready_path
