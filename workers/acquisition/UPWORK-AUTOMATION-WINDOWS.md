@@ -51,7 +51,7 @@ United States jobs are tagged as matching both presets. Other eligible countries
 Approved commercial engagements are:
 
 - fixed price of **$1,000 or more**; or
-- hourly work of **30 or more hours per week** for either **3-6 months** or **more than 6 months**.
+- hourly work of **more than 30 hours per week** for either **3-6 months** or **more than 6 months**.
 
 An explicit fixed budget below $1,000 or an explicitly non-matching hourly engagement is archived as Priority C. Missing commercial evidence is sent to Priority B for human confirmation rather than being falsely promoted.
 
