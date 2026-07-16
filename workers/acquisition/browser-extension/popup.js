@@ -2,6 +2,7 @@
   "use strict";
 
   const COLLECTOR = "http://127.0.0.1:8765";
+  const CALIBRATION_JOBS_PER_SEARCH = 2;
   const captureButton = document.getElementById("capture");
   const finishButton = document.getElementById("finish");
   const segmentSelect = document.getElementById("segment");
@@ -41,12 +42,12 @@
 
   captureButton.addEventListener("click", async () => {
     setBusy(true);
-    setStatus("Reading the visible job cards on this page…");
+    setStatus(`Reading up to ${CALIBRATION_JOBS_PER_SEARCH} visible job cards on this page…`);
     try {
       const tab = await activeTab();
       const result = await chrome.tabs.sendMessage(tab.id, {
         type: "CODISTAN_CAPTURE_VISIBLE_UPWORK_CARDS",
-        limit: 10
+        limit: CALIBRATION_JOBS_PER_SEARCH
       });
       if (!result || !result.ok) {
         throw new Error(result && result.error ? result.error : "The Upwork page could not be read.");
@@ -60,7 +61,10 @@
         page_title: result.page_title,
         cards: result.cards
       });
-      setStatus(`Captured ${response.accepted} new job(s). Total qualified sample: ${response.total_extracted}.`);
+      setStatus(
+        `Captured ${response.accepted} new job(s) for this search. ` +
+        `Total sample: ${response.total_extracted}/10. Continue with the next service search.`
+      );
     } catch (error) {
       setStatus(error instanceof Error ? error.message : String(error));
     } finally {
@@ -83,6 +87,6 @@
 
   fetch(`${COLLECTOR}/status`)
     .then((response) => response.json())
-    .then((data) => setStatus(`Collector ready. Captured so far: ${data.extracted || 0}.`))
+    .then((data) => setStatus(`Collector ready. Captured so far: ${data.extracted || 0}/10. Capture two jobs from each service search.`))
     .catch(() => setStatus("Start the Codistan capture launcher before using this extension."));
 })();
