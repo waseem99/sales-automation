@@ -1,10 +1,17 @@
 const PARTIAL_START = '<!--prospect-partial:start-->';
 const PARTIAL_END = '<!--prospect-partial:end-->';
-const PARTIAL_CSS = '/assets/prospect-partial-navigation.v1.css';
-const PARTIAL_JS = '/assets/prospect-partial-navigation.v1.js';
+const PARTIAL_CSS = '/assets/prospect-partial-navigation.v2.css';
+const PARTIAL_JS = '/assets/prospect-partial-navigation.v2.js';
 
 export interface ProspectPartialNavigationOptions {
+  activeRoute: string;
   drawerOpen: boolean;
+  documentTitle: string;
+  navigationLabel: string;
+  eyebrow: string;
+  title: string;
+  description: string;
+  serverMs?: number;
 }
 
 export function enhanceProspectPartialNavigation(
@@ -18,9 +25,20 @@ export function enhanceProspectPartialNavigation(
   );
   if (!options.drawerOpen) output = output.replace('prospect-row selected', 'prospect-row');
   output = updateBodyClass(output, 'drawer-open', options.drawerOpen);
+  const attributes = [
+    'id="prospect-content"',
+    'data-prospect-partial-root',
+    `data-prospect-workspace-route="${escapeAttribute(options.activeRoute)}"`,
+    `data-prospect-document-title="${escapeAttribute(options.documentTitle)}"`,
+    `data-prospect-navigation-label="${escapeAttribute(options.navigationLabel)}"`,
+    `data-prospect-eyebrow="${escapeAttribute(options.eyebrow)}"`,
+    `data-prospect-page-title="${escapeAttribute(options.title)}"`,
+    `data-prospect-description="${escapeAttribute(options.description)}"`,
+    `data-prospect-server-ms="${Math.max(0, Math.round(options.serverMs ?? 0))}"`,
+  ].join(' ');
   output = output.replace(
     '<section class="metrics">',
-    `${PARTIAL_START}<div id="prospect-content" data-prospect-partial-root><section class="metrics">`,
+    `${PARTIAL_START}<div ${attributes}><section class="metrics">`,
   );
   output = output.replace(/<\/main>(?=(?:<\/div>)?<script>|(?:<\/div>)?<\/body>)/, `</div>${PARTIAL_END}</main>`);
   if (!output.includes('data-prospect-partial-root') || !output.includes('id="prospect-drawer"')) {
@@ -45,4 +63,8 @@ function updateBodyClass(html: string, className: string, enabled: boolean): str
     const value = [...classes].join(' ');
     return value ? `<body class="${value}">` : '<body>';
   });
+}
+
+function escapeAttribute(value: string): string {
+  return value.replace(/[&<>"']/g, (character) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[character] ?? character);
 }
