@@ -44,7 +44,7 @@ $CheckpointRoot = Join-Path $StateRoot "checkpoints"
 $OutputRoot = Join-Path $StateRoot "output\upwork-extension-pilot"
 $ConfigPath = Join-Path $WorkerRoot "config\upwork-pilot.toml"
 $QualificationPath = Join-Path $WorkerRoot "config\qualification.example.toml"
-$CheckpointPath = Join-Path $CheckpointRoot "upwork-extension-seen-v2.json"
+$CheckpointPath = Join-Path $CheckpointRoot "upwork-extension-seen-v3.json"
 $ExtensionSource = Join-Path $WorkerRoot "browser-extension"
 $ExtensionTarget = Join-Path $StateRoot "upwork-capture-extension"
 $ExtensionMarker = Join-Path $StateRoot "upwork-extension-installed.txt"
@@ -74,9 +74,10 @@ if (Test-Path $ExtensionTarget) {
 Copy-Item -Recurse -Force $ExtensionSource $ExtensionTarget
 
 Write-Step "Preparing the normal-Chrome capture extension"
-Write-Host "This method uses your ordinary Chrome browser with no Playwright, no remote debugging," -ForegroundColor Yellow
+Write-Host "Pilot V2 uses ordinary Chrome with no Playwright, no remote debugging," -ForegroundColor Yellow
 Write-Host "no special Upwork launch flags, and no automatic navigation." -ForegroundColor Yellow
-Write-Host "You will browse Upwork normally and click the Codistan extension to capture visible job cards." -ForegroundColor Yellow
+Write-Host "Capture up to five visible opportunities from each of the five service searches." -ForegroundColor Yellow
+Write-Host "The 25-opportunity report grades records A, B or C." -ForegroundColor Yellow
 Write-Host ""
 
 if ($NeedsExtensionReload) {
@@ -109,14 +110,14 @@ $RunId = Get-Date -Format "yyyyMMdd-HHmmss"
 $RunDirectory = Join-Path $OutputRoot $RunId
 New-Item -ItemType Directory -Force -Path $RunDirectory | Out-Null
 
-Write-Step "Starting the local opportunity collector"
+Write-Step "Starting the Pilot V2 opportunity collector"
 Write-Host "A normal Upwork page will open explicitly in Google Chrome." -ForegroundColor Yellow
 Write-Host "For each saved search:" -ForegroundColor Yellow
 Write-Host "  1. Open the search normally."
 Write-Host "  2. Wait until the job cards are visible."
 Write-Host "  3. Click the pinned Codistan extension icon."
 Write-Host "  4. Choose the service category and click Capture visible jobs."
-Write-Host "When finished, click Finish and create report in the extension." -ForegroundColor Yellow
+Write-Host "The report auto-generates at 25 reviewed jobs, or you may finish earlier." -ForegroundColor Yellow
 Write-Host ""
 Write-Host "No proposal, message, application, job-detail navigation, or dashboard write is automated." -ForegroundColor Green
 
@@ -154,20 +155,24 @@ if (-not $ReportPath -or -not (Test-Path $ReportPath)) {
 }
 
 $Latest = [ordered]@{
-    schema_version = "codistan-upwork-extension-latest.v2"
+    schema_version = "codistan-upwork-extension-latest.v3"
     completed_at = (Get-Date).ToString("o")
-    capture_mode = "manual_chrome_extension_visible_cards_v2"
+    capture_mode = "manual_chrome_extension_visible_cards_v3"
     run_directory = $RunDirectory
     report_path = $ReportPath
     dashboard_ready_path = [string]$Result.dashboard_ready_path
+    dashboard_eligible = [int]$Result.dashboard_eligible
+    priority_counts = $Result.priority_counts
     dashboard_ingestion_enabled = $false
 }
-$Latest | ConvertTo-Json -Depth 3 | Set-Content -Path (Join-Path $StateRoot "latest-upwork-pilot.json") -Encoding UTF8
+$Latest | ConvertTo-Json -Depth 4 | Set-Content -Path (Join-Path $StateRoot "latest-upwork-pilot.json") -Encoding UTF8
 
-Write-Step "Opening the local opportunity report"
+Write-Step "Opening the Pilot V2 opportunity report"
 Start-Process -FilePath $ChromeExecutable -ArgumentList "`"$ReportPath`"" | Out-Null
 Write-Host "Report: $ReportPath" -ForegroundColor Green
 Write-Host "Dashboard-ready file: $($Result.dashboard_ready_path)" -ForegroundColor Green
 Write-Host "Captured opportunities: $($Result.total_extracted)" -ForegroundColor Green
+Write-Host "Priority A: $($Result.priority_counts.A) | Priority B: $($Result.priority_counts.B) | Priority C: $($Result.priority_counts.C)" -ForegroundColor Green
+Write-Host "Dashboard-eligible A+B records: $($Result.dashboard_eligible)" -ForegroundColor Green
 Write-Host ""
-Write-Host "Dashboard ingestion remains disabled until the report quality is explicitly approved." -ForegroundColor Yellow
+Write-Host "Dashboard ingestion remains disabled until this 25-opportunity calibration report is explicitly approved." -ForegroundColor Yellow
