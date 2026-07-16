@@ -29,7 +29,7 @@ if ($Task) {
 }
 
 Write-Host ""
-if (Test-Path $VenvPython -and Test-Path $ConfigPath) {
+if ((Test-Path $VenvPython) -and (Test-Path $ConfigPath)) {
     try {
         $ScheduleText = (& $VenvPython -m acquisition upwork-schedule-info --config $ConfigPath 2>&1 | Out-String).Trim()
         $Schedule = $ScheduleText | ConvertFrom-Json
