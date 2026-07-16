@@ -69,6 +69,8 @@ export async function handleAcquisitionIngest(request: Request): Promise<Respons
       idempotencyKey: payload.idempotencyKey,
       acquisitionPriority: payload.priority,
       acquisitionScore: payload.score,
+      intendedProfile: optionalText(payload.attributes.profile_name, 128),
+      marketScopes: stringList(payload.attributes.market_scopes),
       humanReviewRequired: true,
       externalActionAutomated: false,
     }, response.status);
@@ -132,9 +134,8 @@ function validate(value: unknown): IntakePayload {
 
 function manualBody(payload: IntakePayload): Record<string, unknown> {
   const attributes = payload.attributes;
-  const skills = Array.isArray(attributes.skills)
-    ? attributes.skills.map((value) => String(value).trim()).filter(Boolean).slice(0, 30)
-    : [];
+  const skills = stringList(attributes.skills).slice(0, 30);
+  const marketScopes = stringList(attributes.market_scopes);
   const content = [
     payload.title,
     payload.body,
@@ -148,9 +149,21 @@ function manualBody(payload: IntakePayload): Record<string, unknown> {
     line('Confidence', payload.confidence),
     line('Recommended human action', payload.recommendedAction),
     line('Qualification version', payload.configurationVersion),
+    line('Saved search', attributes.search_name),
+    line('Intended Upwork profile', attributes.profile_name),
+    line('Intended profile URL', attributes.profile_url),
+    line('Service lane', attributes.service_lane),
+    marketScopes.length ? `Market scopes: ${marketScopes.join(', ')}` : '',
+    line('Market policy status', attributes.market_policy_status),
+    line('Market policy reason', attributes.market_policy_reason),
+    line('Commercial filter status', attributes.commercial_filter_status),
+    line('Commercial filter reason', attributes.commercial_filter_reason),
     line('Budget USD', attributes.budget_usd),
+    line('Fixed budget USD', attributes.fixed_budget_usd),
     line('Hourly minimum USD', attributes.hourly_min_usd),
     line('Hourly maximum USD', attributes.hourly_max_usd),
+    line('Estimated hours per week', attributes.estimated_hours_per_week),
+    line('Duration', attributes.duration),
     line('Client spend USD', attributes.client_spend_usd),
     line('Client hire rate', attributes.client_hire_rate),
     line('Payment status', attributes.payment_status),
@@ -220,6 +233,12 @@ function textValue(value: unknown, field: string, maximum: number): string {
 
 function optionalText(value: unknown, maximum: number): string | undefined {
   return typeof value === 'string' && value.trim() ? value.trim().slice(0, maximum) : undefined;
+}
+
+function stringList(value: unknown): string[] {
+  return Array.isArray(value)
+    ? value.map((item) => String(item).trim()).filter(Boolean)
+    : [];
 }
 
 function line(label: string, value: unknown): string {
