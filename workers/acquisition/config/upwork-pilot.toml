@@ -1,7 +1,10 @@
 [pilot]
-version = "2026-07-16.upwork-pilot.v2"
+version = "2026-07-16.upwork-operator-assisted.v1"
 max_jobs_total = 10
-min_description_chars = 100
+min_description_chars = 80
+
+# Search URLs are used only to display the intended keywords to the operator.
+# The assisted worker never navigates to these URLs automatically.
 
 [[searches]]
 id = "software-saas"
