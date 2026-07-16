@@ -44,8 +44,8 @@ end_local = "10:30"
 days = ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"]
 
 # Every active run visits all three exact saved-search links below. Commercial
-# acceptance is enforced locally as: fixed price $1,000+, or hourly 30+
-# hours/week for 3-6 months or more than 6 months. Explicit Pakistan and GCC
+# acceptance is enforced locally as: fixed price $1,000+, or hourly more than
+# 30 hours/week for 3-6 months or more than 6 months. Explicit Pakistan and GCC
 # client locations are archived. US jobs match both US-only and worldwide;
 # other eligible countries match worldwide.
 
