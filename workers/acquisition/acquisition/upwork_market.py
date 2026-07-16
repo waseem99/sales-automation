@@ -72,6 +72,7 @@ _COUNTRY_TERMS = (
 )
 
 _ALLOWED_HOURLY_DURATIONS = {"3 to 6 months", "more than 6 months"}
+_PRIORITY_A_FIXED_MIN_USD = 5000
 
 
 def annotate_profile_and_market(
@@ -85,10 +86,18 @@ def annotate_profile_and_market(
     attributes.update(profile)
 
     country = _country(attributes.get("client_country"))
+    country_basis = str(attributes.get("client_country_basis") or "").strip()
     if not country and visible_client_card_text:
         country = _country_from_visible_card(visible_client_card_text)
+        if country:
+            country_basis = "visible_client_card"
+    if not country:
+        country = _country_from_explicit_self_location(evidence.body)
+        if country:
+            country_basis = "explicit_self_location_in_description"
     if country:
         attributes["client_country"] = country
+        attributes["client_country_basis"] = country_basis or "existing_evidence"
 
     commercial_status, commercial_reason = _commercial_filter(attributes)
     market_scopes: list[str] = []
@@ -122,6 +131,7 @@ def annotate_profile_and_market(
             "commercial_filter_status": commercial_status,
             "commercial_filter_reason": commercial_reason,
             "commercial_filter_fixed_min_usd": 1000,
+            "priority_a_fixed_min_usd": _PRIORITY_A_FIXED_MIN_USD,
             "commercial_filter_hourly_requirement": "more_than_30_hours_per_week",
             "commercial_filter_hourly_durations": ["3 to 6 months", "more than 6 months"],
             "excluded_market_countries": sorted(_EXCLUDED_COUNTRIES),
@@ -175,6 +185,34 @@ def apply_market_policy(record: OpportunityRecord, decision: QualificationDecisi
             ),
         )
 
+    fixed = _number(attributes.get("fixed_budget_usd"))
+    competition = str(attributes.get("competition_level") or "").strip().casefold()
+    if decision.priority == "A" and fixed is not None and fixed < _PRIORITY_A_FIXED_MIN_USD:
+        return replace(
+            decision,
+            disposition="qualified" if decision.disposition != "reject" else decision.disposition,
+            priority="B",
+            score=min(decision.score, 74),
+            risks=_append(decision.risks, "fixed_budget_below_priority_a_threshold"),
+            recommended_action=(
+                "Priority B — technically relevant, but the fixed budget is in the $1,000-$4,999 tier. "
+                "Review scope realism and buyer intent before using connects."
+            ),
+        )
+
+    if decision.priority == "A" and competition == "very_high":
+        return replace(
+            decision,
+            disposition="qualified" if decision.disposition != "reject" else decision.disposition,
+            priority="B",
+            score=min(decision.score, 74),
+            risks=_append(decision.risks, "very_high_competition_priority_cap"),
+            recommended_action=(
+                "Priority B — strong fit but very high competition. Review immediately and pursue only "
+                "when the profile proof and proposal angle are unusually strong."
+            ),
+        )
+
     return decision
 
 
@@ -215,6 +253,21 @@ def _country(value: object) -> str:
 def _country_from_visible_card(value: str) -> str:
     for term in _COUNTRY_TERMS:
         if re.search(rf"\b{re.escape(term)}\b", value, re.I):
+            return _country(term)
+    return ""
+
+
+def _country_from_explicit_self_location(value: str) -> str:
+    text = " ".join(str(value or "").split())
+    for term in _COUNTRY_TERMS:
+        escaped = re.escape(term)
+        patterns = (
+            rf"\bI\s+am\b.{{0,45}}\bfrom\s+{escaped}\b",
+            rf"\bwe\s+are\b.{{0,45}}\b(?:based|located)\s+in\s+{escaped}\b",
+            rf"\bour\s+(?:company|business|firm|team)\b.{{0,55}}\b(?:based|located|headquartered)\s+in\s+{escaped}\b",
+            rf"\b(?:company|business|firm|team)\s+(?:is\s+)?(?:based|located|headquartered)\s+in\s+{escaped}\b",
+        )
+        if any(re.search(pattern, text, re.I) for pattern in patterns):
             return _country(term)
     return ""
 
