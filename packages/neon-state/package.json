@@ -21,6 +21,10 @@
     "./operational-telemetry": {
       "types": "./dist/operational-telemetry.d.ts",
       "default": "./dist/operational-telemetry.js"
+    },
+    "./prospect-performance-evidence": {
+      "types": "./dist/prospect-performance-evidence.d.ts",
+      "default": "./dist/prospect-performance-evidence.js"
     }
   },
   "scripts": {
