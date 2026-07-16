@@ -10,13 +10,15 @@ def write_csv_report(path: Path, items: list[Any]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     fields = [
         "priority", "score", "disposition", "business_unit", "service_id", "title",
-        "captured_segment", "commercial_potential", "technical_fit", "buyer_quality",
+        "captured_segment", "search_name", "profile_name", "profile_url", "service_lane",
+        "market_scopes", "market_policy_status", "commercial_filter_status",
+        "commercial_filter_reason", "commercial_potential", "technical_fit", "buyer_quality",
         "competition_timing", "budget_usd", "fixed_budget_usd",
         "estimated_contract_value_usd", "budget_basis", "hourly_min_usd",
-        "hourly_max_usd", "client_spend_usd", "client_hire_rate", "client_rating",
-        "payment_status", "proposal_activity", "competition_level", "posted_age",
-        "client_country", "capture_quality", "proof_ids", "risks", "missing_evidence",
-        "recommended_action", "source_url",
+        "hourly_max_usd", "estimated_hours_per_week", "duration", "client_spend_usd",
+        "client_hire_rate", "client_rating", "payment_status", "proposal_activity",
+        "competition_level", "posted_age", "client_country", "capture_quality", "proof_ids",
+        "risks", "missing_evidence", "recommended_action", "source_url",
     ]
     with path.open("w", encoding="utf-8-sig", newline="") as handle:
         writer = csv.DictWriter(handle, fieldnames=fields)
@@ -34,6 +36,14 @@ def write_csv_report(path: Path, items: list[Any]) -> None:
                 "service_id": decision.service_id or "",
                 "title": evidence.title,
                 "captured_segment": evidence.segment,
+                "search_name": attrs.get("search_name") or "",
+                "profile_name": attrs.get("profile_name") or "",
+                "profile_url": attrs.get("profile_url") or "",
+                "service_lane": attrs.get("service_lane") or "",
+                "market_scopes": " | ".join(map(str, attrs.get("market_scopes") or [])),
+                "market_policy_status": attrs.get("market_policy_status") or "",
+                "commercial_filter_status": attrs.get("commercial_filter_status") or "",
+                "commercial_filter_reason": attrs.get("commercial_filter_reason") or "",
                 "commercial_potential": dims.get("commercial_potential", 0),
                 "technical_fit": dims.get("technical_fit", 0),
                 "buyer_quality": dims.get("buyer_quality", 0),
@@ -44,6 +54,8 @@ def write_csv_report(path: Path, items: list[Any]) -> None:
                 "budget_basis": attrs.get("budget_basis") or "",
                 "hourly_min_usd": attrs.get("hourly_min_usd") or "",
                 "hourly_max_usd": attrs.get("hourly_max_usd") or "",
+                "estimated_hours_per_week": attrs.get("estimated_hours_per_week") or "",
+                "duration": attrs.get("duration") or "",
                 "client_spend_usd": attrs.get("client_spend_usd") or "",
                 "client_hire_rate": attrs.get("client_hire_rate") or "",
                 "client_rating": attrs.get("client_rating") or "",
@@ -79,7 +91,7 @@ def write_html_report(path: Path, summary: Any, items: list[Any]) -> None:
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Codistan Upwork Pilot V2 Report</title>
+<title>Codistan Upwork Scheduled Acquisition Report</title>
 <style>
 body{{font-family:Segoe UI,Arial,sans-serif;margin:0;background:#f4f6f8;color:#182230}}
 header{{background:#111827;color:white;padding:28px 36px}}
@@ -99,9 +111,10 @@ details{{margin-top:10px}} pre{{white-space:pre-wrap;font-family:inherit;backgro
 </style>
 </head>
 <body>
-<header><h1>Upwork Opportunity Pilot V2</h1><p>BD-focused prioritization. No proposal, message, or dashboard write was performed.</p></header>
+<header><h1>Upwork Scheduled Acquisition</h1><p>Three saved profiles, DST-aware market windows and BD-focused prioritization. No proposal or message was sent.</p></header>
 <main>
 <section class="grid">
+<div class="metric"><strong>{summary.searches_completed}</strong>Searches completed</div>
 <div class="metric"><strong>{summary.links_found}</strong>Links found</div>
 <div class="metric"><strong>{summary.extracted}</strong>Extracted</div>
 <div class="metric"><strong>{priorities.get('A',0)}</strong>Priority A</div>
@@ -109,7 +122,7 @@ details{{margin-top:10px}} pre{{white-space:pre-wrap;font-family:inherit;backgro
 <div class="metric"><strong>{priorities.get('C',0)}</strong>Priority C</div>
 <div class="metric"><strong>{dispositions.get('bd_review',0)}</strong>BD review</div>
 </section>
-<p class="muted"><strong>A:</strong> contact within 24 hours. <strong>B:</strong> human BD review. <strong>C:</strong> archive. Only A and B records are written to dashboard-ready.jsonl.</p>
+<p class="muted"><strong>A:</strong> pursue within 24 hours. <strong>B:</strong> human BD review. <strong>C:</strong> archive. Only A and B records are written to dashboard-ready.jsonl and offered to Prospect Desk.</p>
 {cards if cards else '<div class="card"><h2>No opportunities extracted</h2></div>'}
 </main></body></html>"""
     path.write_text(html, encoding="utf-8")
@@ -127,11 +140,21 @@ def _card(item: Any) -> str:
     description = escape(evidence.body[:5000])
     hourly = _hourly_label(attrs)
     disposition = "BD Review Required" if decision.disposition == "bd_review" else decision.disposition.replace("_", " ").title()
+    market_scopes = ", ".join(map(str, attrs.get("market_scopes") or [])) or "Unverified"
+    profile_url = str(attrs.get("profile_url") or "")
+    profile_name = str(attrs.get("profile_name") or attrs.get("search_name") or evidence.segment)
+    profile_label = (
+        f'<a href="{escape(profile_url, quote=True)}" target="_blank" rel="noreferrer">{escape(profile_name)}</a>'
+        if profile_url
+        else escape(profile_name)
+    )
     return f"""<article class="card {escape(decision.priority.lower())}">
 <div class="row"><span class="badge priority">{escape(decision.priority)}</span><span class="score">{decision.score}</span>
 <span class="badge">{escape(disposition)}</span><span class="badge">{escape(decision.business_unit or 'Unrouted')}</span>
 <span class="badge">routed: {escape(decision.service_id or 'none')}</span>
-<span class="badge">captured: {escape(evidence.segment)}</span>
+<span class="badge">profile: {profile_label}</span>
+<span class="badge">market: {escape(market_scopes)}</span>
+<span class="badge">commercial filter: {escape(str(attrs.get('commercial_filter_status') or 'unknown'))}</span>
 <span class="badge">confidence: {escape(decision.confidence)}</span></div>
 <h2><a href="{escape(evidence.source_url, quote=True)}" target="_blank" rel="noreferrer">{escape(evidence.title)}</a></h2>
 <div class="dimensions">
@@ -140,8 +163,14 @@ def _card(item: Any) -> str:
 <div class="dimension"><strong>Buyer quality</strong><br>{dims.get('buyer_quality',0)}/20</div>
 <div class="dimension"><strong>Competition/timing</strong><br>{dims.get('competition_timing',0)}/20</div>
 </div>
+<p><strong>Saved search:</strong> {escape(str(attrs.get('search_name') or evidence.segment))} &nbsp;
+<strong>Intended profile:</strong> {profile_label}<br>
+<strong>Market policy:</strong> {escape(str(attrs.get('market_policy_status') or 'unknown'))} — {escape(str(attrs.get('market_policy_reason') or ''))}<br>
+<strong>Commercial filter:</strong> {escape(str(attrs.get('commercial_filter_status') or 'unknown'))} — {escape(str(attrs.get('commercial_filter_reason') or ''))}</p>
 <p><strong>Budget/value:</strong> {escape(str(attrs.get('fixed_budget_usd') or attrs.get('estimated_contract_value_usd') or attrs.get('budget_usd') or 'Not visible'))} &nbsp;
-<strong>Hourly:</strong> {escape(hourly)} &nbsp;<strong>Proposals:</strong> {escape(str(attrs.get('proposal_activity') or 'Not visible'))}<br>
+<strong>Hourly:</strong> {escape(hourly)} &nbsp;<strong>Weekly hours:</strong> {escape(str(attrs.get('estimated_hours_per_week') or 'Not visible'))} &nbsp;
+<strong>Duration:</strong> {escape(str(attrs.get('duration') or 'Not visible'))}<br>
+<strong>Proposals:</strong> {escape(str(attrs.get('proposal_activity') or 'Not visible'))} &nbsp;
 <strong>Client spend:</strong> {escape(str(attrs.get('client_spend_usd') or 'Not visible'))} &nbsp;
 <strong>Hire rate:</strong> {escape(str(attrs.get('client_hire_rate') or 'Not visible'))} &nbsp;
 <strong>Rating:</strong> {escape(str(attrs.get('client_rating') or 'Not visible'))} &nbsp;
