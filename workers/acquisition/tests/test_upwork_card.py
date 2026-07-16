@@ -26,26 +26,41 @@ class UpworkCardTests(unittest.TestCase):
     def test_parses_fixed_budget_and_visible_client_signals(self) -> None:
         value = parse_visible_card_metrics(
             "Posted 41 minutes ago Proposals: 5 to 10 Fixed-price - Expert - "
-            "Est. Budget: $5,000 Payment verified $50K+ spent United States"
+            "Est. Budget: $5,000 Payment verified 4.95 of 5 stars 23 hires "
+            "$50K+ spent United States"
         )
         self.assertEqual(value["fixed_budget_usd"], 5000)
         self.assertEqual(value["budget_usd"], 5000)
         self.assertEqual(value["budget_basis"], "fixed")
         self.assertEqual(value["client_spend_usd"], 50000)
+        self.assertEqual(value["client_rating"], 4.95)
+        self.assertEqual(value["client_hires"], 23)
         self.assertEqual(value["proposal_activity"], "5 to 10")
         self.assertEqual(value["competition_level"], "medium")
         self.assertEqual(value["payment_status"], "verified")
+        self.assertEqual(value["posted_age"], "41 minutes ago")
 
-    def test_parses_hourly_range_without_hr_suffix(self) -> None:
+    def test_estimates_hourly_contract_value_from_duration_and_hours(self) -> None:
         value = parse_visible_card_metrics(
-            "Hourly: $30-$60 - Intermediate - Less than 1 month - "
+            "Hourly: $30-$60 - Intermediate - Less than 1 month, Less than 30 hrs/week - "
             "Proposals: 50+ Payment verified $60K+ spent"
         )
         self.assertEqual(value["hourly_min_usd"], 30)
         self.assertEqual(value["hourly_max_usd"], 60)
-        self.assertEqual(value["budget_usd"], 9600)
-        self.assertEqual(value["budget_basis"], "hourly_monthly_estimate")
+        self.assertEqual(value["estimated_hours_per_week"], 30)
+        self.assertEqual(value["estimated_contract_value_usd"], 7200)
+        self.assertEqual(value["budget_usd"], 7200)
+        self.assertEqual(value["budget_basis"], "hourly_contract_estimate")
         self.assertEqual(value["competition_level"], "very_high")
+
+    def test_detects_enterprise_and_recurring_signals(self) -> None:
+        value = parse_visible_card_metrics(
+            "Build an enterprise SaaS platform and ongoing custom integration. "
+            "We need a long-term partner for future phases."
+        )
+        self.assertTrue(value["enterprise_signal"])
+        self.assertTrue(value["recurring_signal"])
+        self.assertTrue(value["custom_delivery_signal"])
 
     def test_removes_feedback_menu_from_description(self) -> None:
         body, metadata = clean_visible_description(
