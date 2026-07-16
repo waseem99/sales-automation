@@ -1,0 +1,57 @@
+[pilot]
+version = "2026-07-16.upwork-scheduled.v1"
+max_jobs_total = 25
+min_description_chars = 80
+
+[automation]
+version = "upwork-scheduled.v1"
+navigation_wait_seconds = 15
+challenge_wait_seconds = 900
+challenge_poll_seconds = 15
+max_runtime_minutes = 40
+max_detail_enrichments = 8
+detail_wait_seconds = 12
+installed_browser_only = true
+ingest_url_env = "ACQUISITION_INGEST_URL"
+ingest_token_env = "ACQUISITION_INGEST_TOKEN"
+request_timeout_seconds = 30
+retention_days = 30
+
+# The worker opens only these configured Upwork search-result URLs. It does not
+# submit proposals, send messages, solve security challenges or imitate human
+# input. Search and detail pages are visible in the authorized Chrome profile.
+
+[[searches]]
+id = "software-saas"
+enabled = true
+url = "https://www.upwork.com/nx/search/jobs/?q=saas%20react%20native%20next.js%20node.js%20marketplace%20software%20architecture&sort=recency"
+max_jobs = 5
+delay_seconds = 15
+
+[[searches]]
+id = "ai-automation"
+enabled = true
+url = "https://www.upwork.com/nx/search/jobs/?q=ai%20agent%20rag%20llm%20automation%20n8n%20voice%20ai&sort=recency"
+max_jobs = 5
+delay_seconds = 15
+
+[[searches]]
+id = "cybersecurity"
+enabled = true
+url = "https://www.upwork.com/nx/search/jobs/?q=vapt%20penetration%20testing%20soc%202%20iso%2027001%20iam%20cloud%20security&sort=recency"
+max_jobs = 5
+delay_seconds = 15
+
+[[searches]]
+id = "immersive"
+enabled = true
+url = "https://www.upwork.com/nx/search/jobs/?q=3d%20animation%20unity%20unreal%20augmented%20reality%20virtual%20reality%20webxr&sort=recency"
+max_jobs = 5
+delay_seconds = 15
+
+[[searches]]
+id = "digital-growth"
+enabled = true
+url = "https://www.upwork.com/nx/search/jobs/?q=website%20redesign%20seo%20aeo%20performance%20marketing%20analytics%20growth&sort=recency"
+max_jobs = 5
+delay_seconds = 15
