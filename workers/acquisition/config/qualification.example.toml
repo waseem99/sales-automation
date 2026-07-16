@@ -1,5 +1,5 @@
 [qualification]
-version = "2026-07-16.v1"
+version = "2026-07-16.v2"
 proposal_ready_score = 80
 contact_ready_score = 68
 qualified_score = 55
@@ -14,7 +14,12 @@ prohibited_terms = [
 [[services]]
 id = "software-saas"
 business_unit = "Codistan"
-keywords = ["saas", "react", "react native", "next.js", "node.js", "python", "marketplace", "mobile app", "portal", "subscription"]
+keywords = [
+  "saas", "react", "react native", "next.js", "node.js", "python",
+  "marketplace", "mobile app", "desktop application", "web application",
+  "browser extension", "portal", "subscription", "full stack", "full-stack",
+  "software architecture", "technical lead", "enterprise platform", "api integration"
+]
 minimum_budget_usd = 3000
 remote_delivery = true
 proof_ids = ["acmetel-esim", "bizb-marketplace"]
@@ -22,7 +27,13 @@ proof_ids = ["acmetel-esim", "bizb-marketplace"]
 [[services]]
 id = "ai-automation"
 business_unit = "Hilarious AI"
-keywords = ["ai agent", "rag", "llm", "automation", "chatbot", "document intelligence", "voice ai", "copilot"]
+keywords = [
+  "ai agent", "ai assistant", "artificial intelligence", "generative ai",
+  "rag", "llm", "large language model", "automation", "workflow automation",
+  "n8n", "retool", "chatbot", "document intelligence", "voice ai",
+  "voice receptionist", "ai receptionist", "prompt engineering", "copilot",
+  "natural language query", "natural language queries", "ai implementation"
+]
 minimum_budget_usd = 3000
 remote_delivery = true
 proof_ids = ["private-rag", "secure-chat-ai"]
@@ -30,7 +41,11 @@ proof_ids = ["private-rag", "secure-chat-ai"]
 [[services]]
 id = "cybersecurity"
 business_unit = "Cytas"
-keywords = ["vapt", "penetration testing", "soc 2", "iso 27001", "hipaa", "cmmc", "iam", "cloud security"]
+keywords = [
+  "vapt", "penetration testing", "soc 2", "iso 27001", "hipaa", "cmmc",
+  "iam", "identity access management", "cloud security", "security assessment",
+  "compliance readiness", "siem", "incident response"
+]
 minimum_budget_usd = 2000
 remote_delivery = true
 proof_ids = ["cytas-security-delivery"]
@@ -38,7 +53,11 @@ proof_ids = ["cytas-security-delivery"]
 [[services]]
 id = "immersive"
 business_unit = "Motionly"
-keywords = ["3d animation", "unity", "unreal", "augmented reality", "virtual reality", "ar experience", "vr training"]
+keywords = [
+  "3d animation", "3d modeling", "unity", "unreal", "augmented reality",
+  "virtual reality", "ar experience", "vr training", "webxr", "metaverse",
+  "character animation", "cgi"
+]
 minimum_budget_usd = 1500
 remote_delivery = true
 proof_ids = ["motionly-immersive"]
@@ -46,7 +65,11 @@ proof_ids = ["motionly-immersive"]
 [[services]]
 id = "digital-growth"
 business_unit = "Digital Marketing"
-keywords = ["website redesign", "seo", "performance marketing", "analytics", "social media", "brand strategy"]
+keywords = [
+  "website redesign", "seo", "search engine optimization", "aeo", "geo",
+  "performance marketing", "analytics", "social media", "brand strategy",
+  "google ads", "meta ads", "content marketing", "growth marketing"
+]
 minimum_budget_usd = 1500
 remote_delivery = true
 proof_ids = ["renome-digital", "ranchers-digital"]
