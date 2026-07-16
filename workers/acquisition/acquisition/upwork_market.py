@@ -74,14 +74,19 @@ _COUNTRY_TERMS = (
 _ALLOWED_HOURLY_DURATIONS = {"3 to 6 months", "more than 6 months"}
 
 
-def annotate_profile_and_market(evidence: SourceEvidence, segment: str) -> SourceEvidence:
+def annotate_profile_and_market(
+    evidence: SourceEvidence,
+    segment: str,
+    *,
+    visible_client_card_text: str = "",
+) -> SourceEvidence:
     attributes = dict(evidence.attributes)
     profile = PROFILE_METADATA.get(segment, {})
     attributes.update(profile)
 
     country = _country(attributes.get("client_country"))
-    if not country:
-        country = _country_from_text(f"{evidence.title} {evidence.body}")
+    if not country and visible_client_card_text:
+        country = _country_from_visible_card(visible_client_card_text)
     if country:
         attributes["client_country"] = country
 
@@ -203,7 +208,7 @@ def _country(value: object) -> str:
     return _COUNTRY_ALIASES.get(text, text)
 
 
-def _country_from_text(value: str) -> str:
+def _country_from_visible_card(value: str) -> str:
     for term in _COUNTRY_TERMS:
         if re.search(rf"\b{re.escape(term)}\b", value, re.I):
             return _country(term)
