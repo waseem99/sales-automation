@@ -71,8 +71,7 @@ def parse_visible_card_metrics(text: str) -> dict[str, Any]:
         clean,
         (
             r"Est\.?\s*Budget\s*:?\s*\$([\d,]+(?:\.\d+)?)",
-            r"Fixed(?:-price)?[^$]{0,80}\$([\d,]+(?:\.\d+)?)",
-            r"Budget[^$]{0,40}\$([\d,]+(?:\.\d+)?)",
+            r"(?:Fixed(?:-price)?[^$]{0,50})?Budget\s*:?\s*\$([\d,]+(?:\.\d+)?)",
         ),
     )
 
@@ -117,6 +116,10 @@ def parse_visible_card_metrics(text: str) -> dict[str, Any]:
         payment_status = "not_visible"
 
     proposal_activity = proposals.group(1) if proposals else None
+    local_required = bool(
+        re.search(r"\b(on[- ]?site|must be located in|local candidates? only)\b", clean, re.I)
+    )
+    country = _country(clean)
     return {
         "budget_usd": budget,
         "budget_basis": "fixed" if fixed is not None else "hourly_monthly_estimate" if hourly else None,
@@ -133,10 +136,9 @@ def parse_visible_card_metrics(text: str) -> dict[str, Any]:
         "posted_age": posted.group(1) if posted else None,
         "duration": duration.group(1) if duration else None,
         "experience_level": experience.group(1) if experience else None,
-        "client_country": _country(clean),
-        "local_presence_required": bool(
-            re.search(r"\b(on[- ]?site|must be located in|local candidates? only)\b", clean, re.I)
-        ),
+        "client_country": country,
+        "local_presence_required": local_required,
+        "delivery_country": country if local_required and country else "",
     }
 
 
@@ -154,7 +156,7 @@ def _derive_description(card_text: str, title: str) -> str:
         flags=re.I,
     ).strip()
     value = re.sub(
-        r"^(?:Hourly|Fixed(?:-price)?)\s*:?[^.]{0,180}",
+        r"^(?:Hourly|Fixed(?:-price)?)\s*:?[^.]{0,120}(?=\.|\b(?:We|I|Our|The|Looking|Seeking|Need)\b)",
         "",
         value,
         flags=re.I,
