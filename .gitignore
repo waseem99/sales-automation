@@ -14,5 +14,7 @@ __pycache__/
 .pytest_cache/
 .mypy_cache/
 .ruff_cache/
+*.egg-info/
+build/
 workers/acquisition/.profiles/
 workers/acquisition/browser-profiles/
