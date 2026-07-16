@@ -16,8 +16,15 @@ from .models import OpportunityRecord, SourceEvidence
 from .qualification import QualificationDecision, load_qualification_config, qualify
 
 
+UPWORK_HOME_URL = "https://www.upwork.com/nx/find-work/"
+
+
 class HumanActionRequired(RuntimeError):
     """Raised when Upwork presents login, verification, or account protection."""
+
+
+class PilotNoData(RuntimeError):
+    """Raised when a live pilot could not obtain a trustworthy opportunity sample."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -53,6 +60,9 @@ class PilotItem:
 class PilotSummary:
     started_at: str
     completed_at: str | None = None
+    status: str = "running"
+    searches_completed: int = 0
+    human_verification_prompts: int = 0
     links_found: int = 0
     reviewed: int = 0
     extracted: int = 0
@@ -83,15 +93,15 @@ def load_upwork_pilot_config(path: Path) -> UpworkPilotConfig:
                 enabled=bool(item.get("enabled", True)),
                 url=url,
                 max_jobs=max(1, min(int(item.get("max_jobs", 5)), 20)),
-                delay_seconds=max(2.0, min(float(item.get("delay_seconds", 4.0)), 30.0)),
+                delay_seconds=max(4.0, min(float(item.get("delay_seconds", 8.0)), 30.0)),
             )
         )
     enabled = tuple(search for search in searches if search.enabled)
     if not enabled:
         raise ValueError("At least one enabled Upwork search is required")
     return UpworkPilotConfig(
-        version=str(pilot.get("version", "upwork-pilot.v1")),
-        max_jobs_total=max(1, min(int(pilot.get("max_jobs_total", 20)), 100)),
+        version=str(pilot.get("version", "upwork-pilot.v2")),
+        max_jobs_total=max(1, min(int(pilot.get("max_jobs_total", 10)), 100)),
         min_description_chars=max(40, int(pilot.get("min_description_chars", 100))),
         searches=enabled,
     )
@@ -106,6 +116,7 @@ def run_upwork_pilot(
     output_directory: Path,
     checkpoint_path: Path,
 ) -> tuple[PilotSummary, list[PilotItem]]:
+    del repository_root  # The profile path was already validated by the CLI.
     config = load_upwork_pilot_config(pilot_config_path)
     qualification_config = load_qualification_config(qualification_config_path)
     seen = _load_seen(checkpoint_path)
@@ -114,53 +125,104 @@ def run_upwork_pilot(
     session_seen: set[str] = set()
 
     with persistent_chromium(profile_path, headless=False) as context:
-        search_page = context.pages[0] if context.pages else context.new_page()
-        detail_page = context.new_page()
-        try:
-            for search in config.searches:
+        pages = list(context.pages)
+        page = pages[0] if pages else context.new_page()
+        for extra in pages[1:]:
+            try:
+                extra.close()
+            except Exception:
+                pass
+
+        _navigate_with_human_gate(
+            page,
+            UPWORK_HOME_URL,
+            delay_seconds=8.0,
+            summary=summary,
+            label="Upwork Find Work home",
+        )
+
+        for search in config.searches:
+            if summary.reviewed >= config.max_jobs_total:
+                break
+
+            _navigate_with_human_gate(
+                page,
+                search.url,
+                delay_seconds=search.delay_seconds,
+                summary=summary,
+                label=f"{search.id} search",
+            )
+            _settle(page)
+            links = extract_job_links(page, search.max_jobs)
+
+            if not links:
+                # One ordinary reload is allowed after the operator has cleared any
+                # visible challenge. This is not a challenge bypass.
+                page.wait_for_timeout(4_000)
+                page.reload(wait_until="domcontentloaded", timeout=60_000)
+                page.wait_for_timeout(int(search.delay_seconds * 1000))
+                _ensure_upwork_ready(page, summary=summary, label=f"{search.id} search reload")
+                _settle(page)
+                links = extract_job_links(page, search.max_jobs)
+
+            summary.links_found += len(links)
+            summary.searches_completed += 1
+
+            for source_url in links:
                 if summary.reviewed >= config.max_jobs_total:
                     break
-                search_page.goto(search.url, wait_until="domcontentloaded", timeout=60_000)
-                search_page.wait_for_timeout(int(search.delay_seconds * 1000))
-                _assert_upwork_session(search_page)
-                _settle(search_page)
-                links = extract_job_links(search_page, search.max_jobs)
-                summary.links_found += len(links)
-                for source_url in links:
-                    if summary.reviewed >= config.max_jobs_total:
-                        break
-                    source_id = external_job_id(source_url)
-                    if source_id in seen or source_id in session_seen:
-                        summary.duplicates += 1
-                        continue
-                    summary.reviewed += 1
-                    try:
-                        detail_page.goto(source_url, wait_until="domcontentloaded", timeout=60_000)
-                        detail_page.wait_for_timeout(int(search.delay_seconds * 1000))
-                        _assert_upwork_session(detail_page)
-                        evidence = extract_job_evidence(detail_page, search.id)
-                        if len(evidence.body.strip()) < config.min_description_chars:
-                            summary.rejected_extraction += 1
-                            continue
-                        record = OpportunityRecord(
-                            dedupe_key=_dedupe_key(evidence),
-                            evidence=evidence,
-                        )
-                        decision = qualify(record, qualification_config)
-                        items.append(PilotItem(record=record, qualification=decision))
-                        seen.add(source_id)
-                        session_seen.add(source_id)
-                        _save_seen(checkpoint_path, seen)
-                        summary.extracted += 1
-                        time.sleep(search.delay_seconds)
-                    except HumanActionRequired:
-                        raise
-                    except Exception:
-                        summary.failed += 1
-        finally:
-            detail_page.close()
-            search_page.close()
+                source_id = external_job_id(source_url)
+                if source_id in seen or source_id in session_seen:
+                    summary.duplicates += 1
+                    continue
 
+                summary.reviewed += 1
+                try:
+                    _navigate_with_human_gate(
+                        page,
+                        source_url,
+                        delay_seconds=search.delay_seconds,
+                        summary=summary,
+                        label="Upwork job detail",
+                    )
+                    evidence = extract_job_evidence(page, search.id)
+                    if len(evidence.body.strip()) < config.min_description_chars:
+                        summary.rejected_extraction += 1
+                        continue
+
+                    record = OpportunityRecord(
+                        dedupe_key=_dedupe_key(evidence),
+                        evidence=evidence,
+                    )
+                    decision = qualify(record, qualification_config)
+                    items.append(PilotItem(record=record, qualification=decision))
+                    seen.add(source_id)
+                    session_seen.add(source_id)
+                    _save_seen(checkpoint_path, seen)
+                    summary.extracted += 1
+                    time.sleep(search.delay_seconds)
+                except HumanActionRequired:
+                    raise
+                except Exception:
+                    summary.failed += 1
+
+    if summary.links_found == 0:
+        summary.status = "incomplete_no_links"
+        summary.completed_at = utc_now_iso()
+        raise PilotNoData(
+            "No Upwork job links were collected. The page was likely still under "
+            "Cloudflare/security verification or the search results did not finish loading. "
+            "No zero-result report was accepted."
+        )
+    if summary.extracted == 0:
+        summary.status = "incomplete_no_evidence"
+        summary.completed_at = utc_now_iso()
+        raise PilotNoData(
+            "Upwork links were found, but no complete job evidence was extracted. "
+            "No zero-opportunity report was accepted."
+        )
+
+    summary.status = "completed"
     summary.completed_at = utc_now_iso()
     write_pilot_outputs(
         output_directory=output_directory,
@@ -169,6 +231,127 @@ def run_upwork_pilot(
         config_version=config.version,
     )
     return summary, items
+
+
+def _navigate_with_human_gate(
+    page: Any,
+    url: str,
+    *,
+    delay_seconds: float,
+    summary: PilotSummary,
+    label: str,
+) -> None:
+    page.goto(url, wait_until="domcontentloaded", timeout=60_000)
+    page.wait_for_timeout(int(delay_seconds * 1000))
+    _ensure_upwork_ready(page, summary=summary, label=label)
+
+    # Verification can return the user to Find Work rather than the requested URL.
+    # Retry the intended URL once, slowly, only after the human challenge is gone.
+    target_path = urlparse(url).path
+    current_path = urlparse(page.url).path
+    if target_path != current_path and (
+        "/nx/search/jobs" in target_path
+        or "/jobs/" in target_path
+        or "/freelance-jobs/apply/" in target_path
+    ):
+        page.wait_for_timeout(3_000)
+        page.goto(url, wait_until="domcontentloaded", timeout=60_000)
+        page.wait_for_timeout(int(delay_seconds * 1000))
+        _ensure_upwork_ready(page, summary=summary, label=f"{label} retry")
+
+
+def _ensure_upwork_ready(
+    page: Any,
+    *,
+    summary: PilotSummary,
+    label: str,
+    max_prompts: int = 3,
+) -> None:
+    reason = _challenge_reason(page)
+    if reason is None:
+        return
+
+    for attempt in range(1, max_prompts + 1):
+        summary.human_verification_prompts += 1
+        print("")
+        print("UPWORK HUMAN VERIFICATION REQUIRED")
+        print(f"Location: {label}")
+        print(f"Detected: {reason}")
+        print("Complete the visible Upwork/Cloudflare verification yourself.")
+        print("Do not close the browser. Wait until a normal Upwork page is fully visible.")
+        answer = input(
+            f"Press Enter after verification is complete ({attempt}/{max_prompts}), "
+            "or type Q to stop safely: "
+        ).strip().lower()
+        if answer == "q":
+            raise HumanActionRequired("The operator stopped during Upwork verification.")
+
+        page.wait_for_timeout(5_000)
+        reason = _challenge_reason(page)
+        if reason is None:
+            print("Upwork verification cleared. Resuming the dry-run.")
+            return
+
+    raise HumanActionRequired(
+        "Upwork verification remained active after three human-confirmed attempts. "
+        "The browser was not bypassed and the pilot stopped safely."
+    )
+
+
+def _challenge_reason(page: Any) -> str | None:
+    if page.is_closed():
+        return "the controlled Upwork browser tab was closed"
+
+    parsed = urlparse(page.url)
+    host = (parsed.hostname or "").lower()
+    path = parsed.path.lower()
+    if host not in {"upwork.com", "www.upwork.com"}:
+        return "Upwork redirected outside the expected domain"
+    if any(value in path for value in (
+        "/login",
+        "/account-security",
+        "/identity-verification",
+        "/captcha",
+        "/checkpoint",
+        "/challenge",
+    )):
+        return "Upwork login, identity verification, or account protection is visible"
+
+    try:
+        title = (page.title() or "").strip().lower()
+    except Exception:
+        title = ""
+    if any(value in title for value in ("just a moment", "attention required", "security verification")):
+        return f"security page title: {title[:80]}"
+
+    try:
+        if page.locator('iframe[src*="challenges.cloudflare.com"]').count() > 0:
+            return "Cloudflare human-verification frame is visible"
+    except Exception:
+        pass
+
+    try:
+        body = " ".join(page.locator("body").inner_text(timeout=5_000).lower().split())
+    except Exception:
+        body = ""
+
+    challenge_terms = (
+        "verify you are human",
+        "performing security verification",
+        "complete the security check",
+        "checking your browser",
+        "verify your identity",
+        "unusual activity",
+        "cloudflare ray id",
+        "enable javascript and cookies to continue",
+    )
+    for term in challenge_terms:
+        if term in body:
+            return f"security text detected: {term}"
+
+    if len(body) < 20:
+        return "the Upwork page remained blank or did not finish loading"
+    return None
 
 
 def extract_job_links(page: Any, limit: int) -> list[str]:
@@ -230,7 +413,7 @@ def extract_job_evidence(page: Any, segment: str) -> SourceEvidence:
     attributes = parse_upwork_metrics(main_text)
     attributes["skills"] = extract_skills(page)
     attributes["captured_from"] = "authenticated_job_detail"
-    attributes["pilot_schema_version"] = "upwork-pilot-evidence.v1"
+    attributes["pilot_schema_version"] = "upwork-pilot-evidence.v2"
     evidence = SourceEvidence(
         source="upwork",
         source_id=external_job_id(url),
@@ -257,7 +440,11 @@ def parse_upwork_metrics(text: str) -> dict[str, Any]:
     hourly = re.search(r"\$([\d,.]+)\s*-\s*\$([\d,.]+)\s*/?\s*(?:hr|hour)", clean, re.I)
     spend = re.search(r"\$([\d,.]+)\s*([kKmM]?)\+?\s*spent", clean, re.I)
     hire_rate = re.search(r"(\d{1,3})%\s*hire rate", clean, re.I)
-    proposals = re.search(r"(?:proposals?|applicants?)\s*:?\s*(Less than\s+\d+|\d+\s*to\s*\d+|\d+\+?)", clean, re.I)
+    proposals = re.search(
+        r"(?:proposals?|applicants?)\s*:?\s*(Less than\s+\d+|\d+\s*to\s*\d+|\d+\+?)",
+        clean,
+        re.I,
+    )
     posted = re.search(r"Posted\s+([^|]{1,50}?\s+ago)", clean, re.I)
     duration = re.search(
         r"(Less than 1 month|1 to 3 months|3 to 6 months|More than 6 months)",
@@ -280,8 +467,14 @@ def parse_upwork_metrics(text: str) -> dict[str, Any]:
         "duration": duration.group(1) if duration else None,
         "experience_level": experience.group(1) if experience else None,
         "client_country": country,
-        "local_presence_required": bool(re.search(r"\b(on[- ]?site|must be located in|local candidates? only)\b", clean, re.I)),
-        "delivery_country": country if re.search(r"\b(on[- ]?site|must be located in|local candidates? only)\b", clean, re.I) else "",
+        "local_presence_required": bool(
+            re.search(r"\b(on[- ]?site|must be located in|local candidates? only)\b", clean, re.I)
+        ),
+        "delivery_country": (
+            country
+            if re.search(r"\b(on[- ]?site|must be located in|local candidates? only)\b", clean, re.I)
+            else ""
+        ),
     }
 
 
@@ -335,7 +528,7 @@ def write_pilot_outputs(
 
     output_directory.mkdir(parents=True, exist_ok=True)
     payload = {
-        "schema_version": "upwork-dry-run-report.v1",
+        "schema_version": "upwork-dry-run-report.v2",
         "config_version": config_version,
         "summary": summary.to_dict(),
         "items": [item.to_dict() for item in items],
@@ -363,27 +556,11 @@ def write_pilot_outputs(
     write_html_report(output_directory / "report.html", summary, items)
 
 
-def _assert_upwork_session(page: Any) -> None:
-    parsed = urlparse(page.url)
-    path = parsed.path.lower()
-    if parsed.hostname not in {"upwork.com", "www.upwork.com"}:
-        raise HumanActionRequired("Upwork redirected outside the expected domain.")
-    if any(value in path for value in ("/login", "/account-security", "/identity-verification", "/captcha")):
-        raise HumanActionRequired("Upwork requires login or account verification in the open browser.")
-    body = ""
-    try:
-        body = page.locator("body").inner_text(timeout=5_000).lower()
-    except Exception:
-        pass
-    if any(value in body for value in ("verify your identity", "unusual activity", "complete the security check")):
-        raise HumanActionRequired("Upwork requires a human security action in the open browser.")
-
-
 def _settle(page: Any) -> None:
-    page.mouse.wheel(0, 1200)
+    page.mouse.wheel(0, 900)
+    page.wait_for_timeout(1_500)
+    page.mouse.wheel(0, -350)
     page.wait_for_timeout(1_000)
-    page.mouse.wheel(0, -500)
-    page.wait_for_timeout(500)
 
 
 def _first_visible_text(page: Any, selectors: tuple[str, ...], max_chars: int = 12_000) -> str:
