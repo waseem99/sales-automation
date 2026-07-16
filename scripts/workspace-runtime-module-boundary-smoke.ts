@@ -9,12 +9,15 @@ const pageSource = readFileSync(new URL('../vercel/workspace-pages.ts', import.m
 const modelSource = readFileSync(new URL('../vercel/workspace-page-model.ts', import.meta.url), 'utf8');
 const neonStateSource = readFileSync(new URL('../packages/neon-state/src/index.ts', import.meta.url), 'utf8');
 const prospectQuerySource = readFileSync(new URL('../packages/neon-state/src/prospect-query.ts', import.meta.url), 'utf8');
+const consolidatedPageSource = readFileSync(new URL('../packages/neon-state/src/prospect-page-v2.ts', import.meta.url), 'utf8');
+const packageSource = readFileSync(new URL('../packages/neon-state/package.json', import.meta.url), 'utf8');
 const staticSalesAutomationImport = /import\s+(?!type\b)[\s\S]*?from\s+['"]@sales-automation\//m;
 
 assert.equal(staticSalesAutomationImport.test(runtimeSource), false);
 assert.equal(staticSalesAutomationImport.test(pageSource), false);
 assert.equal(staticSalesAutomationImport.test(modelSource), false);
 assert.equal(runtimeSource.includes("import('@sales-automation/neon-state')"), true);
+assert.equal(runtimeSource.includes("import('@sales-automation/neon-state/prospect-page-v2')"), true);
 assert.equal(runtimeSource.includes("import('@sales-automation/prospect-discovery')"), true);
 assert.equal(runtimeSource.includes("import('@sales-automation/storage')"), true);
 assert.equal(runtimeSource.includes("import('@sales-automation/web/prospect-handler')"), true);
@@ -24,7 +27,8 @@ assert.equal(runtimeSource.includes('loadApprovedPortfolioCatalog'), false);
 assert.equal(runtimeSource.includes('persistLeadRecords'), false);
 assert.equal(runtimeSource.includes('loadNeonScopedRecordsWithMetrics'), false);
 assert.equal(runtimeSource.includes('buildWorkspacePage('), false);
-assert.match(runtimeSource, /loadNeonProspectPageWithMetrics/);
+assert.equal(runtimeSource.includes('loadNeonProspectPageWithMetrics('), false);
+assert.match(runtimeSource, /loadNeonProspectPageV2WithMetrics/);
 assert.match(runtimeSource, /loadNeonProspectRecordWithMetrics/);
 assert.match(runtimeSource, /workspace\.queryScope/);
 assert.match(runtimeSource, /selectedId\s*\?\s*await neonState\.loadNeonProspectRecordWithMetrics/);
@@ -51,16 +55,20 @@ assert.match(neonStateSource, /SCHEMA_QUERY_COUNT = 5/);
 assert.match(neonStateSource, /cacheState: 'cold' \| 'warm'/);
 assert.match(neonStateSource, /schemaReadiness\.delete/);
 assert.match(prospectQuerySource, /ProspectWorkspaceScope/);
-assert.match(prospectQuerySource, /loadNeonProspectPageWithMetrics/);
 assert.match(prospectQuerySource, /loadNeonProspectRecordWithMetrics/);
-assert.match(prospectQuerySource, /queryCount: schema\.queryCount \+ 4/);
-assert.match(prospectQuerySource, /dataQueryCount: 4/);
 assert.match(prospectQuerySource, /queryCount: schema\.queryCount \+ 1/);
 assert.match(prospectQuerySource, /dataQueryCount: 1/);
-assert.match(prospectQuerySource, /requireKnownService/);
-assert.match(prospectQuerySource, /jsonb_typeof\(record->'lead'->'tender'\)/);
-assert.match(prospectQuerySource, /LOWER\(record::text\)/);
-assert.match(prospectQuerySource, /follow_up_at\(record\)/);
+assert.match(consolidatedPageSource, /loadNeonProspectPageV2WithMetrics/);
+assert.match(consolidatedPageSource, /WITH visible AS MATERIALIZED/);
+assert.match(consolidatedPageSource, /filtered AS MATERIALIZED/);
+assert.match(consolidatedPageSource, /JSONB_AGG\(owner ORDER BY owner\)/);
+assert.match(consolidatedPageSource, /queryCount: schema\.queryCount \+ indexes\.queryCount \+ 2/);
+assert.match(consolidatedPageSource, /dataQueryCount: 2/);
+assert.match(consolidatedPageSource, /requireKnownService/);
+assert.match(consolidatedPageSource, /jsonb_typeof\(record->'lead'->'tender'\)/);
+assert.match(consolidatedPageSource, /LOWER\(record::text\)/);
+assert.match(consolidatedPageSource, /follow_up_at\(record\)/);
+assert.match(packageSource, /\.\/prospect-page-v2/);
 assert.match(modelSource, /queryScope: ProspectWorkspaceScope/);
 assert.match(modelSource, /queryScopeFor/);
 assert.equal(pageSource.includes("from './workspace-page-model.js'"), true);
@@ -78,7 +86,7 @@ for (const page of WORKSPACE_PAGES) {
   }
 }
 
-console.log('Neon-native workspace pagination keeps dynamic boundaries, uses four warm list statements plus optional detail, and matches established workspace predicates');
+console.log('Neon-native workspace pagination keeps dynamic boundaries, uses two warm list statements plus optional detail, and matches established workspace predicates');
 
 function workspaceSamples(): Lead[] {
   return [
