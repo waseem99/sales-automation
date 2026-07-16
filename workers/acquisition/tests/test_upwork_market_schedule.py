@@ -138,6 +138,55 @@ class UpworkMarketScheduleTests(unittest.TestCase):
         self.assertEqual(decision.priority, "B")
         self.assertEqual(decision.disposition, "bd_review")
 
+    def test_fixed_price_under_5000_cannot_be_priority_a(self) -> None:
+        annotated = annotate_profile_and_market(
+            _evidence(segment="ai-jobs", country="United States", attributes={"fixed_budget_usd": 2275}),
+            "ai-jobs",
+        )
+        decision = apply_market_policy(
+            OpportunityRecord(dedupe_key="priority-tier", evidence=annotated),
+            _decision(priority="A", score=84),
+        )
+        self.assertEqual(decision.priority, "B")
+        self.assertLessEqual(decision.score, 74)
+        self.assertIn("fixed_budget_below_priority_a_threshold", decision.risks)
+
+    def test_very_high_competition_caps_priority_a(self) -> None:
+        annotated = annotate_profile_and_market(
+            _evidence(
+                segment="ai-jobs",
+                country="United States",
+                attributes={"fixed_budget_usd": 8000, "competition_level": "very_high"},
+            ),
+            "ai-jobs",
+        )
+        decision = apply_market_policy(
+            OpportunityRecord(dedupe_key="competition-cap", evidence=annotated),
+            _decision(priority="A", score=85),
+        )
+        self.assertEqual(decision.priority, "B")
+        self.assertIn("very_high_competition_priority_cap", decision.risks)
+
+    def test_explicit_self_location_in_description_excludes_gcc(self) -> None:
+        evidence = SourceEvidence(
+            source="upwork",
+            source_id="~012345678901234567890",
+            source_url="https://www.upwork.com/jobs/Test_~012345678901234567890/",
+            captured_at="2026-07-16T00:00:00Z",
+            title="Technology partnership",
+            body="I am a business investor from Saudi Arabia looking for a software partner.",
+            segment="ai-jobs",
+            attributes={"fixed_budget_usd": 6000},
+        )
+        annotated = annotate_profile_and_market(evidence, "ai-jobs")
+        self.assertEqual(annotated.attributes["client_country"], "saudi arabia")
+        self.assertEqual(annotated.attributes["client_country_basis"], "explicit_self_location_in_description")
+        decision = apply_market_policy(
+            OpportunityRecord(dedupe_key="explicit-gcc", evidence=annotated),
+            _decision(priority="A", score=85),
+        )
+        self.assertEqual(decision.priority, "C")
+
     def test_description_country_mentions_do_not_override_visible_client_location(self) -> None:
         evidence = SourceEvidence(
             source="upwork",
