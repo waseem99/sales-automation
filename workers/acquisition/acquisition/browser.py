@@ -47,6 +47,10 @@ def persistent_chromium(
                     "headless": headless,
                     "viewport": {"width": 1440, "height": 1000},
                     "no_viewport": False,
+                    # Playwright includes --no-sandbox in its Chromium defaults.
+                    # This Windows workstation does not require that exception;
+                    # retain Chrome's normal sandbox and remove the warning bar.
+                    "ignore_default_args": ["--no-sandbox"],
                 }
                 if channel is not None:
                     options["channel"] = channel
