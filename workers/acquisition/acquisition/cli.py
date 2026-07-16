@@ -16,6 +16,7 @@ from .redaction import sanitize_log_text
 from .runner import AcquisitionRunner
 from .session_validation import validate_session
 from .storage import HttpIngestionSink, JsonlSink
+from .upwork_assisted import AssistedCaptureStopped, run_upwork_assisted_pilot
 from .upwork_pilot import HumanActionRequired, PilotNoData, run_upwork_pilot
 
 
@@ -68,15 +69,25 @@ def build_parser() -> argparse.ArgumentParser:
 
     upwork = subparsers.add_parser(
         "upwork-pilot",
-        help="Run the authenticated, headed, no-action Upwork dry-run pilot",
+        help="Run the authenticated, headed, no-action automated-navigation Upwork pilot",
     )
-    upwork.add_argument("--profile", type=Path, required=True)
-    upwork.add_argument("--repository-root", type=Path, default=Path.cwd())
-    upwork.add_argument("--config", type=Path, required=True)
-    upwork.add_argument("--qualification-config", type=Path, required=True)
-    upwork.add_argument("--output-directory", type=Path, required=True)
-    upwork.add_argument("--checkpoint", type=Path, required=True)
+    _add_upwork_arguments(upwork)
+
+    assisted = subparsers.add_parser(
+        "upwork-assisted",
+        help="Capture visible Upwork job cards after explicit human navigation",
+    )
+    _add_upwork_arguments(assisted)
     return parser
+
+
+def _add_upwork_arguments(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument("--profile", type=Path, required=True)
+    parser.add_argument("--repository-root", type=Path, default=Path.cwd())
+    parser.add_argument("--config", type=Path, required=True)
+    parser.add_argument("--qualification-config", type=Path, required=True)
+    parser.add_argument("--output-directory", type=Path, required=True)
+    parser.add_argument("--checkpoint", type=Path, required=True)
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -97,10 +108,11 @@ def main(argv: list[str] | None = None) -> int:
             args.output.parent.mkdir(parents=True, exist_ok=True)
             args.output.write_text(rendered + "\n", encoding="utf-8")
         return 0 if result.authenticated else 3
-    if args.command == "upwork-pilot":
+    if args.command in {"upwork-pilot", "upwork-assisted"}:
         profile = validate_external_profile_path(args.profile, args.repository_root)
         try:
-            summary, items = run_upwork_pilot(
+            runner = run_upwork_assisted_pilot if args.command == "upwork-assisted" else run_upwork_pilot
+            summary, items = runner(
                 profile_path=profile,
                 repository_root=args.repository_root,
                 pilot_config_path=args.config,
@@ -108,7 +120,7 @@ def main(argv: list[str] | None = None) -> int:
                 output_directory=args.output_directory,
                 checkpoint_path=args.checkpoint,
             )
-        except HumanActionRequired as error:
+        except (HumanActionRequired, AssistedCaptureStopped) as error:
             logging.getLogger("acquisition.worker").warning("human_action_required reason=%s", str(error))
             return 4
         except PilotNoData as error:
@@ -122,6 +134,7 @@ def main(argv: list[str] | None = None) -> int:
                 if item.qualification.disposition in {"qualified", "contact_ready", "proposal_ready"}
             ),
             "dashboard_ingestion_enabled": False,
+            "capture_mode": "operator_assisted" if args.command == "upwork-assisted" else "automated_navigation",
         }
         print(json.dumps(payload, indent=2, sort_keys=True))
         return 0 if summary.failed == 0 else 2
