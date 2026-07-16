@@ -28,7 +28,7 @@ from .upwork_pilot import (
 MAX_REQUEST_BYTES = 1_000_000
 
 
-@dataclass(slots=True)
+@dataclass
 class CollectorState:
     pilot_config_path: Path
     qualification_config_path: Path
