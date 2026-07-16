@@ -51,12 +51,13 @@ id = "ai"
 enabled = true
 url = "https://www.upwork.com/nx/search/jobs/?q=ai&sort=recency"
 max_jobs = 3
-delay_seconds = 4
+delay_seconds = 8
 """,
                 encoding="utf-8",
             )
             config = load_upwork_pilot_config(path)
         self.assertEqual(config.max_jobs_total, 10)
+        self.assertEqual(config.min_description_chars, 80)
         self.assertEqual(config.searches[0].id, "ai")
         self.assertEqual(config.searches[0].max_jobs, 3)
 
