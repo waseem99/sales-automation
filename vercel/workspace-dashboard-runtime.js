@@ -30,8 +30,9 @@ export async function handleWorkspaceDashboardRuntime(input) {
   const runtimeState = workspaceRuntimeWarm ? 'warm' : 'cold';
   workspaceRuntimeWarm = true;
   const modulesStartedAt = performance.now();
-  const [neonState, prospectDiscovery, storage, prospectHandler, workspacePages, workflowUi, partialNavigation] = await Promise.all([
+  const [neonState, prospectPageV2, prospectDiscovery, storage, prospectHandler, workspacePages, workflowUi, partialNavigation] = await Promise.all([
     import('@sales-automation/neon-state'),
+    import('@sales-automation/neon-state/prospect-page-v2'),
     import('@sales-automation/prospect-discovery'),
     import('@sales-automation/storage'),
     import('@sales-automation/web/prospect-handler'),
@@ -56,7 +57,7 @@ export async function handleWorkspaceDashboardRuntime(input) {
   const generatedAt = new Date().toISOString();
 
   const pageStartedAt = performance.now();
-  const pageLoad = await neonState.loadNeonProspectPageWithMetrics(
+  const pageLoad = await prospectPageV2.loadNeonProspectPageV2WithMetrics(
     input.databaseUrl,
     query,
     visibility,
