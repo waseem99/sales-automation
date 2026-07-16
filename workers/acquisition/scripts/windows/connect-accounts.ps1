@@ -95,11 +95,11 @@ function Connect-AccountProfile {
 }
 
 if ($Account -in @("Both", "Upwork")) {
-    Connect-AccountProfile -Name "Upwork" -ProfileFolder "upwork" -Url "https://www.upwork.com/nx/find-work/"
+    Connect-AccountProfile -Name "Upwork" -ProfileFolder "upwork-browser-v2" -Url "https://www.upwork.com/nx/find-work/"
 }
 
 if ($Account -in @("Both", "LinkedIn")) {
-    Connect-AccountProfile -Name "LinkedIn Sales Navigator" -ProfileFolder "linkedin-sales-navigator" -Url "https://www.linkedin.com/sales/home"
+    Connect-AccountProfile -Name "LinkedIn Sales Navigator" -ProfileFolder "linkedin-sales-navigator-browser-v2" -Url "https://www.linkedin.com/sales/home"
 }
 
 Write-Step "Account connection step completed"
