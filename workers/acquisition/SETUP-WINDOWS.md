@@ -7,11 +7,15 @@ This guide is for a nontechnical operator. The setup is local-first: account pas
 1. Open the `workers/acquisition` folder.
 2. Double-click `START-HERE.cmd`.
 3. Allow Windows to install Python 3.12 if prompted.
-4. Wait while Chromium and the acquisition worker are installed and tested.
-5. An Upwork browser window opens. Log in inside that browser, complete any verification, confirm the Find Work page is visible, return to the setup window and press Enter.
-6. A separate LinkedIn Sales Navigator browser window opens. Log in, complete any verification, confirm Sales Navigator is visible, return to the setup window and press Enter.
+4. Wait while the acquisition worker and its browser support are installed and tested.
+5. A normal Google Chrome or Microsoft Edge window opens with a separate Upwork profile. Log in, complete any verification, confirm the Find Work page is visible, close that dedicated browser window, return to the setup window and press Enter.
+6. A separate native browser window opens for LinkedIn Sales Navigator. Log in, complete any verification, confirm Sales Navigator is visible, close that dedicated browser window, return to the setup window and press Enter.
 
 That is the full first-time operator workflow.
+
+## Why account login uses Chrome or Edge
+
+Account login is performed in a normal installed browser rather than the Playwright-controlled Chromium window. This keeps login, OTP, CAPTCHA and account-security checks under direct human control. The worker will later reuse the separate authorized profile only for reviewed research.
 
 ## Important safety rules
 
@@ -31,8 +35,8 @@ The setup creates private local state under:
 
 It contains:
 
-- `profiles\upwork` — authorized Upwork Chromium profile;
-- `profiles\linkedin-sales-navigator` — authorized LinkedIn Chromium profile;
+- `profiles\upwork-browser-v2` — authorized Upwork native-browser profile;
+- `profiles\linkedin-sales-navigator-browser-v2` — authorized LinkedIn native-browser profile;
 - `output` — future reviewed dry-run opportunity output;
 - `checkpoints` — resumable source-run checkpoints;
 - `settings.json` — non-sensitive local path configuration.
