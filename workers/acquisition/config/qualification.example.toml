@@ -1,5 +1,5 @@
 [qualification]
-version = "2026-07-16.v2"
+version = "2026-07-16.v3"
 proposal_ready_score = 80
 contact_ready_score = 68
 qualified_score = 55
@@ -28,7 +28,8 @@ proof_ids = ["acmetel-esim", "bizb-marketplace"]
 id = "ai-automation"
 business_unit = "Hilarious AI"
 keywords = [
-  "ai agent", "ai assistant", "artificial intelligence", "generative ai",
+  "ai agent", "ai assistant", "ai architect", "ai engineer", "ai expert",
+  "artificial intelligence", "machine learning", "generative ai", "applied ai",
   "rag", "llm", "large language model", "automation", "workflow automation",
   "n8n", "retool", "chatbot", "document intelligence", "voice ai",
   "voice receptionist", "ai receptionist", "prompt engineering", "copilot",
