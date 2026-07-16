@@ -1,5 +1,4 @@
 import type { ProspectPageQuery, ProspectVisibility } from '@sales-automation/neon-state';
-import type { StoredLeadRecord } from '@sales-automation/storage';
 
 interface WorkspaceSession {
   identifier: string;
@@ -34,6 +33,8 @@ const WORKSPACE_ROUTES = new Set([
   '/services/marketing',
 ]);
 
+let workspaceRuntimeWarm = false;
+
 export function isWorkspaceDashboardPath(pathname: string): boolean {
   return WORKSPACE_ROUTES.has(normalizePath(pathname));
 }
@@ -42,16 +43,19 @@ export async function handleWorkspaceDashboardRuntime(
   input: WorkspaceDashboardRuntimeInput,
 ): Promise<Response> {
   const startedAt = performance.now();
-  const [neonState, prospectDiscovery, storage, prospectHandler, portfolioCatalog, workspacePages, workflowUi, partialNavigation] = await Promise.all([
+  const runtimeState = workspaceRuntimeWarm ? 'warm' : 'cold';
+  workspaceRuntimeWarm = true;
+  const modulesStartedAt = performance.now();
+  const [neonState, prospectDiscovery, storage, prospectHandler, workspacePages, workflowUi, partialNavigation] = await Promise.all([
     import('@sales-automation/neon-state'),
     import('@sales-automation/prospect-discovery'),
     import('@sales-automation/storage'),
     import('@sales-automation/web/prospect-handler'),
-    import('@sales-automation/neon-state/portfolio-catalog'),
     import('./workspace-pages.js'),
     import('./prospect-workflow-ui.js'),
     import('./prospect-partial-navigation.js'),
   ]);
+  const modulesMs = performance.now() - modulesStartedAt;
 
   const url = new URL(input.originalUrl, 'https://local.invalid');
   const pathname = normalizePath(url.pathname);
@@ -64,20 +68,15 @@ export async function handleWorkspaceDashboardRuntime(
     ownerTokens: access.visibleOwnerTokens,
   };
   const recordsStartedAt = performance.now();
-  const scopedRecords = await neonState.loadNeonScopedRecords(input.databaseUrl, visibility);
+  const loaded = await neonState.loadNeonScopedRecordsWithMetrics(input.databaseUrl, visibility);
   const recordsMs = performance.now() - recordsStartedAt;
+  const scopedRecords = loaded.records;
   const query = pageQuery(url);
   const selectedId = url.searchParams.get('leadId') ?? undefined;
   const generatedAt = new Date().toISOString();
   const built = workspacePages.buildWorkspacePage(scopedRecords, query, workspace, selectedId, generatedAt);
   const repository = new storage.InMemoryLeadRepository(built.repositoryRecords);
-  const before = snapshots(repository.listLeads());
-  const supportStartedAt = performance.now();
-  const runs = await neonState.loadNeonDiscoveryRuns(input.databaseUrl, 30);
-  const runStore = new prospectDiscovery.InMemoryProspectDiscoveryRunStore(runs);
-  const approvedPortfolio = await portfolioCatalog.loadApprovedPortfolioCatalog(input.databaseUrl);
-  const portfolioItems = portfolioCatalog.asPortfolioItems(approvedPortfolio);
-  const supportMs = performance.now() - supportStartedAt;
+  const runStore = new prospectDiscovery.InMemoryProspectDiscoveryRunStore();
   const internalUrl = new URL('/prospects', 'https://local.invalid');
   for (const [key, value] of url.searchParams.entries()) internalUrl.searchParams.set(key, value);
 
@@ -92,7 +91,7 @@ export async function handleWorkspaceDashboardRuntime(
   }, {
     repository,
     runStore,
-    portfolioItems,
+    portfolioItems: [],
     adminPassword: input.adminPassword,
     sessionSecret: input.sessionSecret,
     secureCookies: true,
@@ -102,9 +101,6 @@ export async function handleWorkspaceDashboardRuntime(
   });
   const renderMs = performance.now() - renderStartedAt;
 
-  if (result.status < 400) {
-    await persistChangedRecords(input.databaseUrl, repository.listLeads(), before, neonState.persistLeadRecords);
-  }
   const contentType = result.headers['content-type'] ?? '';
   const headers = { ...result.headers };
   let body = result.body;
@@ -145,12 +141,30 @@ export async function handleWorkspaceDashboardRuntime(
   }
   const totalMs = performance.now() - startedAt;
   headers['x-prospect-server-ms'] = String(Math.max(0, Math.round(totalMs)));
+  headers['x-prospect-query-count'] = String(loaded.queryCount);
+  headers['x-prospect-schema-query-count'] = String(loaded.schemaQueryCount);
+  headers['x-prospect-support-query-count'] = '0';
+  headers['x-prospect-schema-cache'] = loaded.schemaCacheState;
+  headers['x-prospect-runtime-state'] = runtimeState;
   headers['server-timing'] = appendServerTiming(headers['server-timing'], [
+    ['prospect_modules', modulesMs],
     ['prospect_records', recordsMs],
-    ['prospect_support', supportMs],
     ['prospect_render', renderMs],
     ['prospect_total', totalMs],
   ]);
+  console.info('PROSPECT_WORKSPACE_TIMING', {
+    route: pathname,
+    runtimeState,
+    schemaCacheState: loaded.schemaCacheState,
+    queryCount: loaded.queryCount,
+    schemaQueryCount: loaded.schemaQueryCount,
+    supportQueryCount: 0,
+    modulesMs: Math.round(modulesMs),
+    recordsMs: Math.round(recordsMs),
+    renderMs: Math.round(renderMs),
+    totalMs: Math.round(totalMs),
+    leadDetailRequested: Boolean(selectedId),
+  });
   return new Response(body, { status: result.status, headers });
 }
 
@@ -166,20 +180,6 @@ function pageQuery(url: URL): ProspectPageQuery {
     feedback: url.searchParams.get('feedback') ?? '',
     followUp: url.searchParams.get('followUp') ?? '',
   };
-}
-
-function snapshots(records: StoredLeadRecord[]): Map<string, string> {
-  return new Map(records.map((record) => [record.lead.id, JSON.stringify(record)]));
-}
-
-async function persistChangedRecords(
-  databaseUrl: string,
-  records: StoredLeadRecord[],
-  before: Map<string, string>,
-  persist: (databaseUrl: string, records: StoredLeadRecord[]) => Promise<void>,
-): Promise<void> {
-  const changed = records.filter((record) => before.get(record.lead.id) !== JSON.stringify(record));
-  if (changed.length > 0) await persist(databaseUrl, changed);
 }
 
 function appendVary(existing: string | undefined, value: string): string {

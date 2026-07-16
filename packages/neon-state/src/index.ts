@@ -13,6 +13,19 @@ export interface NeonAppState {
   runStore: InMemoryProspectDiscoveryRunStore;
 }
 
+export interface NeonSchemaEnsureMetrics {
+  queryCount: number;
+  cacheState: 'cold' | 'warm';
+}
+
+export interface NeonScopedRecordLoadResult {
+  records: StoredLeadRecord[];
+  queryCount: number;
+  schemaQueryCount: number;
+  dataQueryCount: number;
+  schemaCacheState: NeonSchemaEnsureMetrics['cacheState'];
+}
+
 interface LeadRow {
   record: unknown;
 }
@@ -25,8 +38,34 @@ interface LockRow {
   token: string;
 }
 
+const schemaReadiness = new Map<string, Promise<void>>();
+const SCHEMA_QUERY_COUNT = 5;
+
 export async function ensureNeonSchema(databaseUrl: string): Promise<void> {
-  const sql = neon(requireDatabaseUrl(databaseUrl));
+  await ensureNeonSchemaWithMetrics(databaseUrl);
+}
+
+export async function ensureNeonSchemaWithMetrics(databaseUrl: string): Promise<NeonSchemaEnsureMetrics> {
+  const normalizedUrl = requireDatabaseUrl(databaseUrl);
+  const existing = schemaReadiness.get(normalizedUrl);
+  if (existing) {
+    await existing;
+    return { queryCount: 0, cacheState: 'warm' };
+  }
+
+  const initialization = initializeNeonSchema(normalizedUrl);
+  schemaReadiness.set(normalizedUrl, initialization);
+  try {
+    await initialization;
+    return { queryCount: SCHEMA_QUERY_COUNT, cacheState: 'cold' };
+  } catch (error) {
+    if (schemaReadiness.get(normalizedUrl) === initialization) schemaReadiness.delete(normalizedUrl);
+    throw error;
+  }
+}
+
+async function initializeNeonSchema(databaseUrl: string): Promise<void> {
+  const sql = neon(databaseUrl);
   await sql`
     CREATE TABLE IF NOT EXISTS prospect_records (
       lead_id TEXT PRIMARY KEY,
@@ -73,6 +112,37 @@ export async function ensureNeonSchema(databaseUrl: string): Promise<void> {
       SELECT COALESCE(input_record->'lead'->>'pipelineStatus', '') NOT IN ('won','lost','rejected','archived')
     $$
   `;
+}
+
+export async function loadNeonScopedRecordsWithMetrics(
+  databaseUrl: string,
+  visibility: { canViewAll: boolean; ownerTokens: string[] },
+  limit = 5_000,
+): Promise<NeonScopedRecordLoadResult> {
+  const schema = await ensureNeonSchemaWithMetrics(databaseUrl);
+  const sql = neon(requireDatabaseUrl(databaseUrl));
+  const ownerTokensJson = JSON.stringify(normalizeOwnerTokens(visibility.ownerTokens));
+  const rows = await sql`
+    SELECT record
+    FROM prospect_records
+    WHERE ${visibility.canViewAll}::boolean OR EXISTS (
+      SELECT 1 FROM jsonb_array_elements_text(${ownerTokensJson}::jsonb) AS visible_token(value)
+      WHERE LOWER(COALESCE(record->'lead'->>'owner', '')) = LOWER(visible_token.value)
+         OR LOWER(COALESCE(record->'lead'->>'owner', '')) LIKE '%' || LOWER(visible_token.value) || '%'
+    )
+    ORDER BY COALESCE(record->'lead'->>'updatedAt', record->'lead'->>'createdAt', '') DESC
+    LIMIT ${Math.max(1, Math.min(limit, 10_000))}
+  ` as LeadRow[];
+  const records = rows
+    .map((row) => parseJson<StoredLeadRecord>(row.record))
+    .filter((record): record is StoredLeadRecord => Boolean(record?.lead?.id));
+  return {
+    records,
+    queryCount: schema.queryCount + 1,
+    schemaQueryCount: schema.queryCount,
+    dataQueryCount: 1,
+    schemaCacheState: schema.cacheState,
+  };
 }
 
 export async function loadNeonAppState(databaseUrl: string): Promise<NeonAppState> {
@@ -212,6 +282,10 @@ export async function releaseProspectRunLock(databaseUrl: string, token: string)
 export function requireDatabaseUrl(value: string | undefined): string {
   if (!value?.trim()) throw new Error('DATABASE_URL is required. Connect a Neon Postgres database to the Vercel project.');
   return value.trim();
+}
+
+function normalizeOwnerTokens(tokens: string[]): string[] {
+  return [...new Set(tokens.map((token) => token.trim().toLowerCase()).filter(Boolean))];
 }
 
 function parseJson<T>(value: unknown): T | undefined {
