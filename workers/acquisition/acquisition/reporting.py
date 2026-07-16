@@ -10,9 +10,10 @@ def write_csv_report(path: Path, items: list[Any]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     fields = [
         "score", "disposition", "business_unit", "service_id", "title",
-        "segment", "budget_usd", "client_spend_usd", "client_hire_rate",
-        "payment_verified", "proposal_activity", "proof_ids", "risks",
-        "missing_evidence", "source_url",
+        "captured_segment", "budget_usd", "budget_basis", "hourly_min_usd",
+        "hourly_max_usd", "client_spend_usd", "client_hire_rate",
+        "payment_status", "proposal_activity", "competition_level",
+        "capture_quality", "proof_ids", "risks", "missing_evidence", "source_url",
     ]
     with path.open("w", encoding="utf-8-sig", newline="") as handle:
         writer = csv.DictWriter(handle, fieldnames=fields)
@@ -27,12 +28,17 @@ def write_csv_report(path: Path, items: list[Any]) -> None:
                 "business_unit": decision.business_unit or "",
                 "service_id": decision.service_id or "",
                 "title": evidence.title,
-                "segment": evidence.segment,
+                "captured_segment": evidence.segment,
                 "budget_usd": attrs.get("budget_usd") or "",
+                "budget_basis": attrs.get("budget_basis") or "",
+                "hourly_min_usd": attrs.get("hourly_min_usd") or "",
+                "hourly_max_usd": attrs.get("hourly_max_usd") or "",
                 "client_spend_usd": attrs.get("client_spend_usd") or "",
                 "client_hire_rate": attrs.get("client_hire_rate") or "",
-                "payment_verified": attrs.get("payment_verified", False),
+                "payment_status": attrs.get("payment_status") or "not_visible",
                 "proposal_activity": attrs.get("proposal_activity") or "",
+                "competition_level": attrs.get("competition_level") or "",
+                "capture_quality": attrs.get("capture_quality") or "",
                 "proof_ids": " | ".join(decision.proof_ids),
                 "risks": " | ".join(decision.risks),
                 "missing_evidence": " | ".join(decision.missing_evidence),
@@ -94,16 +100,34 @@ def _card(item: Any) -> str:
     missing = ", ".join(decision.missing_evidence) or "None"
     proofs = ", ".join(decision.proof_ids) or "None"
     description = escape(evidence.body[:5000])
+    hourly = _hourly_label(attrs)
     return f"""<article class="card">
 <div class="row"><span class="score">{decision.score}</span><span class="badge">{escape(decision.disposition)}</span>
-<span class="badge">{escape(decision.business_unit or 'Unrouted')}</span><span class="badge">{escape(evidence.segment)}</span></div>
+<span class="badge">{escape(decision.business_unit or 'Unrouted')}</span>
+<span class="badge">routed: {escape(decision.service_id or 'none')}</span>
+<span class="badge">captured: {escape(evidence.segment)}</span>
+<span class="badge">capture: {escape(str(attrs.get('capture_quality') or 'unknown'))}</span></div>
 <h2><a href="{escape(evidence.source_url, quote=True)}" target="_blank" rel="noreferrer">{escape(evidence.title)}</a></h2>
-<p><strong>Budget:</strong> {escape(str(attrs.get('budget_usd') or 'Not visible'))} &nbsp;
+<p><strong>Budget:</strong> {escape(str(attrs.get('budget_usd') or 'Not visible'))} ({escape(str(attrs.get('budget_basis') or 'unknown'))}) &nbsp;
+<strong>Hourly:</strong> {escape(hourly)} &nbsp;
 <strong>Client spend:</strong> {escape(str(attrs.get('client_spend_usd') or 'Not visible'))} &nbsp;
-<strong>Hire rate:</strong> {escape(str(attrs.get('client_hire_rate') or 'Not visible'))} &nbsp;
-<strong>Payment verified:</strong> {escape(str(attrs.get('payment_verified', False)))}</p>
+<strong>Hire rate:</strong> {escape(str(attrs.get('client_hire_rate') or 'Not visible'))}</p>
+<p><strong>Payment:</strong> {escape(str(attrs.get('payment_status') or 'not_visible'))} &nbsp;
+<strong>Proposals:</strong> {escape(str(attrs.get('proposal_activity') or 'Not visible'))} &nbsp;
+<strong>Competition:</strong> {escape(str(attrs.get('competition_level') or 'Not visible'))}</p>
 <p><strong>Proof:</strong> {escape(proofs)}<br><strong>Risks:</strong> {escape(risks)}<br>
 <strong>Missing evidence:</strong> {escape(missing)}</p>
 <ul>{reasons}</ul>
 <details><summary>View captured job description</summary><pre>{description}</pre></details>
 </article>"""
+
+
+def _hourly_label(attrs: dict[str, Any]) -> str:
+    minimum = attrs.get("hourly_min_usd")
+    maximum = attrs.get("hourly_max_usd")
+    if minimum is None and maximum is None:
+        return "Not visible"
+    if minimum is not None and maximum is not None:
+        return f"${minimum:g}–${maximum:g}/hr"
+    value = minimum if minimum is not None else maximum
+    return f"${value:g}/hr"
