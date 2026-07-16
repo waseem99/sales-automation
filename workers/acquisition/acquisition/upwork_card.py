@@ -23,7 +23,6 @@ _JUNK_MARKERS = (
 
 
 def canonical_visible_job_url(url: str) -> str | None:
-    """Return only a concrete Upwork job URL with a stable job identifier."""
     parsed = urlparse(url)
     if parsed.hostname not in {"upwork.com", "www.upwork.com"}:
         return None
@@ -36,12 +35,9 @@ def canonical_visible_job_url(url: str) -> str | None:
 
 
 def clean_visible_description(*, description: str, card_text: str, title: str) -> tuple[str, dict[str, str]]:
-    """Clean a visible-card summary and reject Upwork feedback-menu contamination."""
-    direct = _clean_text(description)
+    direct = _cut_junk_tail(_clean_text(description))
     card = _clean_text(card_text)
     title_clean = _clean_text(title)
-
-    direct = _cut_junk_tail(direct)
     derived = _derive_description(card, title_clean)
 
     if _is_usable_description(direct, title_clean):
@@ -53,8 +49,7 @@ def clean_visible_description(*, description: str, card_text: str, title: str) -
         source = "derived_from_visible_card"
         quality = "medium" if len(body) >= 160 else "low"
     else:
-        body = direct or derived or card
-        body = _cut_junk_tail(body)
+        body = _cut_junk_tail(direct or derived or card)
         source = "fallback_visible_card"
         quality = "low"
 
@@ -66,7 +61,6 @@ def clean_visible_description(*, description: str, card_text: str, title: str) -
 
 def parse_visible_card_metrics(text: str) -> dict[str, Any]:
     clean = _clean_text(text)
-
     fixed = _first_money(
         clean,
         (
@@ -74,37 +68,41 @@ def parse_visible_card_metrics(text: str) -> dict[str, Any]:
             r"(?:Fixed(?:-price)?[^$]{0,50})?Budget\s*:?\s*\$([\d,]+(?:\.\d+)?)",
         ),
     )
-
     hourly = re.search(
         r"Hourly\s*:?\s*\$([\d,.]+)\s*-\s*\$([\d,.]+)(?:\s*/?\s*(?:hr|hour))?",
         clean,
         re.I,
     )
     if hourly is None and "hourly" in clean.casefold():
-        hourly = re.search(
-            r"\$([\d,.]+)\s*-\s*\$([\d,.]+)(?:\s*/?\s*(?:hr|hour))?",
-            clean,
-            re.I,
-        )
+        hourly = re.search(r"\$([\d,.]+)\s*-\s*\$([\d,.]+)(?:\s*/?\s*(?:hr|hour))?", clean, re.I)
+    hourly_single = None
+    if hourly is None:
+        hourly_single = re.search(r"Hourly\s*:?\s*\$([\d,.]+)(?:\s*/?\s*(?:hr|hour))?", clean, re.I)
 
-    hourly_min = float(hourly.group(1).replace(",", "")) if hourly else None
-    hourly_max = float(hourly.group(2).replace(",", "")) if hourly else None
-    estimated_monthly = hourly_max * 160 if hourly_max is not None else None
-    budget = fixed if fixed is not None else estimated_monthly
-
-    spend = re.search(r"\$([\d,.]+)\s*([kKmM]?)\+?\s*spent", clean, re.I)
-    hire_rate = re.search(r"(\d{1,3})%\s*hire rate", clean, re.I)
-    proposals = re.search(
-        r"(?:proposals?|applicants?)\s*:?\s*(Fewer than\s+\d+|Less than\s+\d+|\d+\s*to\s*\d+|\d+\+?)",
-        clean,
-        re.I,
+    hourly_min = float(hourly.group(1).replace(",", "")) if hourly else (
+        float(hourly_single.group(1).replace(",", "")) if hourly_single else None
     )
-    posted = re.search(r"Posted\s+(.{1,45}?\s+ago)", clean, re.I)
+    hourly_max = float(hourly.group(2).replace(",", "")) if hourly else hourly_min
     duration = re.search(
         r"(Less than 1 month|1 to 3 months|3 to 6 months|More than 6 months)",
         clean,
         re.I,
     )
+    weekly_hours = _weekly_hours(clean)
+    estimated_contract = _estimated_contract_value(hourly_max, weekly_hours, duration.group(1) if duration else None)
+    monthly_estimate = hourly_max * 160 if hourly_max is not None else None
+    budget = fixed if fixed is not None else estimated_contract if estimated_contract is not None else monthly_estimate
+
+    spend = re.search(r"\$([\d,.]+)\s*([kKmM]?)\+?\s*spent", clean, re.I)
+    hire_rate = re.search(r"(\d{1,3})%\s*hire rate", clean, re.I)
+    rating = re.search(r"\b([0-5](?:\.\d{1,2})?)\s*(?:of\s*5|stars?)\b", clean, re.I)
+    hires = re.search(r"\b(\d[\d,]*)\s+hires?\b", clean, re.I)
+    proposals = re.search(
+        r"(?:proposals?|applicants?)\s*:?\s*(Fewer than\s+\d+|Less than\s+\d+|\d+\s*to\s*\d+|\d+\+?)",
+        clean,
+        re.I,
+    )
+    posted = re.search(r"Posted\s+(.{1,45}?\s+ago|yesterday)", clean, re.I)
     experience = re.search(r"\b(Entry Level|Intermediate|Expert)\b", clean, re.I)
 
     lowered = clean.casefold()
@@ -116,21 +114,28 @@ def parse_visible_card_metrics(text: str) -> dict[str, Any]:
         payment_status = "not_visible"
 
     proposal_activity = proposals.group(1) if proposals else None
-    local_required = bool(
-        re.search(r"\b(on[- ]?site|must be located in|local candidates? only)\b", clean, re.I)
-    )
+    local_required = bool(re.search(r"\b(on[- ]?site|must be located in|local candidates? only)\b", clean, re.I))
     country = _country(clean)
     return {
         "budget_usd": budget,
-        "budget_basis": "fixed" if fixed is not None else "hourly_monthly_estimate" if hourly else None,
+        "budget_basis": (
+            "fixed" if fixed is not None
+            else "hourly_contract_estimate" if estimated_contract is not None
+            else "hourly_monthly_estimate" if hourly_max is not None
+            else None
+        ),
         "fixed_budget_usd": fixed,
         "hourly_min_usd": hourly_min,
         "hourly_max_usd": hourly_max,
-        "hourly_estimated_monthly_usd": estimated_monthly,
+        "estimated_hours_per_week": weekly_hours,
+        "estimated_contract_value_usd": estimated_contract,
+        "hourly_estimated_monthly_usd": monthly_estimate,
         "payment_verified": payment_status == "verified",
         "payment_status": payment_status,
         "client_spend_usd": _scaled_money(spend.group(1), spend.group(2)) if spend else None,
         "client_hire_rate": float(hire_rate.group(1)) if hire_rate else None,
+        "client_rating": float(rating.group(1)) if rating else None,
+        "client_hires": int(hires.group(1).replace(",", "")) if hires else None,
         "proposal_activity": proposal_activity,
         "competition_level": _competition_level(proposal_activity),
         "posted_age": posted.group(1) if posted else None,
@@ -139,7 +144,36 @@ def parse_visible_card_metrics(text: str) -> dict[str, Any]:
         "client_country": country,
         "local_presence_required": local_required,
         "delivery_country": country if local_required and country else "",
+        "enterprise_signal": bool(re.search(r"\b(enterprise|platform|saas|architecture|system design)\b", clean, re.I)),
+        "recurring_signal": bool(re.search(r"\b(long[- ]term|ongoing|partner|continuously|maintenance|future phases?)\b", clean, re.I)),
+        "custom_delivery_signal": bool(re.search(r"\b(build|develop|implementation|integration|custom|mvp)\b", clean, re.I)),
     }
+
+
+def _weekly_hours(text: str) -> float | None:
+    range_match = re.search(r"(\d+)\s*-\s*(\d+)\s*hrs?/week", text, re.I)
+    if range_match:
+        return float(range_match.group(2))
+    less_match = re.search(r"Less than\s+(\d+)\s*hrs?/week", text, re.I)
+    if less_match:
+        return float(less_match.group(1))
+    more_match = re.search(r"More than\s+(\d+)\s*hrs?/week", text, re.I)
+    if more_match:
+        return float(more_match.group(1))
+    return None
+
+
+def _estimated_contract_value(hourly_max: float | None, weekly_hours: float | None, duration: str | None) -> float | None:
+    if hourly_max is None:
+        return None
+    hours = weekly_hours or 20.0
+    weeks = {
+        "less than 1 month": 4,
+        "1 to 3 months": 12,
+        "3 to 6 months": 24,
+        "more than 6 months": 32,
+    }.get((duration or "").casefold(), 4)
+    return round(hourly_max * hours * weeks, 2)
 
 
 def _derive_description(card_text: str, title: str) -> str:
@@ -148,7 +182,6 @@ def _derive_description(card_text: str, title: str) -> str:
         index = value.casefold().find(title.casefold())
         if index >= 0:
             value = value[index + len(title):].strip()
-
     value = re.sub(
         r"^(?:Featured\s+)?Posted\s+.{1,60}?ago\s*[•|\-]?\s*(?:Proposals?\s*:?\s*[^•|]+)?",
         "",
@@ -156,7 +189,7 @@ def _derive_description(card_text: str, title: str) -> str:
         flags=re.I,
     ).strip()
     value = re.sub(
-        r"^(?:Hourly|Fixed(?:-price)?)\s*:?[^.]{0,120}(?=\.|\b(?:We|I|Our|The|Looking|Seeking|Need)\b)",
+        r"^(?:Hourly|Fixed(?:-price)?)\s*:?[^.]{0,160}(?=\.|\b(?:We|I|Our|The|Looking|Seeking|Need|Build)\b)",
         "",
         value,
         flags=re.I,
@@ -180,8 +213,7 @@ def _is_usable_description(value: str, title: str) -> bool:
         return False
     if title and value.casefold() == title.casefold():
         return False
-    word_count = len(value.split())
-    return word_count >= 14
+    return len(value.split()) >= 14
 
 
 def _competition_level(value: str | None) -> str | None:
