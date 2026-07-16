@@ -1,17 +1,15 @@
 @echo off
 setlocal
-title Codistan Upwork Operator-Assisted Capture
+title Codistan Upwork Manual Chrome Capture
 cd /d "%~dp0"
 
 echo ============================================================
-echo   CODISTAN - UPWORK OPERATOR-ASSISTED CAPTURE
+echo   CODISTAN - UPWORK MANUAL CHROME CAPTURE
 echo ============================================================
 echo.
-echo You will browse Upwork normally and open each saved search yourself.
-echo The worker reads visible job cards only after you press Enter.
-echo.
-echo It does not submit proposals, send messages, imitate human behavior,
-echo bypass security checks, or write to the dashboard.
+echo This uses your ordinary Chrome browser and a manually clicked extension.
+echo No Playwright browser, remote debugging, automatic navigation, proposal,
+echo message, application, or dashboard write is performed.
 echo.
 
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File "%~dp0scripts\windows\run-upwork-pilot.ps1"
