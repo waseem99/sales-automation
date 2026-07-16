@@ -16,6 +16,7 @@ from .redaction import sanitize_log_text
 from .runner import AcquisitionRunner
 from .session_validation import validate_session
 from .storage import HttpIngestionSink, JsonlSink
+from .upwork_pilot import HumanActionRequired, run_upwork_pilot
 
 
 class _SanitizingFormatter(logging.Formatter):
@@ -64,6 +65,17 @@ def build_parser() -> argparse.ArgumentParser:
     session_check.add_argument("--account", choices=["upwork", "linkedin"], required=True)
     session_check.add_argument("--repository-root", type=Path, default=Path.cwd())
     session_check.add_argument("--output", type=Path)
+
+    upwork = subparsers.add_parser(
+        "upwork-pilot",
+        help="Run the authenticated, headed, no-action Upwork dry-run pilot",
+    )
+    upwork.add_argument("--profile", type=Path, required=True)
+    upwork.add_argument("--repository-root", type=Path, default=Path.cwd())
+    upwork.add_argument("--config", type=Path, required=True)
+    upwork.add_argument("--qualification-config", type=Path, required=True)
+    upwork.add_argument("--output-directory", type=Path, required=True)
+    upwork.add_argument("--checkpoint", type=Path, required=True)
     return parser
 
 
@@ -85,6 +97,31 @@ def main(argv: list[str] | None = None) -> int:
             args.output.parent.mkdir(parents=True, exist_ok=True)
             args.output.write_text(rendered + "\n", encoding="utf-8")
         return 0 if result.authenticated else 3
+    if args.command == "upwork-pilot":
+        profile = validate_external_profile_path(args.profile, args.repository_root)
+        try:
+            summary, items = run_upwork_pilot(
+                profile_path=profile,
+                repository_root=args.repository_root,
+                pilot_config_path=args.config,
+                qualification_config_path=args.qualification_config,
+                output_directory=args.output_directory,
+                checkpoint_path=args.checkpoint,
+            )
+        except HumanActionRequired as error:
+            logging.getLogger("acquisition.worker").warning("human_action_required reason=%s", str(error))
+            return 4
+        payload = {
+            "summary": summary.to_dict(),
+            "report": str(args.output_directory / "report.html"),
+            "qualified_or_better": sum(
+                1 for item in items
+                if item.qualification.disposition in {"qualified", "contact_ready", "proposal_ready"}
+            ),
+            "dashboard_ingestion_enabled": False,
+        }
+        print(json.dumps(payload, indent=2, sort_keys=True))
+        return 0 if summary.failed == 0 else 2
     if args.command == "qualify":
         return run_qualification_file(args.input, args.config, args.output)
 
