@@ -128,9 +128,113 @@ def _safe_enrich_from_detail(
             pass
 
 
+def _recovery_objects(snapshot_path: Path) -> tuple[PilotSummary, list[PilotItem], str]:
+    payload = json.loads(snapshot_path.read_text(encoding="utf-8"))
+    if not isinstance(payload, dict):
+        raise ValueError("Recovery snapshot must be an object.")
+    raw_summary = payload.get("summary")
+    raw_items = payload.get("items")
+    if not isinstance(raw_summary, dict) or not isinstance(raw_items, list):
+        raise ValueError("Recovery snapshot is missing summary or items.")
+
+    summary = PilotSummary(
+        started_at=str(raw_summary.get("started_at") or utc_now_iso()),
+        completed_at=str(raw_summary.get("completed_at")) if raw_summary.get("completed_at") else None,
+        status=str(raw_summary.get("status") or "interrupted"),
+        searches_completed=int(raw_summary.get("searches_completed") or 0),
+        human_verification_prompts=int(raw_summary.get("human_verification_prompts") or 0),
+        links_found=int(raw_summary.get("links_found") or 0),
+        reviewed=int(raw_summary.get("reviewed") or 0),
+        extracted=int(raw_summary.get("extracted") or 0),
+        duplicates=int(raw_summary.get("duplicates") or 0),
+        rejected_extraction=int(raw_summary.get("rejected_extraction") or 0),
+        failed=int(raw_summary.get("failed") or 0),
+    )
+
+    items: list[PilotItem] = []
+    for raw_item in raw_items:
+        if not isinstance(raw_item, dict):
+            continue
+        record_value = raw_item.get("record")
+        decision_value = raw_item.get("qualification")
+        if not isinstance(record_value, dict) or not isinstance(decision_value, dict):
+            continue
+        record = OpportunityRecord.from_dict(record_value)
+        decision = QualificationDecision(
+            disposition=str(decision_value.get("disposition") or "bd_review"),
+            priority=str(decision_value.get("priority") or "B"),
+            score=int(decision_value.get("score") or 0),
+            confidence=str(decision_value.get("confidence") or "low"),
+            business_unit=(
+                str(decision_value.get("business_unit"))
+                if decision_value.get("business_unit") is not None
+                else None
+            ),
+            service_id=(
+                str(decision_value.get("service_id"))
+                if decision_value.get("service_id") is not None
+                else None
+            ),
+            dimensions={
+                str(key): int(value)
+                for key, value in dict(decision_value.get("dimensions") or {}).items()
+            },
+            reasons=tuple(str(value) for value in decision_value.get("reasons") or ()),
+            missing_evidence=tuple(str(value) for value in decision_value.get("missing_evidence") or ()),
+            risks=tuple(str(value) for value in decision_value.get("risks") or ()),
+            proof_ids=tuple(str(value) for value in decision_value.get("proof_ids") or ()),
+            recommended_action=str(decision_value.get("recommended_action") or "Review recovered opportunity."),
+            configuration_version=str(decision_value.get("configuration_version") or "recovered"),
+        )
+        items.append(PilotItem(record=record, qualification=decision))
+
+    return summary, items, str(payload.get("config_version") or "recovered")
+
+
+def _run_with_partial_report(**kwargs: Any) -> _base.ScheduledRunResult:
+    result = _base.run_upwork_scheduled(**kwargs)
+    output_directory = Path(kwargs["output_directory"])
+    report_path = output_directory / "report.html"
+    snapshot_path = output_directory / "recovery-snapshot.json"
+
+    if not report_path.exists() and snapshot_path.exists():
+        try:
+            summary, items, config_version = _recovery_objects(snapshot_path)
+            summary.status = result.status
+            summary.completed_at = result.completed_at or utc_now_iso()
+            _policy_write_pilot_outputs(
+                output_directory=output_directory,
+                summary=summary,
+                items=items,
+                config_version=f"{config_version}.partial-recovery",
+            )
+            (output_directory / "partial-report-notice.json").write_text(
+                json.dumps(
+                    {
+                        "schema_version": "upwork-partial-report.v1",
+                        "run_status": result.status,
+                        "message": result.message,
+                        "recovered_items": len(items),
+                        "report": str(report_path),
+                        "generated_at": utc_now_iso(),
+                    },
+                    ensure_ascii=False,
+                    indent=2,
+                    sort_keys=True,
+                ),
+                encoding="utf-8",
+            )
+        except Exception:
+            # Never replace the original worker result with a report-recovery error.
+            pass
+
+    return result
+
+
 # Keep the main implementation in one module while replacing only local
-# evidence enrichment, profile annotation, qualification-policy and A/B output
-# hooks. Browser navigation and the no-external-action boundary are unchanged.
+# evidence enrichment, profile annotation, qualification-policy, A/B output
+# and interrupted-run report recovery hooks. Browser navigation and the
+# no-external-action boundary are unchanged.
 _base._card_evidence = _policy_card_evidence
 _base._enrich_from_detail = _safe_enrich_from_detail
 _base.qualify = _policy_qualify
@@ -139,5 +243,5 @@ _base.write_pilot_outputs = _policy_write_pilot_outputs
 AutomationSettings = _base.AutomationSettings
 ScheduledRunResult = _base.ScheduledRunResult
 load_automation_settings = _base.load_automation_settings
-run_upwork_scheduled = _base.run_upwork_scheduled
+run_upwork_scheduled = _run_with_partial_report
 local_run_id = _base.local_run_id
