@@ -13,10 +13,12 @@ This is a one-time installation. It:
 - installs and tests the Python worker;
 - reuses the saved Upwork browser profile under `%LOCALAPPDATA%\Codistan\Acquisition\profiles`;
 - creates the Windows task `Codistan Upwork Acquisition`;
-- runs Monday-Friday at 09:30, 13:30 and 17:30 by default;
+- triggers every 30 minutes and opens Chrome only during DST-aware US and Australian opportunity windows;
+- covers 07:00 Eastern through approximately 18:00 Pacific and 07:00-10:30 Sydney/Melbourne time;
+- runs all three approved saved searches on every active run: AI Jobs, Roshana 2D/3D, and Nadir Game/AR/VR;
 - launches a visible installed Chrome/Edge session;
-- navigates the configured Upwork search-result URLs;
 - extracts and deduplicates new job opportunities;
+- applies US-only/worldwide market policy, Pakistan/GCC exclusions and approved commercial filters;
 - applies portfolio-aware qualification and A/B/C priorities;
 - enriches a limited number of strong candidates from their visible job-detail pages;
 - generates recoverable HTML, JSON and CSV outputs;
@@ -25,7 +27,7 @@ This is a one-time installation. It:
 
 The Windows user must be signed in because the Upwork browser stays visible. The worker does not run headlessly for authenticated Upwork acquisition.
 
-See [UPWORK-AUTOMATION-WINDOWS.md](UPWORK-AUTOMATION-WINDOWS.md) for the full setup and operating guide.
+See [UPWORK-AUTOMATION-WINDOWS.md](UPWORK-AUTOMATION-WINDOWS.md) for the full setup, exact search links, filters and operating guide.
 
 ### Verification handling
 
@@ -42,8 +44,8 @@ No stealth plugins, fingerprint spoofing, fake mouse movement, CAPTCHA service, 
 
 ### One-click controls
 
-- `CHECK-UPWORK-AUTOMATION.cmd` — show task, run, priority and verification status.
-- `RUN-UPWORK-AUTOMATION-NOW.cmd` — start one immediate run.
+- `CHECK-UPWORK-AUTOMATION.cmd` — show task, market-window, run, priority and verification status.
+- `RUN-UPWORK-AUTOMATION-NOW.cmd` — start one immediate run outside the ordinary time-window gate.
 - `UNINSTALL-UPWORK-AUTOMATION.cmd` — remove the schedule while preserving local history.
 
 ## Prospect Desk ingestion
@@ -122,6 +124,12 @@ python -m acquisition upwork-scheduled \
 
 Add `--enable-ingestion` only when `ACQUISITION_INGEST_URL` and `ACQUISITION_INGEST_TOKEN` are available to the process.
 
+The scheduler gate can be inspected independently:
+
+```bash
+python -m acquisition upwork-schedule-info --config config/upwork-automation.toml
+```
+
 ## Dry-run fixture
 
 ```bash
@@ -156,6 +164,9 @@ The deterministic configuration is stored in `config/qualification.example.toml`
 - A/B/C priority;
 - weighted commercial, technical, buyer and competition dimensions;
 - business unit and service route;
+- intended Upwork profile and saved-search lane;
+- US-only/worldwide market scope;
+- commercial-filter status;
 - missing evidence and risks;
 - approved portfolio proof IDs;
 - recommended human action.
