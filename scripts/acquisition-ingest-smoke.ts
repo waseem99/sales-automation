@@ -1,14 +1,22 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 
-const apiSource = readFileSync(new URL('../api/acquisition-ingest.ts', import.meta.url), 'utf8');
+const gatewaySource = readFileSync(new URL('../api/lead-signals.ts', import.meta.url), 'utf8');
 const runtimeSource = readFileSync(new URL('../vercel/acquisition-ingest-runtime.ts', import.meta.url), 'utf8');
-const vercelConfig = JSON.parse(readFileSync(new URL('../vercel.json', import.meta.url), 'utf8')) as {
+const vercelConfigSource = readFileSync(new URL('../vercel.json', import.meta.url), 'utf8');
+const vercelConfig = JSON.parse(vercelConfigSource) as {
   functions?: Record<string, unknown>;
+  rewrites?: Array<{ source?: string; destination?: string }>;
 };
 
-assert.match(apiSource, /handleAcquisitionIngest/);
-assert.ok(vercelConfig.functions?.['api/acquisition-ingest.ts']);
+assert.match(gatewaySource, /__acquisition/);
+assert.match(gatewaySource, /handleAcquisitionIngest/);
+assert.ok(vercelConfig.functions?.['api/lead-signals.ts']);
+assert.equal(vercelConfig.functions?.['api/acquisition-ingest.ts'], undefined);
+assert.ok(vercelConfig.rewrites?.some((item) => (
+  item.source === '/api/acquisition-ingest'
+  && item.destination === '/api/lead-signals?__acquisition=1'
+)));
 
 assert.match(runtimeSource, /ACQUISITION_INGEST_TOKEN/);
 assert.match(runtimeSource, /timingSafeEqual/);
@@ -19,7 +27,7 @@ assert.match(runtimeSource, /must be an HTTPS Upwork URL/);
 assert.match(runtimeSource, /handleManualIntakeRuntime/);
 assert.match(runtimeSource, /loadNeonAppState/);
 assert.match(runtimeSource, /persistLeadRecords/);
-assert.match(runtimeSource, /applyAutomaticAssignment|manual-intake-runtime/);
+assert.match(runtimeSource, /manual-intake-runtime/);
 assert.match(runtimeSource, /humanReviewRequired: true/);
 assert.match(runtimeSource, /externalActionAutomated: false/);
 assert.match(runtimeSource, /idempotencyKey/);
