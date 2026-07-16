@@ -96,7 +96,8 @@ def load_qualification_config(path: Path) -> QualificationConfig:
 
 def qualify(record: OpportunityRecord, config: QualificationConfig) -> QualificationDecision:
     evidence = record.evidence
-    text = _normalize(f"{evidence.title} {evidence.body} {' '.join(map(str, evidence.attributes.values()))}")
+    attributes_text = " ".join(map(str, evidence.attributes.values()))
+    text = _normalize(f"{evidence.title} {evidence.body} {attributes_text}")
     risks: list[str] = []
     missing: list[str] = []
     reasons: list[str] = []
@@ -131,8 +132,18 @@ def qualify(record: OpportunityRecord, config: QualificationConfig) -> Qualifica
     buyer_spend = _number(evidence.attributes.get("client_spend_usd"))
     hire_rate = _number(evidence.attributes.get("client_hire_rate"))
     payment_verified = _bool(evidence.attributes.get("payment_verified"))
+    payment_status = str(evidence.attributes.get("payment_status", "not_visible")).strip().lower()
     urgency_days = _number(evidence.attributes.get("urgency_days"))
-    original_evidence = bool(evidence.source_url and evidence.body and evidence.title)
+    proposal_activity = str(evidence.attributes.get("proposal_activity", "")).strip()
+    competition_level = str(evidence.attributes.get("competition_level", "")).strip().lower()
+    capture_quality = str(evidence.attributes.get("capture_quality", "high")).strip().lower()
+
+    concrete_source = bool(
+        evidence.source_url
+        and evidence.body
+        and evidence.title
+        and (evidence.source != "upwork" or re.search(r"~[A-Za-z0-9_-]{8,}", evidence.source_url))
+    )
 
     intent_score = 20 if evidence.source in {"upwork", "public_procurement", "fixture"} else 12
     service_score = min(25, keyword_hits * 8) if service else 0
@@ -163,14 +174,28 @@ def qualify(record: OpportunityRecord, config: QualificationConfig) -> Qualifica
     buyer_score = min(15, buyer_score)
     if buyer_score == 0:
         missing.append("buyer credibility evidence")
+    if payment_status == "unverified":
+        risks.append("payment_unverified")
 
-    evidence_score = 10 if original_evidence else 0
+    evidence_score = 10 if concrete_source else 0
     if len(evidence.body.strip()) >= 120:
         evidence_score += 4
+    if capture_quality == "high":
+        evidence_score += 4
+    elif capture_quality == "low":
+        missing.append("complete clean job description")
+        risks.append("low_capture_quality")
     if urgency_days is not None and urgency_days <= 30:
         evidence_score += 6
         reasons.append("The opportunity has a near-term delivery signal.")
     evidence_score = min(20, evidence_score)
+
+    if competition_level == "very_high" or re.search(r"\b50\+\b", proposal_activity):
+        risks.append("very_high_competition")
+        reasons.append("The visible Upwork card shows very high proposal activity.")
+    elif competition_level == "high":
+        risks.append("high_competition")
+        reasons.append("The visible Upwork card shows high proposal activity.")
 
     local_required = _bool(evidence.attributes.get("local_presence_required"))
     delivery_country = str(evidence.attributes.get("delivery_country", "")).strip().lower()
@@ -186,13 +211,32 @@ def qualify(record: OpportunityRecord, config: QualificationConfig) -> Qualifica
         "buyer_quality": buyer_score,
         "evidence": evidence_score,
     }
-    score = max(0, min(100, sum(dimensions.values()) - 15 * len(risks)))
+    risk_penalties = {
+        "budget_below_minimum": 18,
+        "payment_unverified": 8,
+        "low_capture_quality": 20,
+        "unsupported_local_presence": 30,
+        "service_not_remote_suitable": 30,
+        "very_high_competition": 10,
+        "high_competition": 5,
+    }
+    penalty = sum(risk_penalties.get(risk, 15) for risk in set(risks))
+    score = max(0, min(100, sum(dimensions.values()) - penalty))
+
     proof_ids = _approved_proofs(service, config) if service else ()
     if service and not proof_ids:
         missing.append("approved portfolio proof")
 
+    blocking_risks = {
+        "budget_below_minimum",
+        "payment_unverified",
+        "low_capture_quality",
+        "unsupported_local_presence",
+        "service_not_remote_suitable",
+    }.intersection(risks)
+
     confidence = "high" if evidence_score >= 16 and not missing else "medium" if evidence_score >= 10 else "low"
-    if risks:
+    if blocking_risks:
         disposition = "research" if score >= config.qualified_score else "reject"
     elif missing:
         disposition = "research"
