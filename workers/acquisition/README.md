@@ -8,10 +8,14 @@ On the selected Windows office computer:
 
 1. Open this folder in File Explorer.
 2. Double-click `START-HERE.cmd`.
-3. Log into Upwork and LinkedIn only inside the official Chromium windows opened by the setup.
-4. Complete OTP, CAPTCHA or account verification yourself and press Enter when each authorized account page is visible.
+3. Log into Upwork and LinkedIn only inside the official browser windows opened by the setup.
+4. Complete OTP, CAPTCHA or account verification yourself.
+5. Close each dedicated browser window when instructed so its authorized profile is saved.
+6. Run `VALIDATE-ACCOUNTS.cmd`, or rerun `START-HERE.cmd`, to confirm both saved sessions.
 
 See [SETUP-WINDOWS.md](SETUP-WINDOWS.md) for the full operator-safe guide. Browser profiles are stored outside the repository under `%LOCALAPPDATA%\Codistan\Acquisition\profiles`.
+
+The validator records only expected domain/path state, boolean authentication status and the names of known navigation markers. It does not store messages, job descriptions, contacts, cookies, credentials or private page content.
 
 ## Requirements
 
@@ -68,6 +72,18 @@ python -m acquisition browser \
 ```
 
 Complete login or verification manually. The worker never accepts account passwords as CLI arguments and never logs cookies, storage state, tokens or the profile path.
+
+## Validate an authorized session
+
+Close the dedicated account browser window before validation:
+
+```bash
+python -m acquisition session-check \
+  --profile /absolute/private/path/codistan-browser-profile \
+  --account upwork \
+  --repository-root ../.. \
+  --output /private/local/output/upwork-session-check.json
+```
 
 ## Ingestion boundary
 
