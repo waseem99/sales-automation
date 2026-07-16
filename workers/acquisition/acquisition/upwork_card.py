@@ -88,7 +88,7 @@ def parse_visible_card_metrics(text: str) -> dict[str, Any]:
         clean,
         re.I,
     )
-    weekly_hours = _weekly_hours(clean)
+    weekly_hours, weekly_hours_basis = _weekly_hours(clean)
     estimated_contract = _estimated_contract_value(hourly_max, weekly_hours, duration.group(1) if duration else None)
     monthly_estimate = hourly_max * 160 if hourly_max is not None else None
     budget = fixed if fixed is not None else estimated_contract if estimated_contract is not None else monthly_estimate
@@ -128,6 +128,7 @@ def parse_visible_card_metrics(text: str) -> dict[str, Any]:
         "hourly_min_usd": hourly_min,
         "hourly_max_usd": hourly_max,
         "estimated_hours_per_week": weekly_hours,
+        "weekly_hours_basis": weekly_hours_basis,
         "estimated_contract_value_usd": estimated_contract,
         "hourly_estimated_monthly_usd": monthly_estimate,
         "payment_verified": payment_status == "verified",
@@ -150,17 +151,17 @@ def parse_visible_card_metrics(text: str) -> dict[str, Any]:
     }
 
 
-def _weekly_hours(text: str) -> float | None:
+def _weekly_hours(text: str) -> tuple[float | None, str | None]:
     range_match = re.search(r"(\d+)\s*-\s*(\d+)\s*hrs?/week", text, re.I)
     if range_match:
-        return float(range_match.group(2))
+        return float(range_match.group(2)), "range_maximum"
     less_match = re.search(r"Less than\s+(\d+)\s*hrs?/week", text, re.I)
     if less_match:
-        return float(less_match.group(1))
+        return float(less_match.group(1)), "less_than"
     more_match = re.search(r"More than\s+(\d+)\s*hrs?/week", text, re.I)
     if more_match:
-        return float(more_match.group(1))
-    return None
+        return float(more_match.group(1)), "more_than"
+    return None, None
 
 
 def _estimated_contract_value(hourly_max: float | None, weekly_hours: float | None, duration: str | None) -> float | None:
