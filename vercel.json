@@ -6,6 +6,7 @@
   "buildCommand": "PATH=\"$PWD/.pnpm-cli/bin:$PATH\" pnpm build:vercel",
   "functions": {
     "api/dashboard.ts": { "maxDuration": 300 },
+    "api/acquisition-ingest.ts": { "maxDuration": 300 },
     "api/tenders.ts": { "maxDuration": 300 },
     "api/tender-discovery.ts": { "maxDuration": 300 },
     "api/prospect-cleanup.ts": { "maxDuration": 300 },
