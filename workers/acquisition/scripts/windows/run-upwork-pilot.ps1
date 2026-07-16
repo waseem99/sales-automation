@@ -46,10 +46,10 @@ $VenvPython = Join-Path $WorkerRoot ".venv\Scripts\python.exe"
 $StateRoot = Join-Path $env:LOCALAPPDATA "Codistan\Acquisition"
 $ProfileRoot = Join-Path $StateRoot "profiles"
 $CheckpointRoot = Join-Path $StateRoot "checkpoints"
-$OutputRoot = Join-Path $StateRoot "output\upwork-pilot"
+$OutputRoot = Join-Path $StateRoot "output\upwork-assisted-pilot"
 $ConfigPath = Join-Path $WorkerRoot "config\upwork-pilot.toml"
 $QualificationPath = Join-Path $WorkerRoot "config\qualification.example.toml"
-$CheckpointPath = Join-Path $CheckpointRoot "upwork-pilot-seen.json"
+$CheckpointPath = Join-Path $CheckpointRoot "upwork-assisted-seen.json"
 
 Write-Step "Updating and testing the acquisition worker"
 & powershell.exe -NoProfile -ExecutionPolicy Bypass -File $SetupScript
@@ -60,22 +60,18 @@ New-Item -ItemType Directory -Force -Path $CheckpointRoot, $OutputRoot | Out-Nul
 $RunId = Get-Date -Format "yyyyMMdd-HHmmss"
 $RunDirectory = Join-Path $OutputRoot $RunId
 
-Write-Step "Preparing the Upwork dry-run pilot"
-Write-Host "The pilot uses one visible Upwork tab and reviews at most 10 recent job links." -ForegroundColor Yellow
-Write-Host "It creates a local report and performs no proposal, message, application, or dashboard write." -ForegroundColor Yellow
-Write-Host ""
-Write-Host "If Upwork or Cloudflare asks for human verification:" -ForegroundColor Yellow
-Write-Host "1. Complete the verification in the open browser yourself."
-Write-Host "2. Do NOT close the browser."
-Write-Host "3. Wait until a normal Upwork page is fully visible."
-Write-Host "4. Return to this command window and press Enter only when prompted."
+Write-Step "Preparing operator-assisted Upwork capture"
+Write-Host "The browser will open one normal Upwork tab." -ForegroundColor Yellow
+Write-Host "You will open each saved search yourself and press Enter when its job cards are visible." -ForegroundColor Yellow
+Write-Host "The worker will read only the visible cards and build the local qualification report." -ForegroundColor Yellow
+Write-Host "It will not open job details, submit proposals, send messages, imitate human behavior, or bypass Cloudflare." -ForegroundColor Yellow
 Write-Host ""
 Write-Host "Close any dedicated Upwork browser window before continuing."
 Read-Host "Press Enter when the dedicated Upwork window is closed"
 
 Push-Location $WorkerRoot
 try {
-    & $VenvPython -m acquisition upwork-pilot `
+    & $VenvPython -m acquisition upwork-assisted `
         --profile $ProfilePath `
         --repository-root $RepositoryRoot `
         --config $ConfigPath `
@@ -88,13 +84,13 @@ try {
 }
 
 if ($PilotExit -eq 4) {
-    throw "Upwork verification did not clear after the guided human steps. No report was accepted. Wait a few minutes and rerun the pilot."
+    throw "Upwork did not return to a normal authenticated page after the guided human steps. No report was accepted."
 }
 if ($PilotExit -eq 5) {
-    throw "The pilot did not collect a trustworthy opportunity sample, so it refused to create another zero-result report. Share this message in the project chat."
+    throw "No usable visible job cards were captured, so the worker refused to create a zero-result report. Rerun and open a saved-search result page before pressing Enter."
 }
 if ($PilotExit -ne 0) {
-    throw "The Upwork pilot stopped with exit code $PilotExit. Share the visible non-sensitive error text in the project chat."
+    throw "The operator-assisted Upwork pilot stopped with exit code $PilotExit. Share the visible non-sensitive error text in the project chat."
 }
 
 $ReportPath = Join-Path $RunDirectory "report.html"
@@ -103,8 +99,9 @@ if (-not (Test-Path $ReportPath)) {
 }
 
 $Latest = [ordered]@{
-    schema_version = "codistan-upwork-pilot-latest.v2"
+    schema_version = "codistan-upwork-assisted-latest.v1"
     completed_at = (Get-Date).ToString("o")
+    capture_mode = "operator_assisted_visible_cards"
     run_directory = $RunDirectory
     report_path = $ReportPath
     dashboard_ready_path = (Join-Path $RunDirectory "dashboard-ready.jsonl")
