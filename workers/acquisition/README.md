@@ -2,6 +2,17 @@
 
 Local-first Python foundation for browser-assisted opportunity research. It is intentionally separate from Vercel and does not submit proposals, send messages or perform external actions.
 
+## Nontechnical Windows setup
+
+On the selected Windows office computer:
+
+1. Open this folder in File Explorer.
+2. Double-click `START-HERE.cmd`.
+3. Log into Upwork and LinkedIn only inside the official Chromium windows opened by the setup.
+4. Complete OTP, CAPTCHA or account verification yourself and press Enter when each authorized account page is visible.
+
+See [SETUP-WINDOWS.md](SETUP-WINDOWS.md) for the full operator-safe guide. Browser profiles are stored outside the repository under `%LOCALAPPDATA%\Codistan\Acquisition\profiles`.
+
 ## Requirements
 
 - Python 3.12+
