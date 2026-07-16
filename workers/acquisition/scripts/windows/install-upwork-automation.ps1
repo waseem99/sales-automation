@@ -154,7 +154,7 @@ $InstallRecord | ConvertTo-Json -Depth 4 | Set-Content -Path (Join-Path $StateRo
 
 Write-Host "Automatic Upwork acquisition is installed." -ForegroundColor Green
 Write-Host "Cadence: every $CadenceMinutes minutes while a configured market window is active" -ForegroundColor Green
-Write-Host "US window: 07:00 Eastern through 18:00 Pacific, DST-aware" -ForegroundColor Green
+Write-Host "US window: 07:00 Eastern through approximately 18:00 Pacific, DST-aware" -ForegroundColor Green
 Write-Host "Australia window: 07:00-10:30 Sydney/Melbourne time, DST-aware" -ForegroundColor Green
 Write-Host "Every active run checks AI Jobs, Roshana 2D/3D, and Nadir Game/AR/VR." -ForegroundColor Green
 Write-Host "Windows task: $TaskName" -ForegroundColor Green
