@@ -9,7 +9,7 @@ description = "Local-first, human-controlled acquisition worker foundation for C
 readme = "README.md"
 requires-python = ">=3.12"
 authors = [{ name = "Codistan" }]
-dependencies = []
+dependencies = ["tzdata"]
 
 [project.optional-dependencies]
 browser = ["playwright>=1.49,<2"]
