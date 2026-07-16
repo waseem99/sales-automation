@@ -7,6 +7,7 @@ from pathlib import Path
 import sys
 
 from .adapters.fixture import FixtureHtmlAdapter
+from .adapters.upwork import UpworkSavedSearchAdapter, load_upwork_search_config
 from .browser import bootstrap_authorized_profile, validate_external_profile_path
 from .checkpoints import CheckpointStore
 from .config import load_worker_config
@@ -37,8 +38,11 @@ def build_parser() -> argparse.ArgumentParser:
     subparsers = parser.add_subparsers(dest="command", required=True)
 
     run = subparsers.add_parser("run", help="Run a configured acquisition adapter")
-    run.add_argument("--adapter", choices=["fixture"], default="fixture")
-    run.add_argument("--input", type=Path, required=True)
+    run.add_argument("--adapter", choices=["fixture", "upwork"], default="fixture")
+    run.add_argument("--input", type=Path)
+    run.add_argument("--profile", type=Path)
+    run.add_argument("--search-config", type=Path)
+    run.add_argument("--headless", action="store_true")
     run.add_argument("--config", type=Path, required=True)
     run.add_argument("--output", type=Path, default=Path(".data/acquisition/dry-run.jsonl"))
     run.add_argument("--checkpoint", type=Path, default=Path(".data/acquisition/checkpoints.json"))
@@ -73,7 +77,20 @@ def main(argv: list[str] | None = None) -> int:
     if args.ingest_url and args.dry_run:
         parser.error("--dry-run and --ingest-url cannot be used together")
     sink = HttpIngestionSink(args.ingest_url) if args.ingest_url else JsonlSink(args.output)
-    adapter = FixtureHtmlAdapter(args.input)
+    if args.adapter == "fixture":
+        if args.input is None:
+            parser.error("--input is required for the fixture adapter")
+        adapter = FixtureHtmlAdapter(args.input)
+    else:
+        if args.profile is None or args.search_config is None:
+            parser.error("--profile and --search-config are required for the Upwork adapter")
+        profile = validate_external_profile_path(args.profile, Path.cwd())
+        adapter = UpworkSavedSearchAdapter(
+            profile_path=profile,
+            search_config=load_upwork_search_config(args.search_config),
+            request_delay_seconds=config.request_delay_seconds,
+            headless=args.headless,
+        )
     runner = AcquisitionRunner(
         adapter=adapter,
         sink=sink,

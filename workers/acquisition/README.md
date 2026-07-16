@@ -89,3 +89,21 @@ decision = qualify(record, config)
 ```
 
 The decision includes disposition, score, confidence, business unit, service, dimension scores, missing evidence, risks, approved proof IDs, next action and configuration version. It never sends an external message or application.
+
+## Upwork saved-search dry run
+
+After bootstrapping an authorized browser profile, copy `config/upwork-searches.example.toml`, replace the placeholder search URLs with searches reviewed in the signed-in account, and run:
+
+```bash
+python -m acquisition run \
+  --adapter upwork \
+  --profile /absolute/private/path/codistan-upwork-profile \
+  --search-config config/upwork-searches.example.toml \
+  --config config/segments.example.toml \
+  --output .data/acquisition/upwork-dry-run.jsonl \
+  --checkpoint .data/acquisition/upwork-checkpoints.json \
+  --run-key upwork-pilot \
+  --dry-run
+```
+
+The adapter only reads saved-search results. It does not open the proposal composer, submit proposals, send messages or bypass login/verification challenges. When Upwork requests verification, the run stops and requires manual action in the authorized profile.

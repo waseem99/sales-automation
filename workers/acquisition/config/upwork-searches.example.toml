@@ -1,0 +1,41 @@
+[upwork]
+scroll_rounds = 2
+navigation_timeout_ms = 45000
+
+# Replace placeholder URLs with saved-search URLs from the authorized account.
+# Keep this file free of cookies, tokens and account identifiers.
+
+[[searches]]
+id = "software-saas"
+segment = "software-saas"
+url = "https://www.upwork.com/nx/search/jobs/?q=saas%20react%20native%20next.js"
+enabled = true
+max_items = 30
+
+[[searches]]
+id = "ai-automation"
+segment = "ai-automation"
+url = "https://www.upwork.com/nx/search/jobs/?q=ai%20agent%20rag%20automation"
+enabled = true
+max_items = 30
+
+[[searches]]
+id = "cybersecurity"
+segment = "cybersecurity"
+url = "https://www.upwork.com/nx/search/jobs/?q=penetration%20testing%20soc%202%20iso%2027001"
+enabled = true
+max_items = 20
+
+[[searches]]
+id = "immersive"
+segment = "immersive"
+url = "https://www.upwork.com/nx/search/jobs/?q=3d%20animation%20unity%20unreal%20ar%20vr"
+enabled = true
+max_items = 20
+
+[[searches]]
+id = "digital-growth"
+segment = "digital-growth"
+url = "https://www.upwork.com/nx/search/jobs/?q=website%20redesign%20seo%20analytics"
+enabled = true
+max_items = 20
