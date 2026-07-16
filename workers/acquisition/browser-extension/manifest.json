@@ -1,0 +1,22 @@
+{
+  "manifest_version": 3,
+  "name": "Codistan Upwork Opportunity Capture",
+  "version": "0.1.0",
+  "description": "Manually capture visible Upwork job cards into the local Codistan qualification report.",
+  "permissions": ["activeTab", "tabs"],
+  "host_permissions": [
+    "https://www.upwork.com/*",
+    "http://127.0.0.1:8765/*"
+  ],
+  "action": {
+    "default_title": "Capture Upwork opportunities",
+    "default_popup": "popup.html"
+  },
+  "content_scripts": [
+    {
+      "matches": ["https://www.upwork.com/*"],
+      "js": ["content.js"],
+      "run_at": "document_idle"
+    }
+  ]
+}
