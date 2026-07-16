@@ -1,39 +1,39 @@
 [pilot]
-version = "2026-07-16.upwork-pilot.v1"
-max_jobs_total = 20
+version = "2026-07-16.upwork-pilot.v2"
+max_jobs_total = 10
 min_description_chars = 100
 
 [[searches]]
 id = "software-saas"
 enabled = true
 url = "https://www.upwork.com/nx/search/jobs/?q=saas%20react%20native%20next.js%20node.js%20marketplace&sort=recency"
-max_jobs = 4
-delay_seconds = 4
+max_jobs = 2
+delay_seconds = 8
 
 [[searches]]
 id = "ai-automation"
 enabled = true
 url = "https://www.upwork.com/nx/search/jobs/?q=ai%20agent%20rag%20llm%20automation%20n8n&sort=recency"
-max_jobs = 4
-delay_seconds = 4
+max_jobs = 2
+delay_seconds = 8
 
 [[searches]]
 id = "cybersecurity"
 enabled = true
 url = "https://www.upwork.com/nx/search/jobs/?q=vapt%20penetration%20testing%20soc%202%20iso%2027001%20iam&sort=recency"
-max_jobs = 4
-delay_seconds = 4
+max_jobs = 2
+delay_seconds = 8
 
 [[searches]]
 id = "immersive"
 enabled = true
 url = "https://www.upwork.com/nx/search/jobs/?q=3d%20animation%20unity%20unreal%20ar%20vr&sort=recency"
-max_jobs = 4
-delay_seconds = 4
+max_jobs = 2
+delay_seconds = 8
 
 [[searches]]
 id = "digital-growth"
 enabled = true
 url = "https://www.upwork.com/nx/search/jobs/?q=website%20redesign%20seo%20performance%20marketing%20analytics&sort=recency"
-max_jobs = 4
-delay_seconds = 4
+max_jobs = 2
+delay_seconds = 8
