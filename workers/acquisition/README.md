@@ -1,51 +1,92 @@
 # Codistan Acquisition Worker
 
-Local-first foundation for human-controlled opportunity research. It remains separate from Vercel and never submits proposals, sends messages, applies to jobs or performs other external account actions.
+Local-first opportunity acquisition and qualification worker for Prospect Desk. It can research and route opportunities, but it never submits proposals, applies to jobs, sends messages, changes account data or bypasses platform security controls.
 
-## Nontechnical Windows setup
+## Primary Upwork workflow: automatic visible Chrome worker
 
-On the selected Windows office computer:
+On the selected Windows acquisition computer, double-click:
 
-1. Open this folder in File Explorer.
-2. Double-click `START-HERE.cmd`.
-3. Log into Upwork and LinkedIn only inside the official browser windows opened by setup.
-4. Complete OTP, CAPTCHA or account verification yourself.
-5. Close each dedicated browser window when instructed so its authorized profile is saved.
-6. Run `VALIDATE-ACCOUNTS.cmd`, or rerun `START-HERE.cmd`, to confirm both saved sessions.
+`INSTALL-UPWORK-AUTOMATION.cmd`
 
-See [SETUP-WINDOWS.md](SETUP-WINDOWS.md) for the account-profile setup guide. Browser profiles stay outside Git under `%LOCALAPPDATA%\Codistan\Acquisition\profiles`.
+This is a one-time installation. It:
 
-## Upwork manual Chrome-extension capture
+- installs and tests the Python worker;
+- reuses the saved Upwork browser profile under `%LOCALAPPDATA%\Codistan\Acquisition\profiles`;
+- creates the Windows task `Codistan Upwork Acquisition`;
+- runs Monday-Friday at 09:30, 13:30 and 17:30 by default;
+- launches a visible installed Chrome/Edge session;
+- navigates the configured Upwork search-result URLs;
+- extracts and deduplicates new job opportunities;
+- applies portfolio-aware qualification and A/B/C priorities;
+- enriches a limited number of strong candidates from their visible job-detail pages;
+- generates recoverable HTML, JSON and CSV outputs;
+- sends Priority A/B records to Prospect Desk when encrypted ingestion credentials are configured;
+- keeps failed or unconfigured ingestion records in a durable local retry queue.
 
-Double-click `RUN-UPWORK-PILOT.cmd`.
+The Windows user must be signed in because the Upwork browser stays visible. The worker does not run headlessly for authenticated Upwork acquisition.
 
-The current pilot does not launch or control an Upwork browser through Playwright or remote debugging. On its first run it guides the operator through loading the unpacked `Codistan Upwork Opportunity Capture` extension into the same ordinary Chrome profile used for Upwork.
+See [UPWORK-AUTOMATION-WINDOWS.md](UPWORK-AUTOMATION-WINDOWS.md) for the full setup and operating guide.
 
-The workflow:
+### Verification handling
 
-- starts a localhost-only collector at `127.0.0.1:8765`;
-- opens Upwork through the operating system's normal default-browser flow;
-- requires the operator to open saved searches and browse normally;
-- captures only visible job-result cards after the operator clicks the extension;
+The worker detects login, Cloudflare, CAPTCHA, identity verification, unusual-activity and account-checkpoint states. It then:
+
+1. leaves the browser open;
+2. writes a local attention record;
+3. displays a Windows notification;
+4. waits and polls without clicking;
+5. resumes automatically when a normal Upwork page returns;
+6. stops safely and retries on the next schedule if the challenge remains active.
+
+No stealth plugins, fingerprint spoofing, fake mouse movement, CAPTCHA service, randomized human imitation or security-control bypass is included.
+
+### One-click controls
+
+- `CHECK-UPWORK-AUTOMATION.cmd` — show task, run, priority and verification status.
+- `RUN-UPWORK-AUTOMATION-NOW.cmd` — start one immediate run.
+- `UNINSTALL-UPWORK-AUTOMATION.cmd` — remove the schedule while preserving local history.
+
+## Prospect Desk ingestion
+
+The installer can store the Prospect Desk ingestion token using Windows DPAPI for the current Windows user. The token is not committed to Git and is exposed to the worker process only through temporary environment variables.
+
+Only Priority A and B opportunities are eligible for ingestion. Requests include an idempotency key so the receiving endpoint can safely upsert repeated deliveries.
+
+If the endpoint is unavailable or credentials are not configured, records remain queued at:
+
+`%LOCALAPPDATA%\Codistan\Acquisition\prospect-desk-ingestion-pending.jsonl`
+
+They are retried automatically on later runs.
+
+## Manual extension fallback
+
+`RUN-UPWORK-PILOT.cmd` remains available as a troubleshooting and calibration fallback. It uses the manually triggered Chrome extension and localhost collector. It is not the ordinary daily workflow.
+
+The fallback:
+
+- requires the operator to navigate Upwork and trigger capture;
 - never opens job-detail or proposal pages automatically;
-- never generates fake mouse movement, random timing, fingerprint disguises or security-bypass behavior;
-- captures visible titles, descriptions, source links, budget and client-quality signals where present on each card;
-- deduplicates previously reviewed source IDs;
-- applies the deterministic portfolio-aware qualification rules;
-- creates HTML, JSON and CSV reports under `%LOCALAPPDATA%\Codistan\Acquisition\output\upwork-extension-pilot`;
-- creates `dashboard-ready.jsonl` containing only qualified, contact-ready and proposal-ready records;
-- does not write to Prospect Desk until the first report is explicitly approved.
+- never submits proposals, sends messages or applies to jobs;
+- creates local HTML, JSON and CSV reports.
 
-The unpacked extension is copied to `%LOCALAPPDATA%\Codistan\Acquisition\upwork-capture-extension`. It communicates only with the localhost collector and has no credential, cookie or proposal-submission capability.
+## Nontechnical account setup
+
+When the saved Upwork profile is missing, the automation installer launches the existing account connection flow. Complete login, OTP, CAPTCHA and verification only in the official browser window, then close that dedicated window so the profile is saved.
+
+Browser profiles remain outside Git under:
+
+`%LOCALAPPDATA%\Codistan\Acquisition\profiles`
 
 ## Requirements
 
+- Windows 10/11 acquisition workstation
 - Python 3.12+
-- Windows workstation for the guided launchers
-- Google Chrome for the manual Upwork extension pilot
-- Playwright only for the separate account-profile bootstrap and validation tools
+- Google Chrome or Microsoft Edge
+- Windows user signed in during scheduled runs
+- Playwright browser support installed by setup
+- Optional Prospect Desk HTTPS ingestion endpoint and bearer token
 
-## Install
+## Development install
 
 ```bash
 cd workers/acquisition
@@ -57,14 +98,29 @@ python -m pip install -e ".[browser]"
 playwright install chromium
 ```
 
-The fixture tests and the manual extension collector use Python's standard library. Playwright is retained for the separate saved-session setup and validation commands.
-
 ## Test
 
 ```bash
 cd workers/acquisition
 python -m unittest discover -s tests -v
 ```
+
+The setup and automation installers run the test suite before creating or changing the Windows schedule.
+
+## Scheduled worker CLI
+
+```bash
+python -m acquisition upwork-scheduled \
+  --profile /private/upwork-browser-profile \
+  --repository-root ../.. \
+  --config config/upwork-automation.toml \
+  --qualification-config config/qualification.example.toml \
+  --output-directory /private/output/run-id \
+  --checkpoint /private/checkpoints/upwork-seen.json \
+  --state-directory /private/state
+```
+
+Add `--enable-ingestion` only when `ACQUISITION_INGEST_URL` and `ACQUISITION_INGEST_TOKEN` are available to the process.
 
 ## Dry-run fixture
 
@@ -79,8 +135,6 @@ python -m acquisition run \
   --dry-run
 ```
 
-Running the same command twice demonstrates resumable deduplication: the second run records duplicates instead of appending them again.
-
 ## Bootstrap an authorized browser profile
 
 Store the profile outside the Git repository:
@@ -88,51 +142,30 @@ Store the profile outside the Git repository:
 ```bash
 python -m acquisition browser \
   --profile /absolute/private/path/codistan-browser-profile \
-  --url https://example.com/login \
+  --url https://www.upwork.com/nx/find-work/ \
   --repository-root ../..
 ```
 
-Complete login or verification manually. The worker never accepts account passwords as CLI arguments and never logs cookies, storage state or tokens.
+The worker never accepts account passwords as CLI arguments and never logs cookies, storage state, OTPs or recovery codes.
 
-## Validate an authorized session
+## Qualification model
 
-```bash
-python -m acquisition session-check \
-  --profile /absolute/private/path/codistan-browser-profile \
-  --account upwork \
-  --repository-root ../.. \
-  --output /private/local/output/upwork-session-check.json
-```
+The deterministic configuration is stored in `config/qualification.example.toml`. Decisions include:
 
-## Ingestion boundary
-
-Dry-run JSONL is the default. A future reviewed ingestion API can be used with:
-
-```bash
-export ACQUISITION_INGEST_TOKEN="..."
-python -m acquisition run ... --ingest-url https://internal.example/api/opportunities
-```
-
-Do not enable ingestion until the receiving API, qualification contract and first live report quality are approved.
+- disposition;
+- A/B/C priority;
+- weighted commercial, technical, buyer and competition dimensions;
+- business unit and service route;
+- missing evidence and risks;
+- approved portfolio proof IDs;
+- recommended human action.
 
 ## Safety rules
 
-- Use only user-authorized sessions and pages.
-- Respect platform rules, account protections and conservative human operation.
+- Use only user-authorized sessions and configured search URLs.
+- Keep the authenticated browser visible.
 - Complete login, CAPTCHA and verification personally.
-- Do not automate Upwork applications, LinkedIn connections, messages or InMails.
+- Stop and wait when account protection appears.
+- Do not automate proposals, applications, messages, connections or profile changes.
 - Do not attempt to evade Cloudflare, platform safeguards, rate limits or browser detection.
-- Never commit browser profiles, cookies, tokens, storage state or extracted private page archives.
-
-## Qualification preview
-
-The deterministic configuration is stored in `config/qualification.example.toml`.
-
-```python
-from acquisition.qualification import load_qualification_config, qualify
-
-config = load_qualification_config(Path("config/qualification.example.toml"))
-decision = qualify(record, config)
-```
-
-The decision includes disposition, score, confidence, business unit, service, dimension scores, missing evidence, risks, approved proof IDs, next action and configuration version. It never sends an external message or application.
+- Never commit profiles, cookies, tokens, storage state or private page archives.
