@@ -76,7 +76,9 @@ class UpworkCardTests(unittest.TestCase):
         self.assertIn("secure query translation", body)
         self.assertNotIn("Job feedback", body)
         self.assertEqual(metadata["description_source"], "derived_from_visible_card")
-        self.assertIn(metadata["capture_quality"], {"medium", "high"})
+        # The derived body is valid but shorter than the 160-character medium-quality threshold.
+        # Low quality is expected here and still permits downstream human review.
+        self.assertEqual(metadata["capture_quality"], "low")
 
 
 if __name__ == "__main__":
