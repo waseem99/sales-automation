@@ -5,6 +5,9 @@ $ErrorActionPreference = "Stop"
 Set-StrictMode -Version Latest
 
 $TaskName = "Codistan Upwork Acquisition"
+$WorkerRoot = (Resolve-Path (Join-Path $PSScriptRoot "..\..")).Path
+$VenvPython = Join-Path $WorkerRoot ".venv\Scripts\python.exe"
+$ConfigPath = Join-Path $WorkerRoot "config\upwork-automation.toml"
 $StateRoot = Join-Path $env:LOCALAPPDATA "Codistan\Acquisition"
 $StatusPath = Join-Path $StateRoot "upwork-automation-status.json"
 $AttentionPath = Join-Path $StateRoot "upwork-attention-required.json"
@@ -18,11 +21,27 @@ if ($Task) {
     $Info = Get-ScheduledTaskInfo -TaskName $TaskName
     Write-Host "Scheduled task: Installed" -ForegroundColor Green
     Write-Host "Task state: $($Task.State)"
-    Write-Host "Last run: $($Info.LastRunTime)"
+    Write-Host "Last trigger: $($Info.LastRunTime)"
     Write-Host "Last result: $($Info.LastTaskResult)"
-    Write-Host "Next run: $($Info.NextRunTime)"
+    Write-Host "Next 30-minute trigger: $($Info.NextRunTime)"
 } else {
     Write-Host "Scheduled task: Not installed" -ForegroundColor Red
+}
+
+Write-Host ""
+if (Test-Path $VenvPython -and Test-Path $ConfigPath) {
+    try {
+        $ScheduleText = (& $VenvPython -m acquisition upwork-schedule-info --config $ConfigPath 2>&1 | Out-String).Trim()
+        $Schedule = $ScheduleText | ConvertFrom-Json
+        Write-Host "Market window active now: $($Schedule.active)" -ForegroundColor Yellow
+        Write-Host "Cadence: every $($Schedule.cadence_minutes) minutes"
+        Write-Host "Matched windows: $(@($Schedule.matched_windows) -join ', ')"
+        foreach ($Window in @($Schedule.windows)) {
+            Write-Host "  $($Window.id): $($Window.local_time) | active=$($Window.active)"
+        }
+    } catch {
+        Write-Host "Target-market schedule status could not be read." -ForegroundColor Yellow
+    }
 }
 
 Write-Host ""
@@ -31,7 +50,7 @@ if (Test-Path $StatusPath) {
     Write-Host "Worker status: $($Status.status)" -ForegroundColor Yellow
     Write-Host "Started: $($Status.started_at)"
     Write-Host "Completed: $($Status.completed_at)"
-    Write-Host "Searches completed: $($Status.searches_completed)"
+    Write-Host "Searches completed: $($Status.searches_completed) of 3 expected"
     Write-Host "New opportunities: $($Status.extracted)"
     Write-Host "Priority A: $($Status.priority_a_count)"
     Write-Host "Priority B: $($Status.priority_b_count)"
