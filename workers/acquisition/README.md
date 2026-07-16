@@ -17,19 +17,22 @@ See [SETUP-WINDOWS.md](SETUP-WINDOWS.md) for the full operator-safe guide. Brows
 
 The validator records only expected domain/path state, boolean authentication status and the names of known navigation markers. It does not store messages, job descriptions, contacts, cookies, credentials or private page content.
 
-## One-click Upwork dry-run pilot
+## One-click Upwork operator-assisted capture
 
 After the Upwork session is validated, double-click `RUN-UPWORK-PILOT.cmd`.
 
-The pilot:
+The current pilot deliberately avoids automated search navigation. It:
 
-- opens the dedicated authorized Upwork profile in a visible installed browser;
-- reviews at most 20 recent job links across five configured service segments;
-- opens job detail pages conservatively and pauses on login or security challenges;
-- captures original job evidence, budget, buyer-quality and proposal-activity signals where visible;
+- opens one dedicated authorized Upwork tab in an installed visible browser;
+- asks the operator to open each saved search normally inside Upwork;
+- reads visible job-result cards only after the operator presses Enter;
+- never opens job-detail or proposal pages automatically;
+- never generates fake mouse movement, random timing or browser-fingerprint disguises;
+- pauses for human login, Cloudflare or account-verification action;
+- captures visible titles, descriptions, source links, budget and client-quality signals where present on the card;
 - deduplicates previously reviewed source IDs;
-- applies the deterministic portfolio-aware qualification rules;
-- creates local HTML, JSON and CSV reports under `%LOCALAPPDATA%\Codistan\Acquisition\output\upwork-pilot`;
+- applies deterministic portfolio-aware qualification rules;
+- creates local HTML, JSON and CSV reports under `%LOCALAPPDATA%\Codistan\Acquisition\output\upwork-assisted-pilot`;
 - creates `dashboard-ready.jsonl` containing only qualified, contact-ready and proposal-ready records;
 - does not submit proposals, send messages or write to Prospect Desk.
 
@@ -50,7 +53,7 @@ python -m venv .venv
 # Windows: .venv\Scripts\activate
 # Linux/macOS: source .venv/bin/activate
 python -m pip install --upgrade pip
-python -m pip install -e "[browser]"
+python -m pip install -e ".[browser]"
 playwright install chromium
 ```
 
@@ -120,6 +123,7 @@ Do not use ingestion mode until the receiving API and #204 qualification contrac
 - Respect platform rules, account protections and conservative pacing.
 - Pause for human action when login or verification is required.
 - Do not automate Upwork applications, LinkedIn connections, messages or InMails.
+- Do not attempt to evade Cloudflare, platform safeguards, rate limits or browser detection.
 - Never commit browser profiles, cookies, tokens, storage state or extracted private page archives.
 
 ## Qualification preview
