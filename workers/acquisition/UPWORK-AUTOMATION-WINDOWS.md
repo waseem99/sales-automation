@@ -17,12 +17,12 @@ This is the primary Upwork acquisition workflow. It runs a visible, conservative
 
 Windows triggers the worker every 30 minutes at a fixed seven-minute offset from the hour. The worker opens Chrome only while one of these daylight-saving-aware windows is active:
 
-- **United States:** 07:00 Eastern through 18:00 Pacific every day. Internally this is represented as 07:00-21:30 in `America/New_York`, which covers the East Coast morning through the Pacific evening.
+- **United States:** 07:00 Eastern through approximately 18:00 Pacific every day. Internally this is represented as 07:00-21:30 in `America/New_York`, allowing the 21:07 Eastern / 18:07 Pacific scheduler slot.
 - **Australia:** 07:00-10:30 in `Australia/Sydney` every day, covering the early Sydney/Melbourne opportunity window.
 
 The IANA time-zone rules automatically adjust for US and Australian daylight-saving changes. Pakistan local time is not used as the business scheduling reference.
 
-The seven-minute offset and the inactive gaps between market windows distribute workload away from the top of the hour. There is no random timing, fake human-input behavior or anti-detection logic.
+The seven-minute offset and inactive gaps between market windows distribute task load away from the top of the hour. There is no random timing, fake human-input behavior or anti-detection logic.
 
 The computer must be powered on and the configured Windows user must be signed in because the Upwork browser remains visible.
 
@@ -51,7 +51,7 @@ United States jobs are tagged as matching both presets. Other eligible countries
 Approved commercial engagements are:
 
 - fixed price of **$1,000 or more**; or
-- hourly work of **more than 30 hours per week** for either **3-6 months** or **more than 6 months**.
+- hourly work of **30 or more hours per week** for either **3-6 months** or **more than 6 months**.
 
 An explicit fixed budget below $1,000 or an explicitly non-matching hourly engagement is archived as Priority C. Missing commercial evidence is sent to Priority B for human confirmation rather than being falsely promoted.
 
