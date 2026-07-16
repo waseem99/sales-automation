@@ -18,6 +18,7 @@ from .session_validation import validate_session
 from .storage import HttpIngestionSink, JsonlSink
 from .upwork_assisted import AssistedCaptureStopped, run_upwork_assisted_pilot
 from .upwork_pilot import HumanActionRequired, PilotNoData, run_upwork_pilot
+from .upwork_schedule import evaluate_acquisition_schedule, write_schedule_status
 from .upwork_scheduled_runtime import run_upwork_scheduled
 
 
@@ -68,6 +69,19 @@ def build_parser() -> argparse.ArgumentParser:
     session_check.add_argument("--repository-root", type=Path, default=Path.cwd())
     session_check.add_argument("--output", type=Path)
 
+    schedule_info = subparsers.add_parser(
+        "upwork-schedule-info",
+        help="Show the DST-aware cadence and current target-market window state",
+    )
+    schedule_info.add_argument("--config", type=Path, required=True)
+
+    schedule_check = subparsers.add_parser(
+        "upwork-schedule-check",
+        help="Return success only while a configured US or Australian market window is active",
+    )
+    schedule_check.add_argument("--config", type=Path, required=True)
+    schedule_check.add_argument("--state-directory", type=Path)
+
     upwork = subparsers.add_parser(
         "upwork-pilot",
         help="Run the authenticated, headed, no-action automated-navigation Upwork pilot",
@@ -103,6 +117,12 @@ def main(argv: list[str] | None = None) -> int:
     parser = build_parser()
     args = parser.parse_args(argv)
     configure_logging(args.verbose)
+    if args.command in {"upwork-schedule-info", "upwork-schedule-check"}:
+        decision = evaluate_acquisition_schedule(args.config)
+        if args.command == "upwork-schedule-check" and args.state_directory:
+            write_schedule_status(args.state_directory / "upwork-scheduler-status.json", decision)
+        print(json.dumps(decision.to_dict(), indent=2, sort_keys=True))
+        return 0 if args.command == "upwork-schedule-info" or decision.active else 10
     if args.command == "browser":
         profile = validate_external_profile_path(args.profile, args.repository_root)
         bootstrap_authorized_profile(profile, args.url)
