@@ -11,8 +11,8 @@
       "default": "./dist/index.js"
     },
     "./prospect-page-v2": {
-      "types": "./dist/prospect-page-v2.d.ts",
-      "default": "./dist/prospect-page-v2.js"
+      "types": "./dist/prospect-page-safe.d.ts",
+      "default": "./dist/prospect-page-safe.js"
     },
     "./portfolio-catalog": {
       "types": "./dist/portfolio-catalog.d.ts",
