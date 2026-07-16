@@ -2,7 +2,9 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+import re
 from typing import Any
+from urllib.parse import unquote, urlparse
 
 from .models import OpportunityRecord, SourceEvidence
 from .qualification import QualificationDecision
@@ -14,6 +16,24 @@ from . import upwork_scheduled as _base
 _original_card_evidence = _base._card_evidence
 _original_qualify = _base.qualify
 _original_write_pilot_outputs = _base.write_pilot_outputs
+_original_navigate = _base._navigate
+_original_run_upwork_scheduled = _base.run_upwork_scheduled
+
+
+_MORE_ABOUT_TITLE = re.compile(r'more\s+about\s+["“]([^"”]{4,500})["”]\s*$', re.I)
+_UNTRUSTED_DETAIL_KEYS = {
+    "client_country",
+    "delivery_country",
+    "market_scopes",
+    "market_policy_status",
+    "market_policy_reason",
+    "commercial_filter_status",
+    "commercial_filter_reason",
+    "profile_name",
+    "profile_url",
+    "search_name",
+    "service_lane",
+}
 
 
 def _has_value(value: object) -> bool:
@@ -24,8 +44,54 @@ def _has_value(value: object) -> bool:
     return True
 
 
+def _trusted_detail_value(key: str, value: object) -> bool:
+    if key in _UNTRUSTED_DETAIL_KEYS:
+        return False
+    if not _has_value(value):
+        return False
+    if key == "payment_status" and str(value).strip().casefold() in {"not_visible", "unknown"}:
+        return False
+    return True
+
+
+def _recover_title(original_title: str, body: str, source_url: str) -> str:
+    for candidate in (body, original_title):
+        match = _MORE_ABOUT_TITLE.search(str(candidate or "").strip())
+        if match:
+            return " ".join(match.group(1).split())[:500]
+
+    parsed = urlparse(source_url)
+    match = re.search(r"/(?:jobs|freelance-jobs/apply)/(.+?)_~", parsed.path, re.I)
+    if match:
+        slug = unquote(match.group(1)).replace("-", " ").replace("_", " ")
+        recovered = " ".join(slug.split())
+        if recovered:
+            return recovered[:500]
+
+    value = " ".join(str(original_title or "").split())
+    return value[:500] or "Untitled Upwork opportunity"
+
+
+def _strip_more_about(body: str) -> str:
+    value = str(body or "").strip()
+    match = _MORE_ABOUT_TITLE.search(value)
+    if match:
+        value = value[: match.start()].rstrip(" .")
+    return value
+
+
 def _policy_card_evidence(raw: dict[str, Any], *, segment: str) -> SourceEvidence:
     evidence = _original_card_evidence(raw, segment=segment)
+    evidence = SourceEvidence(
+        source=evidence.source,
+        source_id=evidence.source_id,
+        source_url=evidence.source_url,
+        captured_at=evidence.captured_at,
+        title=_recover_title(evidence.title, evidence.body, evidence.source_url),
+        body=_strip_more_about(evidence.body),
+        segment=evidence.segment,
+        attributes=evidence.attributes,
+    )
     annotated = annotate_profile_and_market(
         evidence,
         segment,
@@ -62,6 +128,35 @@ def _policy_write_pilot_outputs(
             handle.write("\n")
 
 
+def _resilient_navigate(page: Any, url: str, *, wait_seconds: float) -> None:
+    try:
+        _original_navigate(page, url, wait_seconds=wait_seconds)
+        return
+    except Exception as error:
+        if error.__class__.__name__ != "TimeoutError":
+            raise
+
+    # A normal Upwork page may be usable even when the browser lifecycle event
+    # times out. Retry once using the earliest safe lifecycle event. Normal
+    # login/challenge handling still runs immediately after this function.
+    try:
+        page.goto(url, wait_until="commit", timeout=30_000)
+    except Exception as retry_error:
+        if retry_error.__class__.__name__ != "TimeoutError":
+            raise
+    try:
+        page.wait_for_timeout(int(max(2.0, min(wait_seconds, 8.0)) * 1000))
+    except Exception:
+        pass
+
+    target = urlparse(url)
+    current = urlparse(str(getattr(page, "url", "")))
+    if current.hostname not in {"upwork.com", "www.upwork.com"}:
+        raise TimeoutError("Upwork navigation timed out before reaching the expected domain.")
+    if target.path and current.path != target.path:
+        raise TimeoutError("Upwork navigation timed out before reaching the configured saved search.")
+
+
 def _safe_enrich_from_detail(
     *,
     context: Any,
@@ -86,7 +181,7 @@ def _safe_enrich_from_detail(
         detail = extract_job_evidence(detail_page, segment)
         attributes = dict(original.attributes)
         for key, value in detail.attributes.items():
-            if _has_value(value):
+            if _trusted_detail_value(key, value):
                 attributes[key] = value
 
         skills: list[str] = []
@@ -104,13 +199,18 @@ def _safe_enrich_from_detail(
         attributes["capture_quality"] = "high"
         attributes["detail_enriched"] = True
 
+        payment_status = str(attributes.get("payment_status") or "").strip().casefold()
+        if payment_status in {"verified", "unverified"}:
+            attributes["payment_verified"] = payment_status == "verified"
+
+        selected_body = detail.body if len(detail.body.strip()) >= len(original.body.strip()) else original.body
         evidence = SourceEvidence(
             source="upwork",
             source_id=original.source_id,
             source_url=original.source_url,
             captured_at=utc_now_iso(),
-            title=detail.title if detail.title and "Untitled" not in detail.title else original.title,
-            body=detail.body if len(detail.body.strip()) >= len(original.body.strip()) else original.body,
+            title=_recover_title(original.title, detail.body or original.body, source_url),
+            body=_strip_more_about(selected_body),
             segment=segment,
             attributes=attributes,
         )
@@ -192,7 +292,7 @@ def _recovery_objects(snapshot_path: Path) -> tuple[PilotSummary, list[PilotItem
 
 
 def _run_with_partial_report(**kwargs: Any) -> _base.ScheduledRunResult:
-    result = _base.run_upwork_scheduled(**kwargs)
+    result = _original_run_upwork_scheduled(**kwargs)
     output_directory = Path(kwargs["output_directory"])
     report_path = output_directory / "report.html"
     snapshot_path = output_directory / "recovery-snapshot.json"
@@ -202,6 +302,7 @@ def _run_with_partial_report(**kwargs: Any) -> _base.ScheduledRunResult:
             summary, items, config_version = _recovery_objects(snapshot_path)
             summary.status = result.status
             summary.completed_at = result.completed_at or utc_now_iso()
+            summary.failed = max(1, summary.failed)
             _policy_write_pilot_outputs(
                 output_directory=output_directory,
                 summary=summary,
@@ -232,11 +333,12 @@ def _run_with_partial_report(**kwargs: Any) -> _base.ScheduledRunResult:
 
 
 # Keep the main implementation in one module while replacing only local
-# evidence enrichment, profile annotation, qualification-policy, A/B output
-# and interrupted-run report recovery hooks. Browser navigation and the
-# no-external-action boundary are unchanged.
+# evidence enrichment, title recovery, resilient navigation, qualification,
+# A/B output and interrupted-run report recovery hooks. Browser actions and
+# the no-external-action boundary are unchanged.
 _base._card_evidence = _policy_card_evidence
 _base._enrich_from_detail = _safe_enrich_from_detail
+_base._navigate = _resilient_navigate
 _base.qualify = _policy_qualify
 _base.write_pilot_outputs = _policy_write_pilot_outputs
 
