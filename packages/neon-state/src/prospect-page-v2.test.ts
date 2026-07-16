@@ -3,7 +3,9 @@ import { readFileSync } from 'node:fs';
 import { PROSPECT_QUERY_INDEX_NAMES } from './prospect-query-indexes.ts';
 
 const pageSource = readFileSync(new URL('./prospect-page-v2.ts', import.meta.url), 'utf8');
+const safeSource = readFileSync(new URL('./prospect-page-safe.ts', import.meta.url), 'utf8');
 const indexSource = readFileSync(new URL('./prospect-query-indexes.ts', import.meta.url), 'utf8');
+const packageSource = readFileSync(new URL('../package.json', import.meta.url), 'utf8');
 const rollback = readFileSync(new URL('../../../docs/neon-prospect-query-indexes.md', import.meta.url), 'utf8');
 
 assert.equal(new Set(PROSPECT_QUERY_INDEX_NAMES).size, PROSPECT_QUERY_INDEX_NAMES.length);
@@ -18,6 +20,11 @@ assert.match(pageSource, /ensureProspectQueryIndexesWithMetrics/);
 assert.match(pageSource, /follow_up_at\(record\)/);
 assert.match(pageSource, /actionable_follow_up\(record\)/);
 assert.match(pageSource, /LOWER\(record::text\)/);
+assert.match(safeSource, /PROSPECT_PAGE_V2_FALLBACK/);
+assert.match(safeSource, /degradedDatabases/);
+assert.match(safeSource, /loadNeonProspectPageWithMetrics/);
+assert.match(safeSource, /loadConsolidatedPage/);
+assert.match(packageSource, /\.\/dist\/prospect-page-safe\.js/);
 assert.match(indexSource, /pg_advisory_xact_lock/);
 assert.match(indexSource, /CREATE INDEX IF NOT EXISTS prospect_records_owner_lower_idx/);
 assert.match(indexSource, /CREATE INDEX IF NOT EXISTS prospect_records_rank_updated_order_idx/);
@@ -32,4 +39,4 @@ assert.match(rollback, /Follow-up timestamp index deferred/);
 assert.match(rollback, /Free-text search index deferred/);
 assert.match(rollback, /Rollback/);
 
-console.log('Consolidated prospect aggregates, two-statement warm page contract and reversible index catalog passed');
+console.log('Consolidated prospect aggregates, safe fallback, two-statement warm page contract and reversible index catalog passed');
