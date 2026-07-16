@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import replace
+import re
 from typing import Any
 
 from .models import OpportunityRecord, SourceEvidence
@@ -10,7 +11,7 @@ from .qualification import QualificationDecision
 PROFILE_METADATA: dict[str, dict[str, str]] = {
     "ai-jobs": {
         "search_name": "AI Jobs",
-        "profile_name": "AI Jobs Profile",
+        "profile_name": "AI Jobs",
         "profile_url": "https://www.upwork.com/freelancers/~016e9a7bda2340dcd9",
         "service_lane": "ai-automation",
     },
@@ -46,6 +47,30 @@ _COUNTRY_ALIASES = {
     "uae": "united arab emirates",
 }
 
+_COUNTRY_TERMS = (
+    "United States",
+    "United States of America",
+    "USA",
+    "Australia",
+    "Canada",
+    "United Kingdom",
+    "Germany",
+    "France",
+    "Netherlands",
+    "Ireland",
+    "Singapore",
+    "Sweden",
+    "Norway",
+    "Pakistan",
+    "United Arab Emirates",
+    "UAE",
+    "Saudi Arabia",
+    "Qatar",
+    "Kuwait",
+    "Bahrain",
+    "Oman",
+)
+
 _ALLOWED_HOURLY_DURATIONS = {"3 to 6 months", "more than 6 months"}
 
 
@@ -55,6 +80,11 @@ def annotate_profile_and_market(evidence: SourceEvidence, segment: str) -> Sourc
     attributes.update(profile)
 
     country = _country(attributes.get("client_country"))
+    if not country:
+        country = _country_from_text(f"{evidence.title} {evidence.body}")
+    if country:
+        attributes["client_country"] = country
+
     commercial_status, commercial_reason = _commercial_filter(attributes)
     market_scopes: list[str] = []
     market_status = "eligible"
@@ -171,6 +201,13 @@ def _commercial_filter(attributes: dict[str, Any]) -> tuple[str, str]:
 def _country(value: object) -> str:
     text = str(value or "").strip().casefold()
     return _COUNTRY_ALIASES.get(text, text)
+
+
+def _country_from_text(value: str) -> str:
+    for term in _COUNTRY_TERMS:
+        if re.search(rf"\b{re.escape(term)}\b", value, re.I):
+            return _country(term)
+    return ""
 
 
 def _number(value: object) -> float | None:
