@@ -15,6 +15,7 @@ function Resolve-SavedProfile {
         [Parameter(Mandatory = $true)][string]$ProfileRoot,
         [Parameter(Mandatory = $true)][string[]]$CandidateFolders,
         [Parameter(Mandatory = $true)][string[]]$CandidateMarkers,
+        [Parameter(Mandatory = $true)][string[]]$FolderPatterns,
         [Parameter(Mandatory = $true)][string]$DisplayName
     )
 
@@ -41,6 +42,26 @@ function Resolve-SavedProfile {
         $candidate = Join-Path $ProfileRoot $folderName
         if (Test-Path $candidate) {
             return $candidate
+        }
+    }
+
+    if (Test-Path $ProfileRoot) {
+        $matchedFolders = @(
+            Get-ChildItem -Path $ProfileRoot -Directory -ErrorAction SilentlyContinue |
+                Where-Object {
+                    $name = $_.Name.ToLowerInvariant()
+                    foreach ($pattern in $FolderPatterns) {
+                        if ($name -like $pattern.ToLowerInvariant()) {
+                            return $true
+                        }
+                    }
+                    return $false
+                } |
+                Sort-Object LastWriteTime -Descending
+        )
+        if ($matchedFolders.Count -gt 0) {
+            Write-Host "Using discovered $DisplayName profile folder: $($matchedFolders[0].Name)" -ForegroundColor Green
+            return $matchedFolders[0].FullName
         }
     }
 
@@ -74,15 +95,17 @@ if (-not (Test-Path $VenvPython)) {
 $UpworkProfile = Resolve-SavedProfile `
     -StateRoot $StateRoot `
     -ProfileRoot $ProfileRoot `
-    -CandidateFolders @("upwork") `
-    -CandidateMarkers @("upwork.connected.json") `
+    -CandidateFolders @("upwork-browser-v2", "upwork") `
+    -CandidateMarkers @("upwork-browser-v2.connected.json", "upwork.connected.json") `
+    -FolderPatterns @("upwork*") `
     -DisplayName "Upwork"
 
 $LinkedInProfile = Resolve-SavedProfile `
     -StateRoot $StateRoot `
     -ProfileRoot $ProfileRoot `
-    -CandidateFolders @("linkedin-sales-navigator", "linkedin", "linkedin-sales") `
-    -CandidateMarkers @("linkedin-sales-navigator.connected.json", "linkedin.connected.json", "linkedin-sales.connected.json") `
+    -CandidateFolders @("linkedin-sales-navigator-browser-v2", "linkedin-sales-navigator", "linkedin", "linkedin-sales") `
+    -CandidateMarkers @("linkedin-sales-navigator-browser-v2.connected.json", "linkedin-sales-navigator.connected.json", "linkedin.connected.json", "linkedin-sales.connected.json") `
+    -FolderPatterns @("linkedin*") `
     -DisplayName "LinkedIn"
 
 New-Item -ItemType Directory -Force -Path $OutputRoot | Out-Null
