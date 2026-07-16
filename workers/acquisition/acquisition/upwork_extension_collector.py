@@ -2,17 +2,21 @@ from __future__ import annotations
 
 import argparse
 from dataclasses import dataclass
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 import json
 from pathlib import Path
 import threading
 import time
 from typing import Any
 from urllib.parse import urlparse
-from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
-from .models import OpportunityRecord
+from .models import OpportunityRecord, SourceEvidence
 from .qualification import load_qualification_config, qualify
-from .upwork_assisted import VisibleJobCard, _canonical_visible_job_url
+from .upwork_card import (
+    canonical_visible_job_url,
+    clean_visible_description,
+    parse_visible_card_metrics,
+)
 from .upwork_pilot import (
     PilotItem,
     PilotSummary,
@@ -72,7 +76,8 @@ class CollectorState:
                 if not isinstance(raw, dict):
                     rejected += 1
                     continue
-                source_url = _canonical_visible_job_url(str(raw.get("source_url", "")))
+
+                source_url = canonical_visible_job_url(str(raw.get("source_url", "")))
                 if not source_url:
                     rejected += 1
                     continue
@@ -86,22 +91,44 @@ class CollectorState:
 
                 self.summary.reviewed += 1
                 try:
-                    card = VisibleJobCard(
-                        source_url=source_url,
-                        title=str(raw.get("title", ""))[:500],
+                    title = str(raw.get("title", "")).strip()[:500]
+                    card_text = str(raw.get("card_text", ""))[:12_000]
+                    body, capture_meta = clean_visible_description(
                         description=str(raw.get("description", ""))[:10_000],
-                        card_text=str(raw.get("card_text", ""))[:12_000],
-                        skills=tuple(
-                            str(value)[:80]
-                            for value in raw.get("skills", [])[:20]
-                            if str(value).strip()
-                        ) if isinstance(raw.get("skills", []), list) else (),
+                        card_text=card_text,
+                        title=title,
                     )
-                    evidence = card.to_evidence(segment)
-                    if len(evidence.body.strip()) < self.pilot_config.min_description_chars:
+                    if len(body.strip()) < self.pilot_config.min_description_chars:
                         self.summary.rejected_extraction += 1
                         rejected += 1
                         continue
+
+                    attributes = parse_visible_card_metrics(card_text)
+                    attributes.update(capture_meta)
+                    attributes.update(
+                        {
+                            "skills": [
+                                str(value)[:80]
+                                for value in raw.get("skills", [])[:20]
+                                if str(value).strip()
+                            ] if isinstance(raw.get("skills", []), list) else [],
+                            "captured_from": "manual_chrome_extension_visible_card",
+                            "capture_mode": "human_navigated_visible_results",
+                            "pilot_schema_version": "upwork-extension-evidence.v2",
+                        }
+                    )
+
+                    evidence = SourceEvidence(
+                        source="upwork",
+                        source_id=source_id,
+                        source_url=source_url,
+                        captured_at=utc_now_iso(),
+                        title=title or "Untitled Upwork opportunity",
+                        body=body,
+                        segment=segment,
+                        attributes=attributes,
+                    )
+                    evidence.validate()
                     record = OpportunityRecord(
                         dedupe_key=_dedupe_key(evidence),
                         evidence=evidence,
@@ -132,12 +159,13 @@ class CollectorState:
             if self.summary.extracted == 0:
                 raise ValueError("Capture at least one usable Upwork opportunity before creating the report.")
             self.finished = True
+            self.summary.status = "completed"
             self.summary.completed_at = utc_now_iso()
             write_pilot_outputs(
                 output_directory=self.output_directory,
                 summary=self.summary,
                 items=self.items,
-                config_version=f"{self.pilot_config.version}.manual-extension",
+                config_version=f"{self.pilot_config.version}.manual-extension.v2",
             )
             result = self._result_payload()
             (self.output_directory / "collector-result.json").write_text(
@@ -171,7 +199,7 @@ class CollectorState:
             "report_path": str(self.output_directory / "report.html"),
             "dashboard_ready_path": str(self.output_directory / "dashboard-ready.jsonl"),
             "dashboard_ingestion_enabled": False,
-            "capture_mode": "manual_chrome_extension_visible_cards",
+            "capture_mode": "manual_chrome_extension_visible_cards_v2",
         }
 
 
