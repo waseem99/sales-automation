@@ -2,7 +2,7 @@ import type { StoredLeadRecord } from '@sales-automation/storage';
 import type {
   ProspectDashboardSummary,
   ProspectWorkspaceScope,
-} from './prospect-query-legacy.js';
+} from './prospect-query.js';
 
 export interface AggregatePageRow {
   total: number | string;
