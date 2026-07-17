@@ -1,0 +1,52 @@
+name: PR build diagnostic
+
+on:
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+  pull-requests: write
+  issues: write
+
+jobs:
+  diagnose:
+    if: github.event.pull_request.number == 218
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Install pnpm
+        run: npm install --global pnpm@9.15.9
+      - name: Install dependencies
+        run: pnpm install --no-frozen-lockfile
+      - name: Run Vercel build contract
+        id: build
+        continue-on-error: true
+        shell: bash
+        run: |
+          set -o pipefail
+          pnpm build:vercel 2>&1 | tee build-diagnostic.log
+      - name: Publish diagnostic
+        if: always()
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const text = fs.existsSync('build-diagnostic.log')
+              ? fs.readFileSync('build-diagnostic.log', 'utf8')
+              : 'No build log was produced.';
+            const tail = text.split('\n').slice(-120).join('\n').slice(-50000);
+            const outcome = '${{ steps.build.outcome }}';
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+              body: `<!-- prospect-desk-build-diagnostic -->\n**Temporary build diagnostic: ${outcome}**\n\n\`\`\`text\n${tail}\n\`\`\``
+            });
+      - name: Fail when build failed
+        if: steps.build.outcome != 'success'
+        run: exit 1
