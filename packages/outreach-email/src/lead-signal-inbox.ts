@@ -63,7 +63,7 @@ const DEFAULT_UPWORK_SENDERS = ['donotreply@upwork.com'];
 const linkedinSenderPattern = /(?:^|\.)linkedin\.com$/i;
 const salesNavigatorPattern = /\b(?:sales navigator|saved (?:lead|account)? search|saved search alert|lead alert|account alert|new leads?|new accounts?)\b/i;
 const forwardedPattern = /^\s*(?:fw|fwd):/i;
-const linkedinUrlPattern = /https?:\/\/(?:[a-z]{2,3}\.)?(?:www\.)?linkedin\.com\/(?:comm\/)?(?:posts\/[^^\s<>()"']+|feed\/update\/urn:li:activity:[^\s<>()"']+|in\/[^\s<>()"']+|company\/[^\s<>()"']+|sales\/lead\/[^\s<>()"']+|sales\/company\/[^\s<>()"']+)/i;
+const linkedinUrlPattern = /https?:\/\/(?:[a-z]{2,3}\.)?(?:www\.)?linkedin\.com\/(?:comm\/)?(?:posts\/[^\s<>()"']+|feed\/update\/urn:li:activity:[^\s<>()"']+|in\/[^\s<>()"']+|company\/[^\s<>()"']+|sales\/lead\/[^\s<>()"']+|sales\/company\/[^\s<>()"']+)/i;
 const upworkUrlPattern = /https?:\/\/(?:www\.)?upwork\.com\/(?:jobs\/[^\s<>()"']+|freelance-jobs\/apply\/[^\s<>()"']+)/i;
 
 export function loadLeadSignalInboxConfig(environment: NodeJS.ProcessEnv = process.env): LeadSignalInboxConfig {
