@@ -32,9 +32,8 @@ interface SalesNavigatorTarget {
 }
 
 const savedSearchPattern = /\b(?:saved (?:lead|account)? search|lead alert|account alert|new leads?|new accounts?|recommended leads?|recommended accounts?|view lead|view account)\b/i;
-const buyerIntentPattern = /\b(?:looking for|seeking|need(?:ing)?|can anyone recommend|request(?:ing)? proposals?|vendor required|agency required|partner required|implementation partner|help us build|want to build|planning to build|we are evaluating)\b/i;
-const postUrlPattern = /\/(?:posts|feed\/update)\//i;
-const targetUrlPattern = /https?:\/\/(?:[a-z]{2,3}\.)?(?:www\.)?linkedin\.com\/(?:in|company|sales\/lead|sales\/company)\/[^\s<>()"']+/gi;
+const postUrlPattern = /linkedin\.com\/(?:comm\/)?(?:posts\/|feed\/update\/)/i;
+const targetUrlPattern = /https?:\/\/(?:[a-z]{2,3}\.)?(?:www\.)?linkedin\.com\/(?:comm\/)?(?:in|company|sales\/lead|sales\/company)\/[^\s<>()"']+/gi;
 
 export function partitionSalesNavigatorSignals(signals: LinkedInWarmSignalInput[]): {
   researchSignals: LinkedInWarmSignalInput[];
@@ -51,8 +50,8 @@ export function partitionSalesNavigatorSignals(signals: LinkedInWarmSignalInput[
 
 export function isSalesNavigatorResearchSignal(signal: LinkedInWarmSignalInput): boolean {
   if (signal.origin !== 'sales_navigator_email') return false;
-  const combined = `${signal.subject ?? ''}\n${signal.text}`;
-  if (buyerIntentPattern.test(combined) || postUrlPattern.test(signal.sourceUrl ?? '')) return false;
+  const combined = `${signal.subject ?? ''}\n${signal.text}\n${signal.sourceUrl ?? ''}`;
+  if (postUrlPattern.test(combined)) return false;
   return savedSearchPattern.test(combined) || containsTargetUrl(combined);
 }
 
@@ -69,8 +68,15 @@ export async function ingestSalesNavigatorResearchSignals(input: {
   const captured: CapturedLinkedInWarmSignal[] = [];
   const duplicateLeadIds: string[] = [];
   const errors: Array<{ messageId?: string; message: string }> = [];
+  const existingByUrl = new Map<string, string>();
+  const companyWebsiteCache = new Map<string, string | undefined>();
   let extractedCandidates = 0;
   let skippedWithoutTarget = 0;
+
+  for (const record of input.repository.listLeads()) {
+    const comparable = comparableTargetUrl(record.lead.sourceUrl ?? record.lead.linkedinUrl);
+    if (comparable) existingByUrl.set(comparable, record.lead.id);
+  }
 
   for (const signal of input.signals) {
     try {
@@ -81,16 +87,24 @@ export async function ingestSalesNavigatorResearchSignals(input: {
       }
       extractedCandidates += targets.length;
       for (const target of targets) {
+        const comparable = comparableTargetUrl(target.sourceUrl);
+        const duplicateLeadId = comparable ? existingByUrl.get(comparable) : undefined;
+        if (duplicateLeadId) {
+          duplicateLeadIds.push(duplicateLeadId);
+          continue;
+        }
+
         const leadId = leadIdFor(target.sourceUrl);
         const existing = input.repository.getLead(leadId);
         if (existing) {
           duplicateLeadIds.push(existing.lead.id);
+          if (comparable) existingByUrl.set(comparable, existing.lead.id);
           continue;
         }
 
         const serviceCategory = inferServiceCategory(`${signal.subject ?? ''}\n${signal.text}`);
         const companyWebsite = target.companyName
-          ? await findCompanyWebsite(fetchImpl, target.companyName).catch(() => undefined)
+          ? await cachedCompanyWebsite(fetchImpl, target.companyName, companyWebsiteCache)
           : undefined;
         const decision = researchDecision(serviceCategory, target, Boolean(companyWebsite));
         const lead = buildResearchLead({ signal, target, decision, companyWebsite, generatedAt, leadId });
@@ -106,6 +120,7 @@ export async function ingestSalesNavigatorResearchSignals(input: {
           `linkedin-evidence::${target.sourceUrl}::Automatically discovered from a native Sales Navigator saved-search alert.`,
           input.actor,
         );
+        if (comparable) existingByUrl.set(comparable, lead.id);
         captured.push({ leadId: lead.id, decision, evaluation, origin: 'sales_navigator_email' });
       }
     } catch (error) {
@@ -164,7 +179,6 @@ function buildResearchLead(input: {
   generatedAt: string;
   leadId: string;
 }): Lead {
-  const isPerson = input.target.kind === 'person';
   const title = input.target.companyName
     ? `${input.target.companyName} — Sales Navigator target account`
     : input.target.contactName
@@ -174,7 +188,7 @@ function buildResearchLead(input: {
     id: input.leadId,
     source: 'sales_navigator',
     sourceUrl: input.target.sourceUrl,
-    leadType: isPerson ? 'sales_navigator_cold_prospect' : 'linkedin_cold_prospect',
+    leadType: 'sales_navigator_cold_prospect',
     prospectStage: 'cold_prospect',
     title,
     description: [
@@ -274,6 +288,18 @@ function inferServiceCategory(text: string): ServiceCategory {
   return 'unknown';
 }
 
+async function cachedCompanyWebsite(
+  fetchImpl: ProspectFetch,
+  companyName: string,
+  cache: Map<string, string | undefined>,
+): Promise<string | undefined> {
+  const key = companyName.trim().toLowerCase();
+  if (cache.has(key)) return cache.get(key);
+  const website = await findCompanyWebsite(fetchImpl, companyName).catch(() => undefined);
+  cache.set(key, website);
+  return website;
+}
+
 function containsTargetUrl(value: string): boolean {
   targetUrlPattern.lastIndex = 0;
   const found = targetUrlPattern.test(value);
@@ -286,6 +312,7 @@ function normalizeTargetUrl(value: string): string | undefined {
     const url = new URL(value.replace(/[.,;:]+$/, ''));
     const host = url.hostname.toLowerCase().replace(/^www\./, '');
     if (host !== 'linkedin.com' && !host.endsWith('.linkedin.com')) return undefined;
+    url.pathname = url.pathname.replace(/^\/comm\/(?=(?:in|company|sales\/lead|sales\/company)\/)/i, '/');
     if (!/^\/(?:in|company|sales\/lead|sales\/company)\//i.test(url.pathname)) return undefined;
     url.hash = '';
     for (const key of [...url.searchParams.keys()]) {
@@ -295,6 +322,11 @@ function normalizeTargetUrl(value: string): string | undefined {
   } catch {
     return undefined;
   }
+}
+
+function comparableTargetUrl(value: string | undefined): string | undefined {
+  const normalized = value ? normalizeTargetUrl(value) : undefined;
+  return normalized?.toLowerCase();
 }
 
 function leadIdFor(sourceUrl: string): string {
@@ -319,7 +351,7 @@ function slugLabel(value: string): string | undefined {
   try {
     const parts = new URL(value).pathname.split('/').filter(Boolean);
     const slug = parts[parts.length - 1]?.replace(/-[a-z0-9]{6,}$/i, '').replace(/[-_]+/g, ' ').trim();
-    if (!slug || /^ACwA/i.test(slug)) return undefined;
+    if (!slug || /^ACwA/i.test(slug) || /^\d+$/.test(slug)) return undefined;
     return slug.replace(/\b\w/g, (letter) => letter.toUpperCase()).slice(0, 100);
   } catch {
     return undefined;
