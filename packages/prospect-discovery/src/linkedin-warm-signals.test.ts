@@ -80,12 +80,12 @@ assert.equal(isLinkedInPostUrl('https://www.linkedin.com/jobs/view/123'), false)
 assert.equal(isLinkedInPostUrl('https://en.wikipedia.org/wiki/LinkedIn'), false);
 
 const rss = `<?xml version="1.0"?><rss><channel>
-<item><title>Looking for website agency</title><link>https://www.linkedin.com/posts/acme_need-agency-activity-1</link><description>We need a website agency for a redesign project.</description><pubDate>Wed, 15 Jul 2026 08:00:00 GMT</pubDate></item>
+<item><title>Looking for a website development agency</title><link>https://www.linkedin.com/posts/acme_need-agency-activity-1</link><description>We need a website development agency to rebuild our customer portal in the United Kingdom.</description><pubDate>Wed, 15 Jul 2026 08:00:00 GMT</pubDate></item>
 <item><title>LinkedIn job</title><link>https://www.linkedin.com/jobs/view/123</link><description>We are hiring a developer.</description></item>
 <item><title>Wikipedia</title><link>https://en.wikipedia.org/wiki/Website</link><description>Website article.</description></item>
 </channel></rss>`;
 const publicIndexQueries = [
-  'site:linkedin.com/posts "looking for" "website agency" -jobs -hiring',
+  'site:linkedin.com/posts "looking for" "website development agency" -jobs -hiring',
 ];
 const collection = await collectPublicLinkedInIndexSignals(async () => new Response(rss, {
   status: 200,
