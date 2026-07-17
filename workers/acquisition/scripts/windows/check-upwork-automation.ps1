@@ -12,6 +12,8 @@ $StateRoot = Join-Path $env:LOCALAPPDATA "Codistan\Acquisition"
 $StatusPath = Join-Path $StateRoot "upwork-automation-status.json"
 $AttentionPath = Join-Path $StateRoot "upwork-attention-required.json"
 $PendingPath = Join-Path $StateRoot "prospect-desk-ingestion-pending.jsonl"
+$AcceptancePath = Join-Path $StateRoot "upwork-automation-accepted.json"
+$OutputRoot = Join-Path $StateRoot "output\upwork-automation"
 
 Write-Host "CODISTAN UPWORK AUTOMATION STATUS" -ForegroundColor Cyan
 Write-Host ""
@@ -26,6 +28,20 @@ if ($Task) {
     Write-Host "Next 30-minute trigger: $($Info.NextRunTime)"
 } else {
     Write-Host "Scheduled task: Not installed" -ForegroundColor Red
+}
+
+if (Test-Path $AcceptancePath) {
+    try {
+        $Acceptance = Get-Content -Raw -Path $AcceptancePath | ConvertFrom-Json
+        Write-Host "Acceptance gate: Passed" -ForegroundColor Green
+        Write-Host "Accepted run: $($Acceptance.run_id)"
+        Write-Host "Accepted at: $($Acceptance.accepted_at)"
+    } catch {
+        Write-Host "Acceptance gate: Record unreadable" -ForegroundColor Yellow
+    }
+} else {
+    Write-Host "Acceptance gate: Not passed" -ForegroundColor Yellow
+    Write-Host "The recurring task should remain disabled until all three searches complete in one controlled run."
 }
 
 Write-Host ""
@@ -59,6 +75,29 @@ if (Test-Path $StatusPath) {
     Write-Host "Message: $($Status.message)"
 } else {
     Write-Host "No worker run status exists yet." -ForegroundColor Yellow
+}
+
+$LatestRun = $null
+if (Test-Path $OutputRoot) {
+    $LatestRun = Get-ChildItem -Path $OutputRoot -Directory | Sort-Object LastWriteTime -Descending | Select-Object -First 1
+}
+if ($LatestRun) {
+    $LatestReport = Join-Path $LatestRun.FullName "report.html"
+    $LatestSearchResults = Join-Path $LatestRun.FullName "search-results.json"
+    Write-Host ""
+    Write-Host "Latest output: $($LatestRun.FullName)"
+    Write-Host "Report present: $(Test-Path $LatestReport)"
+    if (Test-Path $LatestSearchResults) {
+        try {
+            $SearchResults = Get-Content -Raw -Path $LatestSearchResults | ConvertFrom-Json
+            Write-Host "Successful searches in latest run: $($SearchResults.successful_searches) of $($SearchResults.expected_searches)"
+            foreach ($Search in @($SearchResults.searches)) {
+                Write-Host "  $($Search.search_id): $($Search.status) | cards=$($Search.cards_found) | attempts=$($Search.attempts)"
+            }
+        } catch {
+            Write-Host "Latest search diagnostics could not be read." -ForegroundColor Yellow
+        }
+    }
 }
 
 Write-Host ""
