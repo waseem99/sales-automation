@@ -53,7 +53,7 @@ export function isSalesNavigatorResearchSignal(signal: LinkedInWarmSignalInput):
   if (signal.origin !== 'sales_navigator_email') return false;
   const combined = `${signal.subject ?? ''}\n${signal.text}`;
   if (buyerIntentPattern.test(combined) || postUrlPattern.test(signal.sourceUrl ?? '')) return false;
-  return savedSearchPattern.test(combined) || targetUrlPattern.test(combined);
+  return savedSearchPattern.test(combined) || containsTargetUrl(combined);
 }
 
 export async function ingestSalesNavigatorResearchSignals(input: {
@@ -129,6 +129,7 @@ export function extractSalesNavigatorTargets(signal: LinkedInWarmSignalInput): S
   const combined = `${signal.subject ?? ''}\n${signal.text}\n${signal.sourceUrl ?? ''}`;
   const results: SalesNavigatorTarget[] = [];
   const seen = new Set<string>();
+  targetUrlPattern.lastIndex = 0;
   for (const match of combined.matchAll(targetUrlPattern)) {
     const sourceUrl = normalizeTargetUrl(match[0]);
     if (!sourceUrl || seen.has(sourceUrl)) continue;
@@ -151,6 +152,7 @@ export function extractSalesNavigatorTargets(signal: LinkedInWarmSignalInput): S
       region: signal.region ?? extractLabel(context, ['region', 'location']),
     });
   }
+  targetUrlPattern.lastIndex = 0;
   return results.slice(0, 30);
 }
 
@@ -270,6 +272,13 @@ function inferServiceCategory(text: string): ServiceCategory {
   if (/\b(?:software development|web app|mobile app|full[- ]?stack|react|next\.js|node\.js|python)\b/.test(value)) return 'fullstack_web_app';
   if (/\b(?:enterprise system|erp|crm|legacy modernization|system integration|digital transformation|internal platform)\b/.test(value)) return 'enterprise_systems';
   return 'unknown';
+}
+
+function containsTargetUrl(value: string): boolean {
+  targetUrlPattern.lastIndex = 0;
+  const found = targetUrlPattern.test(value);
+  targetUrlPattern.lastIndex = 0;
+  return found;
 }
 
 function normalizeTargetUrl(value: string): string | undefined {
