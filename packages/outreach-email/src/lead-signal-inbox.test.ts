@@ -31,6 +31,29 @@ const linkedIn = parsePotentialLeadSignalMessage({
 assert.equal(linkedIn?.source, 'sales_navigator_email');
 assert.equal(linkedIn?.sourceUrl, 'https://www.linkedin.com/posts/acme_build-activity-123');
 
+const salesNavigatorProfile = parsePotentialLeadSignalMessage({
+  uid: 5,
+  sender: 'alerts@e.linkedin.com',
+  subject: 'New leads from your saved lead search',
+  text: [
+    'Lead: Ayesha Khan',
+    'Role: Chief Technology Officer',
+    'Company: Northstar Health',
+    'https://www.linkedin.com/in/ayesha-khan-987654?trk=email',
+  ].join('\n'),
+}, config);
+assert.equal(salesNavigatorProfile?.source, 'sales_navigator_email');
+assert.equal(salesNavigatorProfile?.sourceUrl, 'https://www.linkedin.com/in/ayesha-khan-987654');
+
+const salesNavigatorAccount = parsePotentialLeadSignalMessage({
+  uid: 6,
+  sender: 'alerts@e.linkedin.com',
+  subject: 'New accounts from your saved account search',
+  text: 'Company: Northstar Health\nhttps://www.linkedin.com/sales/company/123456?trk=email',
+}, config);
+assert.equal(salesNavigatorAccount?.source, 'sales_navigator_email');
+assert.equal(salesNavigatorAccount?.sourceUrl, 'https://www.linkedin.com/sales/company/123456');
+
 const approvedForward = parsePotentialLeadSignalMessage({
   uid: 3,
   sender: 'waseem@codistan.org',
