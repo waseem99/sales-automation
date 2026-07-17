@@ -16,11 +16,11 @@ const prospectQuerySource = readRepositoryFile('packages/neon-state/src/prospect
 assert.equal(hasStaticSalesAutomationRuntimeImport(runtimeSource), false, 'workspace-dashboard-runtime must not use static @sales-automation runtime imports');
 assert.equal(hasStaticSalesAutomationRuntimeImport(pageSource), false, 'workspace-pages must allow type-only package imports but reject static runtime package imports');
 assert.equal(hasStaticSalesAutomationRuntimeImport(modelSource), false, 'workspace-page-model must allow type-only package imports but reject static runtime package imports');
-assert.equal(runtimeSource.includes("import('@sales-automation/neon-state')"), true, 'workspace runtime must dynamically import neon-state');
-assert.equal(runtimeSource.includes("import('@sales-automation/prospect-discovery')"), true, 'workspace runtime must dynamically import prospect-discovery');
-assert.equal(runtimeSource.includes("import('@sales-automation/storage')"), true, 'workspace runtime must dynamically import storage');
-assert.equal(runtimeSource.includes("import('@sales-automation/web/prospect-handler')"), true, 'workspace runtime must dynamically import prospect-handler');
-assert.equal(runtimeSource.includes("import('@sales-automation/neon-state/portfolio-catalog')"), false, 'workspace runtime must not load the portfolio catalog module');
+assert.match(runtimeSource, /import\s*\(\s*['"]@sales-automation\/neon-state['"]\s*\)/, 'workspace runtime must dynamically import neon-state');
+assert.match(runtimeSource, /import\s*\(\s*['"]@sales-automation\/prospect-discovery['"]\s*\)/, 'workspace runtime must dynamically import prospect-discovery');
+assert.match(runtimeSource, /import\s*\(\s*['"]@sales-automation\/storage['"]\s*\)/, 'workspace runtime must dynamically import storage');
+assert.match(runtimeSource, /import\s*\(\s*['"]@sales-automation\/web\/prospect-handler['"]\s*\)/, 'workspace runtime must dynamically import prospect-handler');
+assert.doesNotMatch(runtimeSource, /import\s*\(\s*['"]@sales-automation\/neon-state\/portfolio-catalog['"]\s*\)/, 'workspace runtime must not load the portfolio catalog module');
 assert.equal(runtimeSource.includes('loadNeonDiscoveryRuns'), false, 'workspace runtime must not load discovery runs');
 assert.equal(runtimeSource.includes('loadApprovedPortfolioCatalog'), false, 'workspace runtime must not load the approved portfolio catalog');
 assert.equal(runtimeSource.includes('persistLeadRecords'), false, 'workspace runtime must not persist the full lead collection');
@@ -65,7 +65,7 @@ assert.match(prospectQuerySource, /LOWER\(record::text\)/);
 assert.match(prospectQuerySource, /follow_up_at\(record\)/);
 assert.match(modelSource, /queryScope: ProspectWorkspaceScope/);
 assert.match(modelSource, /queryScopeFor/);
-assert.equal(pageSource.includes("from './workspace-page-model.js'"), true, 'workspace-pages must import workspace-page-model using the runtime .js path');
+assert.match(pageSource, /from\s+['"]\.\/workspace-page-model\.js['"]/, 'workspace-pages must import workspace-page-model using the runtime .js path');
 assert.equal(modelSource.includes('normalizeWorkspacePageQuery'), true, 'workspace-page-model must use normalizeWorkspacePageQuery');
 assert.equal(modelSource.includes('normalizeProspectPageQuery'), false, 'workspace-page-model must not use the legacy normalizeProspectPageQuery');
 
