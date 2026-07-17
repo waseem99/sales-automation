@@ -61,9 +61,9 @@ const DEFAULT_FORWARDERS = [
 ];
 const DEFAULT_UPWORK_SENDERS = ['donotreply@upwork.com'];
 const linkedinSenderPattern = /(?:^|\.)linkedin\.com$/i;
-const salesNavigatorPattern = /\b(?:sales navigator|saved search alert|lead alert|account alert)\b/i;
+const salesNavigatorPattern = /\b(?:sales navigator|saved (?:lead|account)? search|saved search alert|lead alert|account alert|new leads?|new accounts?)\b/i;
 const forwardedPattern = /^\s*(?:fw|fwd):/i;
-const linkedinUrlPattern = /https?:\/\/(?:[a-z]{2,3}\.)?(?:www\.)?linkedin\.com\/(?:posts\/[^\s<>()"']+|feed\/update\/urn:li:activity:[^\s<>()"']+)/i;
+const linkedinUrlPattern = /https?:\/\/(?:[a-z]{2,3}\.)?(?:www\.)?linkedin\.com\/(?:comm\/)?(?:posts\/[^^\s<>()"']+|feed\/update\/urn:li:activity:[^\s<>()"']+|in\/[^\s<>()"']+|company\/[^\s<>()"']+|sales\/lead\/[^\s<>()"']+|sales\/company\/[^\s<>()"']+)/i;
 const upworkUrlPattern = /https?:\/\/(?:www\.)?upwork\.com\/(?:jobs\/[^\s<>()"']+|freelance-jobs\/apply\/[^\s<>()"']+)/i;
 
 export function loadLeadSignalInboxConfig(environment: NodeJS.ProcessEnv = process.env): LeadSignalInboxConfig {
@@ -143,7 +143,7 @@ export async function pollLeadSignalInbox(
             messageId: parsed.messageId?.trim() || `lead-signal-${config.mailboxEmail}-${message.uid}`,
             sender: normalizeEmail(parsed.from?.value?.[0]?.address) ?? parsed.from?.text,
             subject: parsed.subject,
-            text: (parsed.text || stripHtml(parsed.html?.toString() ?? '') || parsed.subject || '').trim(),
+            text: buildSignalText(parsed.text, parsed.html?.toString() ?? '', parsed.subject),
             receivedAt: parsed.date?.toISOString() ?? new Date().toISOString(),
           }, config);
           if (!candidate) continue;
@@ -251,11 +251,37 @@ function createClient(config: LeadSignalInboxConfig): ImapFlow {
   });
 }
 
+function buildSignalText(plainText: string | undefined, html: string, subject: string | undefined): string {
+  const links = extractHtmlLinks(html);
+  return [
+    plainText?.trim(),
+    stripHtml(html),
+    links.length ? `Embedded links:\n${links.join('\n')}` : undefined,
+    subject?.trim(),
+  ].filter((value): value is string => Boolean(value)).join('\n').trim().slice(0, 60_000);
+}
+
+function extractHtmlLinks(value: string): string[] {
+  const links: string[] = [];
+  for (const match of value.matchAll(/\bhref\s*=\s*["']([^"']+)["']/gi)) {
+    const decoded = decodeHtml(match[1] ?? '').trim();
+    if (!/^https?:\/\//i.test(decoded)) continue;
+    try {
+      const url = new URL(decoded);
+      url.hash = '';
+      links.push(url.toString());
+    } catch {
+      continue;
+    }
+  }
+  return [...new Set(links)].slice(0, 100);
+}
+
 function extractCanonicalUrl(value: string, pattern: RegExp): string | undefined {
   const match = value.match(pattern)?.[0];
   if (!match) return undefined;
   try {
-    const url = new URL(match.replace(/[.,;]+$/, ''));
+    const url = new URL(decodeHtml(match.replace(/[.,;]+$/, '')));
     url.hash = '';
     for (const key of [...url.searchParams.keys()]) {
       if (/^(?:utm_|trk|tracking|lipi|midToken|midSig|source|ref)/i.test(key)) url.searchParams.delete(key);
@@ -285,7 +311,23 @@ function normalizeEmail(value: string | undefined | null): string | undefined {
 }
 
 function stripHtml(value: string): string {
-  return value.replace(/<script\b[^>]*>[\s\S]*?<\/script>/gi, ' ').replace(/<style\b[^>]*>[\s\S]*?<\/style>/gi, ' ').replace(/<[^>]+>/g, ' ').replace(/&nbsp;/gi, ' ').replace(/&amp;/gi, '&').replace(/\s+/g, ' ').trim();
+  return decodeHtml(value
+    .replace(/<script\b[^>]*>[\s\S]*?<\/script>/gi, ' ')
+    .replace(/<style\b[^>]*>[\s\S]*?<\/style>/gi, ' ')
+    .replace(/<[^>]+>/g, ' '))
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function decodeHtml(value: string): string {
+  return value
+    .replace(/&amp;/gi, '&')
+    .replace(/&quot;/gi, '"')
+    .replace(/&#39;|&apos;/gi, "'")
+    .replace(/&lt;/gi, '<')
+    .replace(/&gt;/gi, '>')
+    .replace(/&nbsp;/gi, ' ')
+    .replace(/&#(\d+);/g, (_match, code) => String.fromCharCode(Number(code)));
 }
 
 function normalizeIso(value: string | undefined): string | undefined {
