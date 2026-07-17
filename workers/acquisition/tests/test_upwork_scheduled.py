@@ -6,6 +6,8 @@ import tempfile
 import unittest
 
 from acquisition.upwork_scheduled_runtime import (
+    _recover_title,
+    _visible_state,
     load_automation_settings,
 )
 from acquisition import upwork_scheduled as scheduled
@@ -84,6 +86,12 @@ delay_seconds = 15
         self.assertEqual(value.retention_days, 7)
         self.assertTrue(value.installed_browser_only)
 
+    def test_production_stability_config_disables_detail_tabs(self) -> None:
+        path = Path(__file__).resolve().parents[1] / "config" / "upwork-automation.toml"
+        value = load_automation_settings(path)
+        self.assertEqual(value.version, "upwork-stability.v3")
+        self.assertEqual(value.max_detail_enrichments, 0)
+
     def test_card_evidence_parses_visible_commercial_signals(self) -> None:
         evidence = scheduled._card_evidence(
             {
@@ -118,12 +126,21 @@ delay_seconds = 15
         self.assertEqual(len(values), 1)
         self.assertEqual(values[0]["idempotency_key"], "abc")
 
-    def test_detects_normal_page_and_security_challenge(self) -> None:
+    def test_blank_page_is_not_misclassified_as_human_verification(self) -> None:
+        blank = _FakePage(
+            "https://www.upwork.com/nx/find-work/9652877",
+            "",
+        )
+        state, reason = _visible_state(blank)
+        self.assertEqual(state, "blank")
+        self.assertIn("blank", reason.casefold())
+
+    def test_detects_normal_page_and_explicit_security_challenge(self) -> None:
         ready = _FakePage(
             "https://www.upwork.com/nx/search/jobs/",
             "Find work Best Matches Recent jobs My feed and saved searches",
         )
-        state, _reason = scheduled._access_state(ready)
+        state, _reason = _visible_state(ready)
         self.assertEqual(state, "ready")
 
         challenge = _FakePage(
@@ -131,9 +148,20 @@ delay_seconds = 15
             "Verify you are human. Performing security verification.",
             title="Just a moment",
         )
-        state, reason = scheduled._access_state(challenge)
-        self.assertEqual(state, "challenge")
+        state, reason = _visible_state(challenge)
+        self.assertEqual(state, "verification")
         self.assertIn("Security", reason)
+
+    def test_recovers_job_title_from_url_instead_of_neighbouring_card(self) -> None:
+        value = _recover_title(
+            "Website Copy and Content for a Law Firm",
+            "A private AI operating system for litigation documents and drafting.",
+            "https://www.upwork.com/jobs/Lead-Engineer-Solutions-Architect-Build-Private-Native-Legal-Operating-System_~022077485423388552826/",
+        )
+        self.assertEqual(
+            value,
+            "Lead Engineer Solutions Architect Build Private Native Legal Operating System",
+        )
 
     def test_status_json_contains_no_credentials(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
@@ -144,7 +172,7 @@ delay_seconds = 15
                 started_at="2026-07-16T00:00:00Z",
                 completed_at="2026-07-16T00:10:00Z",
                 output_directory="C:/safe/output",
-                searches_completed=5,
+                searches_completed=3,
                 links_found=25,
                 reviewed=20,
                 extracted=18,
@@ -153,7 +181,7 @@ delay_seconds = 15
                 priority_a_count=2,
                 priority_b_count=5,
                 priority_c_count=11,
-                detail_enrichments=7,
+                detail_enrichments=0,
                 ingested=7,
                 ingestion_pending=0,
                 dashboard_ingestion_enabled=True,
