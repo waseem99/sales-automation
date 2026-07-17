@@ -37,12 +37,13 @@ $ProfilePath = Join-Path $StateRoot "profiles\upwork-browser-v2"
 $ConnectionMarker = Join-Path $StateRoot "upwork.connected.json"
 $SecretsRoot = Join-Path $StateRoot "secrets"
 $SecretsPath = Join-Path $SecretsRoot "prospect-desk.json"
+$AcceptancePath = Join-Path $StateRoot "upwork-automation-accepted.json"
 $TaskName = "Codistan Upwork Acquisition"
 
 Write-Step "Installing and testing the acquisition worker"
 & powershell.exe -NoProfile -ExecutionPolicy Bypass -File $SetupScript
 if ($LASTEXITCODE -ne 0) {
-    throw "The acquisition worker setup or automated tests failed. No scheduled task was created."
+    throw "The acquisition worker setup or automated tests failed. No active schedule was created."
 }
 
 if (-not (Test-Path $ProfilePath) -or -not (Test-Path $ConnectionMarker)) {
@@ -50,13 +51,13 @@ if (-not (Test-Path $ProfilePath) -or -not (Test-Path $ConnectionMarker)) {
     Write-Host "A normal Chrome window will open. Log in and complete any verification yourself." -ForegroundColor Yellow
     & powershell.exe -NoProfile -ExecutionPolicy Bypass -File $ConnectScript -Account Upwork
     if ($LASTEXITCODE -ne 0) {
-        throw "The Upwork profile was not connected. No scheduled task was created."
+        throw "The Upwork profile was not connected. No active schedule was created."
     }
 }
 
 New-Item -ItemType Directory -Force -Path $SecretsRoot | Out-Null
 Write-Step "Configuring optional Prospect Desk ingestion"
-Write-Host "The worker can run without this and will keep Priority A/B opportunities in a safe local queue." -ForegroundColor Yellow
+Write-Host "The stability test never sends records to Prospect Desk." -ForegroundColor Yellow
 $Configure = (Read-Host "Do you have the Prospect Desk ingestion URL and token now? Type Y for yes, or press Enter to skip").Trim().ToLowerInvariant()
 if ($Configure -eq "y") {
     $Endpoint = (Read-Host "Paste the Prospect Desk ingestion endpoint URL").Trim()
@@ -65,9 +66,7 @@ if ($Configure -eq "y") {
     }
     $TokenSecure = Read-Host "Paste the ingestion token (it will be encrypted for this Windows user)" -AsSecureString
     $PlainCheck = Convert-SecureStringToPlain $TokenSecure
-    if (-not $PlainCheck) {
-        throw "An ingestion token was not provided."
-    }
+    if (-not $PlainCheck) { throw "An ingestion token was not provided." }
     $PlainCheck = $null
     $SecretPayload = [ordered]@{
         schema_version = "codistan-prospect-desk-secret.v1"
@@ -77,14 +76,14 @@ if ($Configure -eq "y") {
         protection = "Windows DPAPI current user"
     }
     $SecretPayload | ConvertTo-Json -Depth 3 | Set-Content -Path $SecretsPath -Encoding UTF8
-    Write-Host "Prospect Desk credentials were encrypted locally and were not added to GitHub." -ForegroundColor Green
+    Write-Host "Prospect Desk credentials were encrypted locally." -ForegroundColor Green
 } elseif (Test-Path $SecretsPath) {
     Write-Host "Existing encrypted Prospect Desk credentials were preserved." -ForegroundColor Green
 } else {
-    Write-Host "Prospect Desk ingestion is not configured yet; Priority A/B opportunities will queue locally." -ForegroundColor Yellow
+    Write-Host "Prospect Desk ingestion is not configured; Priority A/B records will remain local." -ForegroundColor Yellow
 }
 
-Write-Step "Reading the DST-aware acquisition schedule"
+Write-Step "Reading the target-market schedule"
 $ScheduleText = (& $VenvPython -m acquisition upwork-schedule-info --config $ConfigPath 2>&1 | Out-String).Trim()
 if ($LASTEXITCODE -ne 0 -or -not $ScheduleText) {
     throw "The US/Australian target-market schedule could not be loaded."
@@ -97,10 +96,10 @@ try {
     throw "The target-market schedule output was invalid."
 }
 if ($CadenceMinutes -lt 15 -or $CadenceMinutes -gt 240) {
-    throw "The configured acquisition cadence is outside the supported safety range."
+    throw "The configured acquisition cadence is outside the supported range."
 }
 
-Write-Step "Registering the recurring 30-minute schedule"
+Write-Step "Registering the schedule in disabled mode"
 if (-not (Get-Module -ListAvailable -Name ScheduledTasks)) {
     throw "Windows Scheduled Tasks support is unavailable on this computer."
 }
@@ -133,38 +132,58 @@ Register-ScheduledTask `
     -Trigger $Trigger `
     -Principal $Principal `
     -Settings $TaskSettings `
-    -Description "Visible Upwork opportunity acquisition every 30 minutes during DST-aware US East-to-Pacific and early Australian windows. Runs all three approved saved searches. Stops and waits on login, CAPTCHA or security verification. Never submits proposals or messages." `
+    -Description "Single-tab visible Chrome opportunity acquisition. Runs the three approved saved searches during configured US and Australian windows. Never submits proposals or messages." `
     -Force | Out-Null
+Disable-ScheduledTask -TaskName $TaskName | Out-Null
+Remove-Item -Path $AcceptancePath -Force -ErrorAction SilentlyContinue
 
 $InstallRecord = [ordered]@{
-    schema_version = "codistan-upwork-scheduled-install.v2"
+    schema_version = "codistan-upwork-scheduled-install.v3"
     task_name = $TaskName
+    task_enabled = $false
     cadence_minutes = $CadenceMinutes
     start_offset_minutes = $StartOffsetMinutes
     next_scheduler_trigger = $StartAt.ToString("o")
-    active_window_strategy = "DST-aware America/New_York and Australia/Sydney windows from config"
+    active_window_strategy = "DST-aware America/New_York and Australia/Sydney windows"
     search_ids = @("ai-jobs", "roshana-2d-3d", "nadir-game-ar-vr")
     profile_path = $ProfilePath
     run_script = $RunScript
     installed_at = (Get-Date).ToString("o")
     user = $CurrentUser
     prospect_desk_credentials_configured = (Test-Path $SecretsPath)
+    acceptance_required = $true
 }
 $InstallRecord | ConvertTo-Json -Depth 4 | Set-Content -Path (Join-Path $StateRoot "upwork-automation-installed.json") -Encoding UTF8
 
-Write-Host "Automatic Upwork acquisition is installed." -ForegroundColor Green
-Write-Host "Cadence: every $CadenceMinutes minutes while a configured market window is active" -ForegroundColor Green
-Write-Host "US window: 07:00 Eastern through approximately 18:00 Pacific, DST-aware" -ForegroundColor Green
-Write-Host "Australia window: 07:00-10:30 Sydney/Melbourne time, DST-aware" -ForegroundColor Green
-Write-Host "Every active run checks AI Jobs, Roshana 2D/3D, and Nadir Game/AR/VR." -ForegroundColor Green
-Write-Host "Windows task: $TaskName" -ForegroundColor Green
-Write-Host ""
-Write-Host "The computer must be powered on and this Windows user must be signed in so visible Chrome can run." -ForegroundColor Yellow
-Write-Host "Cloudflare, CAPTCHA, login and identity checks are never bypassed. The worker waits safely and resumes only when the normal page returns." -ForegroundColor Yellow
+Write-Host "The recurring task is installed but remains disabled until the controlled test passes." -ForegroundColor Yellow
 
-if (-not $SkipImmediateRun) {
-    Write-Step "Starting the first controlled test run"
-    $Arguments = "-NoProfile -ExecutionPolicy Bypass -File `"$RunScript`" -Force"
-    Start-Process -FilePath "powershell.exe" -ArgumentList $Arguments | Out-Null
-    Write-Host "The first run has started. Chrome may open within a few seconds." -ForegroundColor Green
+if ($SkipImmediateRun) {
+    Write-Host "Controlled test skipped. The scheduled task remains disabled." -ForegroundColor Yellow
+    exit 0
 }
+
+Write-Step "Running one controlled three-search stability test"
+Write-Host "Chrome will use one tab. Do not click or refresh unless an explicit Upwork verification screen asks you to act." -ForegroundColor Yellow
+& powershell.exe -NoProfile -ExecutionPolicy Bypass -File $RunScript -Force -AcceptanceTest
+$AcceptanceExit = $LASTEXITCODE
+
+if ($AcceptanceExit -eq 0 -and (Test-Path $AcceptancePath)) {
+    Enable-ScheduledTask -TaskName $TaskName | Out-Null
+    $Record = Get-Content -Raw -Path (Join-Path $StateRoot "upwork-automation-installed.json") | ConvertFrom-Json
+    $Record.task_enabled = $true
+    $Record.acceptance_required = $false
+    $Record.accepted_at = (Get-Date).ToString("o")
+    $Record | ConvertTo-Json -Depth 5 | Set-Content -Path (Join-Path $StateRoot "upwork-automation-installed.json") -Encoding UTF8
+
+    Write-Host "" 
+    Write-Host "Stability test passed. The 30-minute schedule is now enabled." -ForegroundColor Green
+    Write-Host "Every active run checks AI Jobs, Roshana 2D/3D, and Nadir Game/AR/VR." -ForegroundColor Green
+    Write-Host "Chrome opens only during the configured US or Australian market windows." -ForegroundColor Green
+    exit 0
+}
+
+Disable-ScheduledTask -TaskName $TaskName -ErrorAction SilentlyContinue | Out-Null
+Write-Host "" 
+Write-Host "The stability test did not pass. The recurring task remains disabled." -ForegroundColor Yellow
+Write-Host "A report and diagnostic files were preserved in the newest output folder." -ForegroundColor Yellow
+exit 20
