@@ -119,22 +119,26 @@ if ([string]::IsNullOrWhiteSpace($DatabasePassword)) {
 }
 $escapedPassword = $DatabasePassword.Replace("'", "''")
 
+# DatabaseName and DatabaseUser have already passed Assert-Identifier, so they
+# are safe to place directly into PostgreSQL identifier positions. PowerShell
+# does not use backslash to escape quotes inside strings; avoiding unnecessary
+# quoted identifiers prevents malformed SQL such as \"role\" from reaching psql.
 Write-Step "Creating or updating role $DatabaseUser"
 $roleExists = (Invoke-Psql $psqlPath $adminPassword 'postgres' "SELECT 1 FROM pg_roles WHERE rolname = '$DatabaseUser';" -TuplesOnly) -join ''
 if ($roleExists.Trim() -eq '1') {
-  Invoke-Psql $psqlPath $adminPassword 'postgres' "ALTER ROLE \"$DatabaseUser\" WITH LOGIN PASSWORD '$escapedPassword';" | Out-Null
+  Invoke-Psql $psqlPath $adminPassword 'postgres' "ALTER ROLE $DatabaseUser WITH LOGIN PASSWORD '$escapedPassword';" | Out-Null
 } else {
-  Invoke-Psql $psqlPath $adminPassword 'postgres' "CREATE ROLE \"$DatabaseUser\" WITH LOGIN PASSWORD '$escapedPassword';" | Out-Null
+  Invoke-Psql $psqlPath $adminPassword 'postgres' "CREATE ROLE $DatabaseUser WITH LOGIN PASSWORD '$escapedPassword';" | Out-Null
 }
 
 Write-Step "Creating or updating database $DatabaseName"
 $databaseExists = (Invoke-Psql $psqlPath $adminPassword 'postgres' "SELECT 1 FROM pg_database WHERE datname = '$DatabaseName';" -TuplesOnly) -join ''
 if ($databaseExists.Trim() -eq '1') {
-  Invoke-Psql $psqlPath $adminPassword 'postgres' "ALTER DATABASE \"$DatabaseName\" OWNER TO \"$DatabaseUser\";" | Out-Null
+  Invoke-Psql $psqlPath $adminPassword 'postgres' "ALTER DATABASE $DatabaseName OWNER TO $DatabaseUser;" | Out-Null
 } else {
-  Invoke-Psql $psqlPath $adminPassword 'postgres' "CREATE DATABASE \"$DatabaseName\" OWNER \"$DatabaseUser\";" | Out-Null
+  Invoke-Psql $psqlPath $adminPassword 'postgres' "CREATE DATABASE $DatabaseName OWNER $DatabaseUser;" | Out-Null
 }
-Invoke-Psql $psqlPath $adminPassword $DatabaseName "ALTER SCHEMA public OWNER TO \"$DatabaseUser\"; GRANT ALL ON SCHEMA public TO \"$DatabaseUser\";" | Out-Null
+Invoke-Psql $psqlPath $adminPassword $DatabaseName "ALTER SCHEMA public OWNER TO $DatabaseUser; GRANT ALL ON SCHEMA public TO $DatabaseUser;" | Out-Null
 
 $connectionUrl = "postgresql://${DatabaseUser}:${DatabasePassword}@127.0.0.1:${Port}/${DatabaseName}?sslmode=disable"
 
