@@ -84,10 +84,13 @@ const rss = `<?xml version="1.0"?><rss><channel>
 <item><title>LinkedIn job</title><link>https://www.linkedin.com/jobs/view/123</link><description>We are hiring a developer.</description></item>
 <item><title>Wikipedia</title><link>https://en.wikipedia.org/wiki/Website</link><description>Website article.</description></item>
 </channel></rss>`;
+const publicIndexQueries = [
+  'site:linkedin.com/posts "looking for" "website agency" -jobs -hiring',
+];
 const collection = await collectPublicLinkedInIndexSignals(async () => new Response(rss, {
   status: 200,
   headers: { 'content-type': 'application/rss+xml' },
-}), undefined, 1, '2026-07-15T10:00:00.000Z');
+}), publicIndexQueries, 1, '2026-07-15T10:00:00.000Z');
 assert.equal(collection.checked, 1);
 assert.equal(collection.inputs.length, 1);
 assert.equal(collection.inputs[0]?.origin, 'public_index');
