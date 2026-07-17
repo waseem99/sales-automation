@@ -50,14 +50,18 @@ const research = buildWorkspacePage(records, {}, requiredPage('/leads/research')
 assert.equal(research.page.visibleTotal, 1);
 assert.equal(research.page.records[0]?.lead.pipelineStatus, 'needs_research');
 
-const sampleHtml = `<!doctype html><html><head><title>Codistan Prospect Desk</title><style></style></head><body><div class="app-shell"><aside class="sidebar">old</aside><main class="main"><header class="topbar"><div><p class="eyebrow">Live internal BD workspace</p><h1>Prospect Discovery & Management</h1><p>Old description.</p></div><div class="top-actions"></div></header><div class="prospect-list"><div class="section-heading"><div><h2>Prospects</h2><p>Old list copy.</p></div></div><a href="/prospects?leadId=1">Lead</a><form action="/prospects"></form><table><tbody><tr><td colspan="7" class="empty">No prospects.</td></tr></tbody></table></div><section class="lower-grid">old</section><section class="panel runs-panel">runs</section></main></div><script></script></body></html>`;
+const sampleHtml = `<!doctype html><html><head><title>Codistan Prospect Desk</title><style></style></head><body><div class="app-shell"><aside class="sidebar">old</aside><main class="main"><header class="topbar"><div><p class="eyebrow">Live internal BD workspace</p><h1>Prospect Discovery & Management</h1><p>Old description.</p></div><div class="top-actions"></div></header><form class="toolbar server-toolbar" action="/prospects"></form><div class="prospect-list"><div class="section-heading"><div><h2>Prospects</h2><p>Old list copy.</p></div></div><a href="/prospects?leadId=1">Lead</a><table><tbody><tr><td colspan="7" class="empty">No prospects.</td></tr></tbody></table></div><section class="lower-grid">old</section><section class="panel runs-panel">runs</section></main></div><script></script></body></html>`;
 const transformed = applyWorkspacePageChrome(sampleHtml, requiredPage('/leads/rfq'), buildWorkspacePage(records, {}, requiredPage('/leads/rfq'), undefined, now).page.summary);
 assert.match(transformed, /Request for Quotation Leads/);
-assert.match(transformed, /class="nav-item active" href="\/leads\/rfq"/);
+assert.match(transformed, /class="nav-item active" href="\/prospects"/);
+assert.match(transformed, /class="workspace-tab active" aria-current="page">Tenders<\/a>/);
 assert.match(transformed, /href="\/leads\/rfq\?leadId=1"/);
 assert.match(transformed, /action="\/leads\/rfq"/);
 assert.doesNotMatch(transformed, /section class="lower-grid"/);
 assert.match(transformed, /sidebar-toggle/);
+assert.doesNotMatch(transformed, /LinkedIn warm leads<\/span>/);
+assert.doesNotMatch(transformed, /RFQs<\/span>/);
+assert.doesNotMatch(transformed, /AI and automation<\/span>/);
 
 const vercel = JSON.parse(readFileSync(new URL('../vercel.json', import.meta.url), 'utf8')) as {
   rewrites: Array<{ source: string; destination: string }>;
@@ -73,7 +77,7 @@ assert.match(dashboardSource, /workspace-dashboard-runtime\.js/);
 assert.match(dashboardSource, /isWorkspaceDashboardPath\(pathname\)/);
 assert.doesNotMatch(JSON.stringify(vercel), /api\/workspaces/);
 
-console.log('Dedicated workspace routes, filters, sidebar and existing-dashboard routing smoke tests passed');
+console.log('Dedicated workspace routes, filters, compact sidebar tabs and existing-dashboard routing smoke tests passed');
 
 function requiredPage(route: string) {
   const page = resolveWorkspacePage(route);
