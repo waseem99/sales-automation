@@ -1,20 +1,40 @@
-# LinkedIn warm signal inbox and quality loop
+# LinkedIn and Sales Navigator automatic discovery loop
 
 ## Purpose
 
-Capture recent buyer-side LinkedIn and Sales Navigator requests without scraping authenticated LinkedIn sessions or automating external actions.
+Automatically discover target companies, decision-maker profiles and recent buyer-side LinkedIn signals without requiring the team to copy and paste prospects into Prospect Desk.
 
-## Approved sources
+The production loop uses native LinkedIn and Sales Navigator alerts plus public-web enrichment. It does not send LinkedIn messages or take any external sales action.
 
-- Native LinkedIn and Sales Navigator alert emails delivered to a dedicated signal mailbox.
-- LinkedIn post text and URLs pasted by Admin/Waseem at `/linkedin-signals`.
-- Public search-engine snippets that point directly to LinkedIn post or activity URLs.
+## Automatic sources
 
-The system does not log into LinkedIn, reuse session cookies, crawl Sales Navigator pages, run a browser extension, send connection requests, send InMails, comment, apply or bid.
+- Native Sales Navigator saved lead-search alerts.
+- Native Sales Navigator saved account-search alerts.
+- Sales Navigator lead and account alerts.
+- Native LinkedIn notifications containing genuine buyer posts.
+- Public search-engine snippets pointing directly to LinkedIn posts or activity URLs.
+- Optional manual intake remains available only as a fallback; it is not required for the automatic loop.
+
+The system does not reuse LinkedIn session cookies, crawl authenticated Sales Navigator pages, install a LinkedIn browser extension, send connection requests, send InMails, comment, follow, apply or bid.
+
+## One-time Sales Navigator setup
+
+Create and save lead/account searches for Codistan's approved target markets, decision-maker roles, company types and service themes. Enable native email alerts for each saved search and deliver those alerts to the configured signal mailbox.
+
+This is a one-time configuration task. After the alerts are active, no prospect copying or profile pasting is required.
+
+Recommended saved-search families:
+
+- software, SaaS and digital-product decision makers;
+- AI, automation, RAG and voice-AI leaders;
+- cybersecurity and compliance buyers;
+- agencies and studios needing delivery partners;
+- AR, VR, 3D, Unity and Unreal decision makers;
+- companies showing growth, funding, hiring or transformation signals.
 
 ## Dedicated signal mailbox
 
-Automatic email intake requires a mailbox used only for LinkedIn signals. Do not reuse an outreach or reply mailbox because the reply worker can mark unmatched messages as seen.
+Automatic email intake requires a mailbox used only for LinkedIn and Sales Navigator signals. Do not reuse an outreach or reply mailbox because the reply worker may mark unrelated messages as seen.
 
 Required configuration names:
 
@@ -33,13 +53,55 @@ LINKEDIN_SIGNAL_IMAP_FOLDER
 LINKEDIN_SIGNAL_MAX_MESSAGES
 ```
 
-A manually forwarded message is accepted only when it comes from a Codistan address, has a forwarded subject and contains a LinkedIn post or activity URL.
+Native LinkedIn/Sales Navigator alerts are read directly. A manually forwarded message is accepted only when it comes from a Codistan address, has a forwarded subject and retains LinkedIn evidence.
+
+## Two automatic qualification paths
+
+### 1. Target-account research
+
+Saved lead/account searches commonly identify a relevant person or company without proving an active buying requirement. These alerts are not rejected.
+
+The system automatically:
+
+1. recognizes the saved-search, lead-alert or account-alert format;
+2. extracts LinkedIn profile, company, Sales Navigator lead and Sales Navigator account URLs;
+3. extracts visible person, role, company and location context;
+4. deduplicates by normalized target URL;
+5. creates a cold prospect in `needs_research`;
+6. searches for the official company website;
+7. runs public company/contact enrichment;
+8. evaluates and assigns the prospect to a BD owner;
+9. records the exact evidence and recommended verification action.
+
+A target-account record cannot become outreach-ready solely because Sales Navigator surfaced it. The person, current role, company fit and legitimate outreach basis must still be reviewed.
+
+### 2. Warm buyer signals
+
+Alerts containing an actual buyer requirement continue through the warm-signal quality gate.
+
+Hard rejections include:
+
+- employee vacancies and candidate applications;
+- service-provider self-promotion;
+- articles, tutorials, newsletters and educational content without buyer intent;
+- individual, unpaid or clearly unrealistic requests;
+- stale posts;
+- public-index results without verifiable LinkedIn post evidence.
+
+Warm-signal scoring evaluates explicit requirement, freshness, service fit, company credibility, buyer influence, evidence route, geography, approved proof and source reliability.
+
+Bands:
+
+- `priority_a`: strongest immediate buyer signals;
+- `priority_b`: qualified buyer signals requiring normal review;
+- `research`: target accounts, incomplete evidence and public-index results;
+- `reject`: invalid or commercially unsuitable signals.
 
 ## Public-index research
 
-The scheduled worker runs service-specific public searches using `site:linkedin.com/posts` queries. It stores only the search title, snippet and original LinkedIn URL. It does not fetch the LinkedIn page.
+The scheduled worker can run service-specific public searches using `site:linkedin.com/posts` queries. It stores only the search title, snippet and original LinkedIn URL. It does not fetch the LinkedIn page.
 
-Every public-index record is forced into the Research band and must be opened and verified by a person before contact readiness.
+Every public-index record remains Research until a person opens and verifies the original post.
 
 Configuration names:
 
@@ -51,44 +113,25 @@ LINKEDIN_PUBLIC_INDEX_QUERIES
 
 Custom queries can be separated by new lines or `||`.
 
-## Quality gate
-
-Hard rejections include:
-
-- employee vacancies and candidate applications;
-- service-provider self-promotion;
-- articles, tutorials, newsletters and educational content without buyer intent;
-- no active buyer or project requirement;
-- individual, unpaid or clearly unrealistic requests;
-- posts older than 30 days;
-- public-index results that do not point to a LinkedIn post or activity URL.
-
-The warm-signal score evaluates explicit requirement, freshness, service fit, company credibility, buyer influence, original evidence route, geography, approved proof and source reliability.
-
-Bands:
-
-- `priority_a`: 85–100;
-- `priority_b`: 75–84;
-- `research`: 60–74, plus every public-index result;
-- `reject`: below 60 or any hard rejection.
-
 ## Processing loop
 
 The `/api/cron/linkedin-signals` worker runs every 30 minutes:
 
-1. Read unseen messages from the dedicated signal mailbox.
-2. Collect public-index LinkedIn post snippets.
-3. Normalize post URLs and message IDs.
-4. Reject invalid signals with reason codes.
+1. Read unseen LinkedIn and Sales Navigator messages from the dedicated mailbox.
+2. Collect enabled public-index LinkedIn post snippets.
+3. Separate saved-search research alerts from genuine buyer-post signals.
+4. Extract and normalize person, company, lead, account and post URLs.
 5. Deduplicate by URL, message ID and content fingerprint.
-6. Evaluate and store accepted signals.
-7. Assign a BD owner.
-8. Generate approved first-outreach guidance.
-9. Run verified public company and contact enrichment.
-10. Rescore the record and expose it in `/priorities`.
-11. Send an internal Priority A alert only when SMTP is configured.
-12. Persist source and run statistics for `/operations`.
-13. Never perform an external LinkedIn or sales action.
+6. Store target accounts as `needs_research` and qualified posts in their appropriate signal band.
+7. Discover the official company website where possible.
+8. Run verified public company and contact enrichment.
+9. Assign a BD owner.
+10. Generate approved first-outreach guidance only for genuine contact-ready buyer signals.
+11. Rescore records and expose them in Prospect Desk.
+12. Send an internal Priority A alert only when SMTP is configured.
+13. Persist source and run statistics for Operations.
+14. Mark mailbox messages as seen only after persistence succeeds.
+15. Never perform an external LinkedIn or sales action.
 
 ## Internal Priority A alerts
 
@@ -108,18 +151,23 @@ Admin/Waseem can pause or restore these sources from `/operations`:
 - `linkedin_signal_inbox`
 - `linkedin_public_index`
 
-Every source-control change requires an audited reason. Disabling one source does not disable manual intake at `/linkedin-signals`.
+Every source-control change requires an audited reason.
 
-## Human operating procedure
+## Human review boundary
 
 For Priority A/B signals:
 
-1. Open the original LinkedIn post.
-2. Confirm the requirement is still active and buyer-authored.
+1. Open the original LinkedIn evidence.
+2. Confirm that the requirement is current and buyer-authored.
 3. Confirm the person and company relationship.
-4. Review contact-enrichment evidence.
+4. Review public contact-enrichment evidence.
 5. Select approved portfolio proof.
 6. Prepare a brief human-reviewed response.
 7. Record outreach, reply, meeting, proposal and win/loss outcomes.
 
-Public-index signals remain Research until the original post and buyer relationship are verified.
+For Sales Navigator research prospects:
+
+1. Verify the current role and company.
+2. Confirm a legitimate service-fit or warm-signal basis.
+3. Complete missing public company/contact evidence.
+4. Move the prospect forward only after human qualification.
