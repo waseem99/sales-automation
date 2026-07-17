@@ -26,18 +26,45 @@ from .upwork_pilot import (
 )
 
 MAX_REQUEST_BYTES = 1_000_000
-SEARCH_PATHS = {
-    "/nx/find-work/9652811": "ai-jobs",
-    "/nx/find-work/9652860": "roshana-2d-3d",
-    "/nx/find-work/9652877": "nadir-game-ar-vr",
+
+
+@dataclass(frozen=True, slots=True)
+class ApprovedSavedSearch:
+    segment: str
+    profile_owner: str
+    saved_search_name: str
+
+
+APPROVED_SAVED_SEARCHES = {
+    "/nx/find-work/9652811": ApprovedSavedSearch(
+        segment="ai-jobs",
+        profile_owner="Waseem",
+        saved_search_name="AI + Fullstack AI 16 July 2026",
+    ),
+    "/nx/find-work/9652860": ApprovedSavedSearch(
+        segment="roshana-2d-3d",
+        profile_owner="Roshana",
+        saved_search_name="3D Design & Creatives 15 July 2026",
+    ),
+    "/nx/find-work/9652877": ApprovedSavedSearch(
+        segment="nadir-game-ar-vr",
+        profile_owner="Nadir",
+        saved_search_name="Game & AR/VR 16 July 2026",
+    ),
 }
+SEARCH_PATHS = {path: search.segment for path, search in APPROVED_SAVED_SEARCHES.items()}
 
 
-def _segment_for_page(value: str) -> str | None:
+def _search_for_page(value: str) -> ApprovedSavedSearch | None:
     parsed = urlparse(value)
     if parsed.hostname not in {"upwork.com", "www.upwork.com"}:
         return None
-    return SEARCH_PATHS.get(parsed.path.rstrip("/"))
+    return APPROVED_SAVED_SEARCHES.get(parsed.path.rstrip("/"))
+
+
+def _segment_for_page(value: str) -> str | None:
+    search = _search_for_page(value)
+    return search.segment if search else None
 
 
 @dataclass
@@ -64,12 +91,24 @@ class CaptureServiceState:
 
     def capture(self, payload: dict[str, Any]) -> dict[str, Any]:
         page_url = str(payload.get("page_url", "")).strip()
-        segment = _segment_for_page(page_url)
-        supplied = str(payload.get("segment", "")).strip()
-        if not segment or segment not in self.allowed_segments:
+        search = _search_for_page(page_url)
+        supplied_segment = str(payload.get("segment", "")).strip()
+        supplied_owner = str(payload.get("profile_owner", "")).strip()
+        supplied_name = str(payload.get("saved_search_name", "")).strip()
+        supplied_path = str(payload.get("saved_search_path", "")).strip()
+
+        if not search or search.segment not in self.allowed_segments:
             raise ValueError("Capture is allowed only from the three approved Upwork saved searches.")
-        if supplied and supplied != segment:
+        if supplied_segment and supplied_segment != search.segment:
             raise ValueError("Saved-search URL and profile category do not match.")
+        if supplied_owner and supplied_owner != search.profile_owner:
+            raise ValueError("Saved-search URL and profile owner do not match.")
+        if supplied_name and supplied_name != search.saved_search_name:
+            raise ValueError("Saved-search URL and saved-search name do not match.")
+        expected_path = urlparse(page_url).path.rstrip("/")
+        if supplied_path and supplied_path != expected_path:
+            raise ValueError("Saved-search URL and saved-search path do not match.")
+
         raw_cards = payload.get("cards")
         if not isinstance(raw_cards, list) or not raw_cards:
             raise ValueError("No visible job cards were supplied.")
@@ -99,7 +138,7 @@ class CaptureServiceState:
 
                 self.summary.reviewed += 1
                 try:
-                    item = self._build_item(raw, segment, payload)
+                    item = self._build_item(raw, search, payload)
                     self.items.append(item)
                     self.session_seen.add(source_id)
                     new_source_ids.add(source_id)
@@ -129,9 +168,17 @@ class CaptureServiceState:
                 "report_path": str(self.output_directory / "report.html"),
                 "dashboard_ready_path": str(self.output_directory / "dashboard-ready.jsonl"),
                 "capture_mode": "normal_chrome_auto_capture",
+                "segment": search.segment,
+                "profile_owner": search.profile_owner,
+                "saved_search_name": search.saved_search_name,
             }
 
-    def _build_item(self, raw: dict[str, Any], segment: str, payload: dict[str, Any]) -> PilotItem:
+    def _build_item(
+        self,
+        raw: dict[str, Any],
+        search: ApprovedSavedSearch,
+        payload: dict[str, Any],
+    ) -> PilotItem:
         source_url = canonical_visible_job_url(str(raw.get("source_url", "")))
         if not source_url:
             raise ValueError("A concrete Upwork job URL is required.")
@@ -157,7 +204,11 @@ class CaptureServiceState:
             "captured_from": "normal_chrome_extension_visible_card",
             "capture_mode": "user_navigated_normal_chrome_auto_capture",
             "capture_trigger": str(payload.get("trigger", "automatic_visible_page"))[:80],
-            "capture_schema_version": "upwork-normal-chrome-capture.v1",
+            "capture_schema_version": "upwork-normal-chrome-capture.v2",
+            "upwork_profile_owner": search.profile_owner,
+            "upwork_saved_search_name": search.saved_search_name,
+            "upwork_saved_search_path": urlparse(str(payload.get("page_url", ""))).path.rstrip("/"),
+            "upwork_page_title": str(payload.get("page_title", ""))[:500],
         })
 
         evidence = SourceEvidence(
@@ -167,12 +218,12 @@ class CaptureServiceState:
             captured_at=utc_now_iso(),
             title=title or "Untitled Upwork opportunity",
             body=body,
-            segment=segment,
+            segment=search.segment,
             attributes=attributes,
         )
         evidence = annotate_profile_and_market(
             evidence,
-            segment,
+            search.segment,
             visible_client_card_text=card_text,
         )
         evidence.validate()
@@ -204,6 +255,15 @@ class CaptureServiceState:
             "failed": self.summary.failed,
             "priority_counts": self._priority_counts(),
             "report_path": str(self.output_directory / "report.html"),
+            "approved_saved_searches": [
+                {
+                    "path": path,
+                    "segment": search.segment,
+                    "profile_owner": search.profile_owner,
+                    "saved_search_name": search.saved_search_name,
+                }
+                for path, search in APPROVED_SAVED_SEARCHES.items()
+            ],
         }
 
     def _priority_counts(self) -> dict[str, int]:
@@ -219,12 +279,12 @@ class CaptureServiceState:
             output_directory=self.output_directory,
             summary=self.summary,
             items=self.items,
-            config_version=f"{self.pilot_config.version}.normal-chrome-auto-capture-v1",
+            config_version=f"{self.pilot_config.version}.normal-chrome-auto-capture-v2",
         )
 
     def _write_service_status(self) -> None:
         payload = {
-            "schema_version": "codistan-upwork-normal-chrome-service.v1",
+            "schema_version": "codistan-upwork-normal-chrome-service.v2",
             **self._status_unlocked(),
         }
         (self.state_directory / "upwork-normal-chrome-service-status.json").write_text(
