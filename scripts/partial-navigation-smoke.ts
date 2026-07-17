@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { dirname, relative, resolve, sep } from 'node:path';
+import { dirname, isAbsolute, relative, resolve, sep } from 'node:path';
 import type { StoredLeadRecord } from '@sales-automation/storage';
 import {
   enhanceProspectPartialNavigation,
@@ -31,7 +31,7 @@ function readRepositoryFile(path: string): string {
 function assertInsideRepository(path: string): void {
   const pathFromRoot = relative(repositoryRoot, path);
   assert.equal(
-    pathFromRoot === '' || (!pathFromRoot.startsWith(`..${sep}`) && pathFromRoot !== '..' && !resolve(pathFromRoot).startsWith(sep)),
+    pathFromRoot === '' || (!pathFromRoot.startsWith(`..${sep}`) && pathFromRoot !== '..' && !isAbsolute(pathFromRoot)),
     true,
     `repository source path must stay inside the checkout: ${path}`,
   );
