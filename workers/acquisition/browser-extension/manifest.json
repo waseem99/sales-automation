@@ -1,15 +1,18 @@
 {
   "manifest_version": 3,
   "name": "Codistan Upwork Opportunity Capture",
-  "version": "0.3.0",
-  "description": "Manually capture visible Upwork job cards into the local Codistan BD-priority qualification report.",
-  "permissions": ["activeTab", "tabs"],
+  "version": "0.4.0",
+  "description": "Automatically capture visible cards from the three approved Upwork saved searches after the user opens them in normal Chrome.",
+  "permissions": ["activeTab", "tabs", "storage", "notifications"],
   "host_permissions": [
     "https://www.upwork.com/*",
     "http://127.0.0.1:8765/*"
   ],
+  "background": {
+    "service_worker": "background.js"
+  },
   "action": {
-    "default_title": "Capture Upwork opportunities",
+    "default_title": "Codistan Upwork capture status",
     "default_popup": "popup.html"
   },
   "content_scripts": [
