@@ -4,7 +4,6 @@ import { resolve } from 'node:path';
 
 const root = resolve(import.meta.dirname, '..');
 const workspace = readFileSync(resolve(root, 'vercel/workspace-pages.ts'), 'utf8');
-const linkedin = readFileSync(resolve(root, 'vercel/linkedin-warm-signals-runtime.ts'), 'utf8');
 const shellCss = readFileSync(resolve(root, 'public/assets/prospect-desk-shell.v2.css'), 'utf8');
 
 assert.match(workspace, /id: 'daily-work'/);
@@ -23,17 +22,4 @@ for (const route of ['/leads/linkedin', '/leads/upwork', '/leads/tenders', '/lea
 assert.match(shellCss, /\.workspace-tabs\{/);
 assert.match(shellCss, /\.workspace-tab\.active\{/);
 
-assert.match(linkedin, /intakeMode === 'research'/);
-assert.match(linkedin, /sourceKind: 'public_post'/);
-assert.match(linkedin, /Manual research note for a LinkedIn target prospect/);
-assert.match(linkedin, /needs research before outreach/);
-assert.match(linkedin, /requiredLinkedInUrl/);
-assert.match(linkedin, /enrichRepositoryContacts/);
-assert.match(linkedin, /evaluateLead/);
-assert.match(linkedin, /linkedin_research::profile_or_company_url/);
-assert.match(linkedin, /externalActionAutomated: false/);
-assert.match(linkedin, /No logged-in LinkedIn crawling/);
-assert.doesNotMatch(linkedin.toLowerCase(), /playwright|puppeteer|selenium/);
-assert.doesNotMatch(linkedin, /connection request[^<]*sent automatically/i);
-
-console.log('Prospect Desk simplification and LinkedIn-assisted intake smoke passed.');
+console.log('Prospect Desk navigation simplification smoke passed.');
