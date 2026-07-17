@@ -38,6 +38,7 @@ $ConnectionMarker = Join-Path $StateRoot "upwork.connected.json"
 $SecretsRoot = Join-Path $StateRoot "secrets"
 $SecretsPath = Join-Path $SecretsRoot "prospect-desk.json"
 $AcceptancePath = Join-Path $StateRoot "upwork-automation-accepted.json"
+$InstallRecordPath = Join-Path $StateRoot "upwork-automation-installed.json"
 $TaskName = "Codistan Upwork Acquisition"
 
 Write-Step "Installing and testing the acquisition worker"
@@ -153,7 +154,7 @@ $InstallRecord = [ordered]@{
     prospect_desk_credentials_configured = (Test-Path $SecretsPath)
     acceptance_required = $true
 }
-$InstallRecord | ConvertTo-Json -Depth 4 | Set-Content -Path (Join-Path $StateRoot "upwork-automation-installed.json") -Encoding UTF8
+$InstallRecord | ConvertTo-Json -Depth 4 | Set-Content -Path $InstallRecordPath -Encoding UTF8
 
 Write-Host "The recurring task is installed but remains disabled until the controlled test passes." -ForegroundColor Yellow
 
@@ -169,13 +170,13 @@ $AcceptanceExit = $LASTEXITCODE
 
 if ($AcceptanceExit -eq 0 -and (Test-Path $AcceptancePath)) {
     Enable-ScheduledTask -TaskName $TaskName | Out-Null
-    $Record = Get-Content -Raw -Path (Join-Path $StateRoot "upwork-automation-installed.json") | ConvertFrom-Json
+    $Record = Get-Content -Raw -Path $InstallRecordPath | ConvertFrom-Json
     $Record.task_enabled = $true
     $Record.acceptance_required = $false
-    $Record.accepted_at = (Get-Date).ToString("o")
-    $Record | ConvertTo-Json -Depth 5 | Set-Content -Path (Join-Path $StateRoot "upwork-automation-installed.json") -Encoding UTF8
+    $Record | Add-Member -NotePropertyName accepted_at -NotePropertyValue (Get-Date).ToString("o") -Force
+    $Record | ConvertTo-Json -Depth 5 | Set-Content -Path $InstallRecordPath -Encoding UTF8
 
-    Write-Host "" 
+    Write-Host ""
     Write-Host "Stability test passed. The 30-minute schedule is now enabled." -ForegroundColor Green
     Write-Host "Every active run checks AI Jobs, Roshana 2D/3D, and Nadir Game/AR/VR." -ForegroundColor Green
     Write-Host "Chrome opens only during the configured US or Australian market windows." -ForegroundColor Green
@@ -183,7 +184,7 @@ if ($AcceptanceExit -eq 0 -and (Test-Path $AcceptancePath)) {
 }
 
 Disable-ScheduledTask -TaskName $TaskName -ErrorAction SilentlyContinue | Out-Null
-Write-Host "" 
+Write-Host ""
 Write-Host "The stability test did not pass. The recurring task remains disabled." -ForegroundColor Yellow
 Write-Host "A report and diagnostic files were preserved in the newest output folder." -ForegroundColor Yellow
 exit 20
