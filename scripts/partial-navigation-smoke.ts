@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
+import { dirname, relative, resolve, sep } from 'node:path';
 import type { StoredLeadRecord } from '@sales-automation/storage';
 import {
   enhanceProspectPartialNavigation,
@@ -7,11 +8,40 @@ import {
 } from '../vercel/prospect-partial-navigation.ts';
 import { enhanceProspectWorkflowUi } from '../vercel/prospect-workflow-ui.ts';
 
+const repositoryRoot = resolve(process.cwd());
+
+function readRepositoryFile(path: string): string {
+  const absolutePath = resolve(repositoryRoot, path);
+  assertInsideRepository(absolutePath);
+  const source = readFileSync(absolutePath, 'utf8');
+  const pointer = source.trim();
+
+  // Git symlinks are checked out as one-line pointer files on Windows when
+  // symbolic-link creation is unavailable. Resolve only a safe, local source
+  // pointer and otherwise return the original file content unchanged.
+  if (/^[^\r\n]+\.(?:[cm]?[jt]sx?)$/.test(pointer)) {
+    const targetPath = resolve(dirname(absolutePath), pointer);
+    assertInsideRepository(targetPath);
+    return readFileSync(targetPath, 'utf8');
+  }
+
+  return source;
+}
+
+function assertInsideRepository(path: string): void {
+  const pathFromRoot = relative(repositoryRoot, path);
+  assert.equal(
+    pathFromRoot === '' || (!pathFromRoot.startsWith(`..${sep}`) && pathFromRoot !== '..' && !resolve(pathFromRoot).startsWith(sep)),
+    true,
+    `repository source path must stay inside the checkout: ${path}`,
+  );
+}
+
 function main(): void {
-  const script = readFileSync(new URL('../public/assets/prospect-partial-navigation.v2.js', import.meta.url), 'utf8');
-  const styles = readFileSync(new URL('../public/assets/prospect-partial-navigation.v2.css', import.meta.url), 'utf8');
-  const workflowScript = readFileSync(new URL('../public/assets/prospect-workflow.v1.js', import.meta.url), 'utf8');
-  const workflowStyles = readFileSync(new URL('../public/assets/prospect-workflow.v1.css', import.meta.url), 'utf8');
+  const script = readRepositoryFile('public/assets/prospect-partial-navigation.v2.js');
+  const styles = readRepositoryFile('public/assets/prospect-partial-navigation.v2.css');
+  const workflowScript = readRepositoryFile('public/assets/prospect-workflow.v1.js');
+  const workflowStyles = readRepositoryFile('public/assets/prospect-workflow.v1.css');
   assert.doesNotThrow(() => new Function(script), 'partial navigation browser asset must parse');
   assert.doesNotThrow(() => new Function(workflowScript), 'prospect workflow browser asset must parse');
   assert.match(script, /x-prospect-partial/);
@@ -112,8 +142,8 @@ function main(): void {
   assert.doesNotMatch(fragment, /<html|<script/);
   assert.throws(() => extractProspectPartialContent('<html><body>No markers</body></html>'), /markers are missing/);
 
-  const runtime = readFileSync(new URL('../vercel/workspace-dashboard-runtime.ts', import.meta.url), 'utf8');
-  const neonQuery = readFileSync(new URL('../packages/neon-state/src/prospect-query.ts', import.meta.url), 'utf8');
+  const runtime = readRepositoryFile('vercel/workspace-dashboard-runtime.ts');
+  const neonQuery = readRepositoryFile('packages/neon-state/src/prospect-query.ts');
   assert.match(runtime, /prospect-workflow-ui/);
   assert.match(runtime, /enhanceProspectWorkflowUi/);
   assert.match(runtime, /PROSPECT_WORKFLOW_UI_ERROR/);
