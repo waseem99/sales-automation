@@ -1,14 +1,17 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import { matchesProspectWorkspaceScope } from '@sales-automation/neon-state';
 import type { Lead } from '@sales-automation/shared';
 import { WORKSPACE_PAGES } from '../vercel/workspace-page-model.ts';
 
-const runtimeSource = readFileSync(new URL('../vercel/workspace-dashboard-runtime.ts', import.meta.url), 'utf8');
-const pageSource = readFileSync(new URL('../vercel/workspace-pages.ts', import.meta.url), 'utf8');
-const modelSource = readFileSync(new URL('../vercel/workspace-page-model.ts', import.meta.url), 'utf8');
-const neonStateSource = readFileSync(new URL('../packages/neon-state/src/index.ts', import.meta.url), 'utf8');
-const prospectQuerySource = readFileSync(new URL('../packages/neon-state/src/prospect-query.ts', import.meta.url), 'utf8');
+const repositoryRoot = process.cwd();
+const readRepositoryFile = (path: string): string => readFileSync(resolve(repositoryRoot, path), 'utf8');
+const runtimeSource = readRepositoryFile('vercel/workspace-dashboard-runtime.ts');
+const pageSource = readRepositoryFile('vercel/workspace-pages.ts');
+const modelSource = readRepositoryFile('vercel/workspace-page-model.ts');
+const neonStateSource = readRepositoryFile('packages/neon-state/src/index.ts');
+const prospectQuerySource = readRepositoryFile('packages/neon-state/src/prospect-query.ts');
 
 assert.equal(hasStaticSalesAutomationRuntimeImport(runtimeSource), false, 'workspace-dashboard-runtime must not use static @sales-automation runtime imports');
 assert.equal(hasStaticSalesAutomationRuntimeImport(pageSource), false, 'workspace-pages must allow type-only package imports but reject static runtime package imports');
