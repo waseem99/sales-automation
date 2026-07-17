@@ -48,7 +48,7 @@
     try {
       await chrome.notifications.create({
         type: "basic",
-        iconUrl: "icon128.png",
+        iconUrl: "icon128.svg",
         title: "Codistan Priority A opportunity",
         message: `${count} new Priority A Upwork opportunity${count === 1 ? "" : "ies"} captured. Review the latest local report.`,
         contextMessage: reportPath || ""
