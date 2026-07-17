@@ -5,6 +5,7 @@ from pathlib import Path
 import tempfile
 import unittest
 
+from acquisition.upwork_stability_guard import _same_saved_search
 from acquisition.upwork_scheduled_runtime import (
     _recover_title,
     _visible_state,
@@ -151,6 +152,16 @@ delay_seconds = 15
         state, reason = _visible_state(challenge)
         self.assertEqual(state, "verification")
         self.assertIn("Security", reason)
+
+    def test_saved_search_guard_rejects_previous_search_page(self) -> None:
+        self.assertTrue(_same_saved_search(
+            "https://www.upwork.com/nx/find-work/9652877/",
+            "https://www.upwork.com/nx/find-work/9652877",
+        ))
+        self.assertFalse(_same_saved_search(
+            "https://www.upwork.com/nx/find-work/9652811",
+            "https://www.upwork.com/nx/find-work/9652877",
+        ))
 
     def test_recovers_job_title_from_url_instead_of_neighbouring_card(self) -> None:
         value = _recover_title(
