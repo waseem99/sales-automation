@@ -17,18 +17,30 @@ Write-Host 'Codistan local CI health check' -ForegroundColor Cyan
 Write-Host ''
 
 $runnerServices = @(Get-Service -Name 'actions.runner.*' -ErrorAction SilentlyContinue)
-Write-Check 'GitHub runner service' ($runnerServices.Count -gt 0) $(if ($runnerServices.Count) { ($runnerServices | ForEach-Object { "$($_.Name)=$($_.Status)" }) -join ', ' } else { 'No actions.runner.* service found' })
-if ($runnerServices.Count) {
-  Write-Check 'GitHub runner running' (($runnerServices | Where-Object Status -eq 'Running').Count -gt 0) (($runnerServices | ForEach-Object { "$($_.Name)=$($_.Status)" }) -join ', ')
+$runnerDetail = if ($runnerServices.Count -gt 0) {
+  ($runnerServices | ForEach-Object { "$($_.Name)=$($_.Status)" }) -join ', '
+} else {
+  'No actions.runner.* service found'
+}
+Write-Check 'GitHub runner service' ($runnerServices.Count -gt 0) $runnerDetail
+if ($runnerServices.Count -gt 0) {
+  $runningRunnerServices = @($runnerServices | Where-Object { $_.Status -eq 'Running' })
+  Write-Check 'GitHub runner running' ($runningRunnerServices.Count -gt 0) $runnerDetail
 }
 
 $databaseUrl = [Environment]::GetEnvironmentVariable('LOCAL_DATABASE_URL', 'Machine')
 Write-Check 'LOCAL_DATABASE_URL' (-not [string]::IsNullOrWhiteSpace($databaseUrl)) $(if ($databaseUrl) { 'Machine variable is configured' } else { 'Machine variable is missing' })
 
 $postgresServices = @(Get-Service -Name 'postgresql*' -ErrorAction SilentlyContinue)
-Write-Check 'PostgreSQL service' ($postgresServices.Count -gt 0) $(if ($postgresServices.Count) { ($postgresServices | ForEach-Object { "$($_.Name)=$($_.Status)" }) -join ', ' } else { 'No PostgreSQL Windows service found' })
-if ($postgresServices.Count) {
-  Write-Check 'PostgreSQL running' (($postgresServices | Where-Object Status -eq 'Running').Count -gt 0) (($postgresServices | ForEach-Object { "$($_.Name)=$($_.Status)" }) -join ', ')
+$postgresDetail = if ($postgresServices.Count -gt 0) {
+  ($postgresServices | ForEach-Object { "$($_.Name)=$($_.Status)" }) -join ', '
+} else {
+  'No PostgreSQL Windows service found'
+}
+Write-Check 'PostgreSQL service' ($postgresServices.Count -gt 0) $postgresDetail
+if ($postgresServices.Count -gt 0) {
+  $runningPostgresServices = @($postgresServices | Where-Object { $_.Status -eq 'Running' })
+  Write-Check 'PostgreSQL running' ($runningPostgresServices.Count -gt 0) $postgresDetail
 }
 
 $psqlCommand = Get-Command psql.exe -ErrorAction SilentlyContinue
