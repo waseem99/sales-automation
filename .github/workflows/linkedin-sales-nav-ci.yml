@@ -1,0 +1,66 @@
+name: LinkedIn Sales Navigator CI
+
+on:
+  pull_request:
+    branches:
+      - main
+    paths:
+      - '.github/workflows/linkedin-sales-nav-ci.yml'
+      - 'api/cron/linkedin-signals.ts'
+      - 'vercel/linkedin-warm-signal-engine.ts'
+      - 'packages/outreach-email/**'
+      - 'packages/prospect-discovery/**'
+      - 'packages/shared/**'
+      - 'packages/storage/**'
+      - 'packages/evaluator/**'
+      - 'packages/fixtures/**'
+      - 'package.json'
+      - 'pnpm-workspace.yaml'
+      - 'tsconfig*.json'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: linkedin-sales-nav-ci-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  validate:
+    name: Build, type-check and test
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Enable pnpm
+        run: |
+          corepack enable
+          corepack prepare pnpm@9.15.9 --activate
+          pnpm --version
+
+      - name: Install workspace dependencies
+        run: pnpm install --no-frozen-lockfile
+
+      - name: Build workspace packages
+        run: pnpm build
+
+      - name: Type-check Vercel runtime
+        run: pnpm typecheck:vercel
+
+      - name: Test unified signal mailbox
+        run: pnpm --filter @sales-automation/outreach-email test
+
+      - name: Test Sales Navigator discovery and qualification
+        run: pnpm --filter @sales-automation/prospect-discovery test
+
+      - name: Test Vercel runtime contracts
+        run: pnpm test:vercel-runtime
