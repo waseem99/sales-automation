@@ -1,20 +1,19 @@
 import type { NeonAppState } from '@sales-automation/neon-state';
-import type { LeadSignalInboxMessage } from '@sales-automation/outreach-email/lead-signal-inbox';
+import type {
+  CapturedLinkedInWarmSignal,
+  LinkedInWarmSignalDecision,
+  LinkedInWarmSignalInput,
+} from '@sales-automation/prospect-discovery';
 
-export interface SalesNavigatorResearchResult {
-  checkedAlerts: number;
+export interface SalesNavigatorResearchIngestion {
+  totalInput: number;
   extractedCandidates: number;
   created: number;
   duplicates: number;
   skippedWithoutTarget: number;
-  assigned: number;
-  enriched: number;
-  rescored: number;
-  createdLeadIds: string[];
+  captured: CapturedLinkedInWarmSignal[];
   duplicateLeadIds: string[];
-  errors: Array<{ messageId: string; message: string }>;
-  humanReviewRequired: true;
-  externalActionAutomated: false;
+  errors: Array<{ messageId?: string; message: string }>;
 }
 
 interface SalesNavigatorCandidate {
@@ -33,70 +32,63 @@ const buyerIntentPattern = /\b(?:looking for|seeking|need(?:ing)?|can anyone rec
 const linkedInPostPattern = /\/posts\/|\/feed\/update\//i;
 const linkedInTargetPattern = /https?:\/\/(?:[a-z]{2,3}\.)?(?:www\.)?linkedin\.com\/(?:in|company|sales\/lead|sales\/company)\/[^\s<>()"']+/gi;
 
-export function splitLinkedInInboxMessages(messages: LeadSignalInboxMessage[]): {
-  researchAlerts: LeadSignalInboxMessage[];
-  warmMessages: LeadSignalInboxMessage[];
+export function splitLinkedInSignals(signals: LinkedInWarmSignalInput[]): {
+  researchSignals: LinkedInWarmSignalInput[];
+  warmSignals: LinkedInWarmSignalInput[];
 } {
-  const researchAlerts: LeadSignalInboxMessage[] = [];
-  const warmMessages: LeadSignalInboxMessage[] = [];
-  for (const message of messages) {
-    if (isSalesNavigatorResearchAlert(message)) researchAlerts.push(message);
-    else warmMessages.push(message);
+  const researchSignals: LinkedInWarmSignalInput[] = [];
+  const warmSignals: LinkedInWarmSignalInput[] = [];
+  for (const signal of signals) {
+    if (isSalesNavigatorResearchSignal(signal)) researchSignals.push(signal);
+    else warmSignals.push(signal);
   }
-  return { researchAlerts, warmMessages };
+  return { researchSignals, warmSignals };
 }
 
-export function isSalesNavigatorResearchAlert(message: LeadSignalInboxMessage): boolean {
-  if (message.source !== 'sales_navigator_email') return false;
-  const combined = `${message.subject ?? ''}\n${message.text}`;
-  if (buyerIntentPattern.test(combined) || linkedInPostPattern.test(message.sourceUrl ?? '')) return false;
+export function isSalesNavigatorResearchSignal(signal: LinkedInWarmSignalInput): boolean {
+  if (signal.origin !== 'sales_navigator_email') return false;
+  const combined = `${signal.subject ?? ''}\n${signal.text}`;
+  if (buyerIntentPattern.test(combined) || linkedInPostPattern.test(signal.sourceUrl ?? '')) return false;
   return researchAlertPattern.test(combined) || linkedInTargetPattern.test(combined);
 }
 
-export async function processSalesNavigatorResearchAlerts(input: {
+export async function ingestSalesNavigatorResearchSignals(input: {
   state: NeonAppState;
-  messages: LeadSignalInboxMessage[];
+  signals: LinkedInWarmSignalInput[];
   actor: string;
-  generatedAt?: string;
+  generatedAt: string;
   fetchImpl?: typeof fetch;
-}): Promise<SalesNavigatorResearchResult> {
+}): Promise<SalesNavigatorResearchIngestion> {
   const [evaluator, fixtures, parsers, discovery] = await Promise.all([
     import('@sales-automation/evaluator'),
     import('@sales-automation/fixtures'),
     import('@sales-automation/parsers'),
     import('@sales-automation/prospect-discovery'),
   ]);
-  const generatedAt = input.generatedAt ?? new Date().toISOString();
-  const fetchImpl = input.fetchImpl ?? globalThis.fetch;
-  const result: SalesNavigatorResearchResult = {
-    checkedAlerts: input.messages.length,
+  const result: SalesNavigatorResearchIngestion = {
+    totalInput: input.signals.length,
     extractedCandidates: 0,
     created: 0,
     duplicates: 0,
     skippedWithoutTarget: 0,
-    assigned: 0,
-    enriched: 0,
-    rescored: 0,
-    createdLeadIds: [],
+    captured: [],
     duplicateLeadIds: [],
     errors: [],
-    humanReviewRequired: true,
-    externalActionAutomated: false,
   };
 
-  for (const message of input.messages) {
+  for (const signal of input.signals) {
     try {
-      const candidates = extractSalesNavigatorCandidates(message);
+      const candidates = extractSalesNavigatorCandidates(signal);
       if (!candidates.length) {
         result.skippedWithoutTarget += 1;
         continue;
       }
       result.extractedCandidates += candidates.length;
       for (const candidate of candidates) {
-        const researchText = buildResearchText(message, candidate);
-        const lead = parsers.parseLinkedInSignal({
+        const researchText = buildResearchText(signal, candidate);
+        const parsed = parsers.parseLinkedInSignal({
           text: researchText,
-          capturedAt: message.receivedAt || generatedAt,
+          capturedAt: signal.receivedAt || input.generatedAt,
           sourceUrl: candidate.sourceUrl,
           contactName: candidate.contactName,
           contactRole: candidate.contactRole,
@@ -104,89 +96,57 @@ export async function processSalesNavigatorResearchAlerts(input: {
           country: candidate.country,
           region: candidate.region,
         });
-        const existing = input.state.repository.getLead(lead.id);
+        const existing = input.state.repository.getLead(parsed.id);
         if (existing) {
           result.duplicates += 1;
           result.duplicateLeadIds.push(existing.lead.id);
           continue;
         }
 
-        let companyWebsite: string | undefined;
-        if (lead.companyName) {
-          companyWebsite = await discovery.findCompanyWebsite(fetchImpl, lead.companyName).catch(() => undefined);
-        }
-        const preparedLead = {
-          ...lead,
+        const companyWebsite = parsed.companyName
+          ? await discovery.findCompanyWebsite(input.fetchImpl ?? globalThis.fetch, parsed.companyName).catch(() => undefined)
+          : undefined;
+        const lead = {
+          ...parsed,
           companyWebsite,
           discoverySource: 'Sales Navigator saved lead/account search alert',
           evidenceUrl: candidate.sourceUrl,
           evidenceSummary: 'Automatically discovered from a native Sales Navigator saved-search alert. Research and human review are required before outreach.',
           pipelineStatus: 'needs_research' as const,
           recommendedNextAction: 'Verify the person, company, current role and a legitimate service-fit or warm-signal basis before preparing outreach.',
-          updatedAt: generatedAt,
+          updatedAt: input.generatedAt,
         };
-        input.state.repository.saveEvaluation(evaluator.evaluateLead({
-          lead: preparedLead,
+        const evaluation = evaluator.evaluateLead({
+          lead,
           portfolioItems: fixtures.samplePortfolioItems,
-          generatedAt,
-        }), input.actor);
+          generatedAt: input.generatedAt,
+        });
+        input.state.repository.saveEvaluation(evaluation, input.actor);
         input.state.repository.addNote(
-          preparedLead.id,
-          `sales_navigator_research::${candidate.kind}::${message.messageId}::No LinkedIn action automated.`,
+          lead.id,
+          `sales_navigator_research::${candidate.kind}::${signal.messageId ?? 'native-alert'}::No LinkedIn action automated.`,
           input.actor,
         );
+        const decision = researchDecision(lead.serviceCategory, candidate.sourceUrl, Boolean(lead.companyName || companyWebsite), Boolean(lead.contactRole));
+        result.captured.push({
+          leadId: lead.id,
+          decision,
+          evaluation,
+          origin: 'sales_navigator_email',
+        });
         result.created += 1;
-        result.createdLeadIds.push(preparedLead.id);
       }
     } catch (error) {
-      result.errors.push({ messageId: message.messageId, message: errorMessage(error) });
+      result.errors.push({ messageId: signal.messageId, message: errorMessage(error) });
     }
   }
 
-  if (result.createdLeadIds.length > 0) {
-    const workload = discovery.buildOwnerWorkload(input.state.repository.listLeads().map((record) => record.lead));
-    for (const leadId of result.createdLeadIds) {
-      const record = input.state.repository.getLead(leadId);
-      if (!record) continue;
-      const applied = discovery.applyAutomaticAssignment(record.lead, workload, generatedAt);
-      input.state.repository.upsertLead(applied.lead, input.actor);
-      input.state.repository.addNote(
-        leadId,
-        `routing::automatic::${applied.assignment.owner}::research::${applied.assignment.reason}`,
-        input.actor,
-      );
-      result.assigned += 1;
-    }
-
-    const enrichment = await discovery.enrichRepositoryContacts({
-      repository: input.state.repository,
-      fetchImpl,
-      maxRecords: Math.min(50, result.createdLeadIds.length),
-      leadIds: result.createdLeadIds,
-      actor: input.actor,
-      now: () => generatedAt,
-    });
-    result.enriched = enrichment.updated;
-
-    for (const leadId of result.createdLeadIds) {
-      const record = input.state.repository.getLead(leadId);
-      if (!record) continue;
-      input.state.repository.saveEvaluation(evaluator.evaluateLead({
-        lead: record.lead,
-        portfolioItems: fixtures.samplePortfolioItems,
-        generatedAt,
-      }), input.actor);
-      result.rescored += 1;
-    }
-  }
-
-  result.createdLeadIds = unique(result.createdLeadIds);
   result.duplicateLeadIds = unique(result.duplicateLeadIds);
   return result;
 }
 
-export function extractSalesNavigatorCandidates(message: LeadSignalInboxMessage): SalesNavigatorCandidate[] {
-  const combined = `${message.subject ?? ''}\n${message.text}`;
+export function extractSalesNavigatorCandidates(signal: LinkedInWarmSignalInput): SalesNavigatorCandidate[] {
+  const combined = `${signal.subject ?? ''}\n${signal.text}\n${signal.sourceUrl ?? ''}`;
   const candidates: SalesNavigatorCandidate[] = [];
   const seen = new Set<string>();
   for (const match of combined.matchAll(linkedInTargetPattern)) {
@@ -195,24 +155,56 @@ export function extractSalesNavigatorCandidates(message: LeadSignalInboxMessage)
     if (!sourceUrl || seen.has(sourceUrl)) continue;
     seen.add(sourceUrl);
     const index = match.index ?? 0;
-    const context = combined.slice(Math.max(0, index - 280), Math.min(combined.length, index + raw.length + 280));
+    const context = combined.slice(Math.max(0, index - 320), Math.min(combined.length, index + raw.length + 320));
     const kind = /\/(?:company|sales\/company)\//i.test(new URL(sourceUrl).pathname) ? 'company' : 'person';
-    const candidate: SalesNavigatorCandidate = {
+    candidates.push({
       sourceUrl,
       kind,
-      context: context.trim().slice(0, 1_500),
-      contactName: kind === 'person' ? extractLabel(context, ['lead', 'name', 'contact', 'person']) ?? slugLabel(sourceUrl) : undefined,
-      contactRole: kind === 'person' ? extractLabel(context, ['role', 'title']) : undefined,
-      companyName: extractLabel(context, ['company', 'account', 'organization']) ?? (kind === 'company' ? slugLabel(sourceUrl) : undefined),
-      country: extractLabel(context, ['country']),
-      region: extractLabel(context, ['region', 'location']),
-    };
-    candidates.push(candidate);
+      context: context.trim().slice(0, 1_800),
+      contactName: kind === 'person' ? signal.authorName ?? extractLabel(context, ['lead', 'name', 'contact', 'person']) ?? slugLabel(sourceUrl) : undefined,
+      contactRole: kind === 'person' ? signal.authorRole ?? extractLabel(context, ['role', 'title']) : undefined,
+      companyName: signal.companyName ?? extractLabel(context, ['company', 'account', 'organization']) ?? (kind === 'company' ? slugLabel(sourceUrl) : undefined),
+      country: signal.country ?? extractLabel(context, ['country']),
+      region: signal.region ?? extractLabel(context, ['region', 'location']),
+    });
   }
   return candidates.slice(0, 30);
 }
 
-function buildResearchText(message: LeadSignalInboxMessage, candidate: SalesNavigatorCandidate): string {
+function researchDecision(
+  serviceCategory: CapturedLinkedInWarmSignal['decision']['serviceCategory'],
+  sourceUrl: string,
+  companyKnown: boolean,
+  roleKnown: boolean,
+): LinkedInWarmSignalDecision {
+  const scoreBreakdown = {
+    explicitRequirement: 0,
+    freshness: 5,
+    serviceFit: serviceCategory === 'unknown' ? 0 : 9,
+    companyCredibility: companyKnown ? 10 : 0,
+    buyerInfluence: roleKnown ? 5 : 0,
+    evidenceRoute: 10,
+    geographyCompatibility: 0,
+    portfolioProof: 0,
+    sourceReliability: 8,
+  };
+  return {
+    outcome: 'research',
+    band: 'research',
+    score: Object.values(scoreBreakdown).reduce((sum, value) => sum + value, 0),
+    scoreBreakdown,
+    reasonCodes: [
+      'sales_navigator_saved_search_research',
+      'no_active_buyer_requirement',
+      'human_verification_required',
+    ],
+    serviceCategory,
+    normalizedSourceUrl: sourceUrl,
+    publicIndexVerificationRequired: false,
+  };
+}
+
+function buildResearchText(signal: LinkedInWarmSignalInput, candidate: SalesNavigatorCandidate): string {
   return [
     'Manual research note for a LinkedIn target prospect. This is a cold prospect and needs research before outreach.',
     'No direct buying post is confirmed. The target was discovered automatically from a native Sales Navigator saved lead/account search alert.',
@@ -220,7 +212,7 @@ function buildResearchText(message: LeadSignalInboxMessage, candidate: SalesNavi
     candidate.contactName ? `Contact: ${candidate.contactName}.` : '',
     candidate.contactRole ? `Role: ${candidate.contactRole}.` : '',
     `LinkedIn evidence: ${candidate.sourceUrl}`,
-    `Saved-search alert: ${message.subject ?? 'Sales Navigator alert'}.`,
+    `Saved-search alert: ${signal.subject ?? 'Sales Navigator alert'}.`,
     candidate.context ? `Visible alert context: ${candidate.context}` : '',
   ].filter(Boolean).join('\n');
 }
