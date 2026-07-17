@@ -1,5 +1,5 @@
 [pilot]
-version = "2026-07-17.upwork-stability.v3"
+version = "2026-07-17.upwork-exact-saved-searches.v1"
 max_jobs_total = 30
 min_description_chars = 80
 
@@ -35,25 +35,31 @@ start_local = "07:00"
 end_local = "10:30"
 days = ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"]
 
-# AI Jobs
+# Waseem: AI + Fullstack AI 16 July 2026
 [[searches]]
 id = "ai-jobs"
+name = "AI + Fullstack AI 16 July 2026"
+owner = "Waseem"
 enabled = true
 url = "https://www.upwork.com/nx/find-work/9652811"
 max_jobs = 10
 delay_seconds = 10
 
-# Roshana: 2D/3D Modeling & Animations
+# Roshana: 3D Design & Creatives 15 July 2026
 [[searches]]
 id = "roshana-2d-3d"
+name = "3D Design & Creatives 15 July 2026"
+owner = "Roshana"
 enabled = true
 url = "https://www.upwork.com/nx/find-work/9652860"
 max_jobs = 10
 delay_seconds = 10
 
-# Nadir: Game Development & AR/VR
+# Nadir: Game & AR/VR 16 July 2026
 [[searches]]
 id = "nadir-game-ar-vr"
+name = "Game & AR/VR 16 July 2026"
+owner = "Nadir"
 enabled = true
 url = "https://www.upwork.com/nx/find-work/9652877"
 max_jobs = 10
