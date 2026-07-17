@@ -96,6 +96,7 @@ jobs:
       - name: Capture full Vercel type-check diagnostics
         continue-on-error: true
         run: |
+          New-Item -Path typecheck-vercel.log -ItemType File -Force | Out-Null
           & cmd.exe /d /s /c "pnpm.cmd typecheck:vercel > typecheck-vercel.log 2>&1"
           $exitCode = $LASTEXITCODE
           if (Test-Path typecheck-vercel.log) { Get-Content typecheck-vercel.log | ForEach-Object { Write-Host $_ } }
@@ -107,7 +108,7 @@ jobs:
         with:
           name: full-vercel-typecheck-diagnostics
           path: typecheck-vercel.log
-          if-no-files-found: error
+          if-no-files-found: warn
           retention-days: 7
 
       - name: Type-check LinkedIn and Sales Navigator runtime
@@ -129,6 +130,7 @@ jobs:
       - name: Capture full prospect-discovery package diagnostics
         continue-on-error: true
         run: |
+          New-Item -Path prospect-discovery-full-tests.log -ItemType File -Force | Out-Null
           & cmd.exe /d /s /c "pnpm.cmd --filter @sales-automation/prospect-discovery test > prospect-discovery-full-tests.log 2>&1"
           $exitCode = $LASTEXITCODE
           if (Test-Path prospect-discovery-full-tests.log) { Get-Content prospect-discovery-full-tests.log | ForEach-Object { Write-Host $_ } }
@@ -140,7 +142,7 @@ jobs:
         with:
           name: prospect-discovery-full-tests
           path: prospect-discovery-full-tests.log
-          if-no-files-found: error
+          if-no-files-found: warn
           retention-days: 7
 
       - name: Test Vercel runtime contracts
