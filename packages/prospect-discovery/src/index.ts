@@ -11,6 +11,7 @@ export * from './pseb.js';
 export * from './enrichment.js';
 export * from './verified-enrichment.js';
 export * from './linkedin-warm-signals.js';
+export * from './linkedin-sales-navigator-research.js';
 export * from './upwork-saved-search.js';
 export * from './run-store.js';
 export * from './digest.js';
