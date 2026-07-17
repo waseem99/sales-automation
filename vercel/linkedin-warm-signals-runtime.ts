@@ -96,22 +96,22 @@ async function handleLinkedInResearchIntake(options: {
   const contactRole = optionalString(options.payload.contactRole);
   const companyWebsite = optionalString(options.payload.companyWebsite);
   const context = optionalString(options.payload.context);
-  const title = optionalString(options.payload.title)
-    ?? [companyName, contactName, contactRole].filter(Boolean).join(' · ')
-    ?? 'LinkedIn research prospect';
+  const suppliedTitle = optionalString(options.payload.title);
+  const inferredTitle = [companyName, contactName, contactRole].filter(Boolean).join(' · ');
+  const title = suppliedTitle ?? (inferredTitle || 'LinkedIn research prospect');
   const content = [
-    'LinkedIn research prospect supplied for internal qualification.',
+    'Manual research note for a LinkedIn target prospect. This is a cold prospect and needs research before outreach.',
     companyName ? `Company: ${companyName}.` : '',
     contactName ? `Contact: ${contactName}.` : '',
     contactRole ? `Role: ${contactRole}.` : '',
     companyWebsite ? `Official website: ${companyWebsite}.` : '',
-    context ? `Reason for review: ${context}` : 'No buyer-side signal is confirmed. Keep this record research-first until relevance and outreach basis are verified.',
+    context ? `Reason for review: ${context}` : 'No direct buying post is confirmed. Verify company fit, role relevance and outreach basis before contact.',
   ].filter(Boolean).join(' ');
 
   const manualIntake = await import('./manual-intake-runtime.js');
   const intakeResponse = await manualIntake.handleManualIntakeRuntime({
     body: {
-      sourceKind: 'public_url',
+      sourceKind: 'public_post',
       sourceUrl,
       title,
       companyName,
