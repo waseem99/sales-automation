@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
   "name": "Codistan Upwork Opportunity Capture",
-  "version": "0.4.0",
-  "description": "Automatically capture visible cards from the three approved Upwork saved searches after the user opens them in normal Chrome.",
+  "version": "0.5.0",
+  "description": "Capture visible cards from Codistan's three exact approved Upwork saved searches after the user opens them in normal Chrome.",
   "permissions": ["activeTab", "tabs", "storage", "notifications"],
   "host_permissions": [
     "https://www.upwork.com/*",
