@@ -24,7 +24,9 @@ assert.match(shellCss, /\.workspace-tabs\{/);
 assert.match(shellCss, /\.workspace-tab\.active\{/);
 
 assert.match(linkedin, /intakeMode === 'research'/);
-assert.match(linkedin, /sourceKind: 'public_url'/);
+assert.match(linkedin, /sourceKind: 'public_post'/);
+assert.match(linkedin, /Manual research note for a LinkedIn target prospect/);
+assert.match(linkedin, /needs research before outreach/);
 assert.match(linkedin, /requiredLinkedInUrl/);
 assert.match(linkedin, /enrichRepositoryContacts/);
 assert.match(linkedin, /evaluateLead/);
