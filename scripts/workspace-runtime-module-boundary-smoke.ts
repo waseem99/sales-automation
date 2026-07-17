@@ -1,12 +1,24 @@
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
-import { resolve } from 'node:path';
+import { existsSync, readFileSync } from 'node:fs';
+import { dirname, resolve, sep } from 'node:path';
 import { matchesProspectWorkspaceScope } from '@sales-automation/neon-state';
 import type { Lead } from '@sales-automation/shared';
 import { WORKSPACE_PAGES } from '../vercel/workspace-page-model.ts';
 
 const repositoryRoot = process.cwd();
-const readRepositoryFile = (path: string): string => readFileSync(resolve(repositoryRoot, path), 'utf8');
+const repositoryPrefix = `${resolve(repositoryRoot)}${sep}`.toLowerCase();
+const readRepositoryFile = (path: string): string => {
+  const absolutePath = resolve(repositoryRoot, path);
+  const source = readFileSync(absolutePath, 'utf8');
+  const pointer = source.trim();
+  if (/^[^\r\n\\/]+\.(?:js|ts)$/.test(pointer)) {
+    const targetPath = resolve(dirname(absolutePath), pointer);
+    if (targetPath.toLowerCase().startsWith(repositoryPrefix) && existsSync(targetPath)) {
+      return readFileSync(targetPath, 'utf8');
+    }
+  }
+  return source;
+};
 const runtimeSource = readRepositoryFile('vercel/workspace-dashboard-runtime.ts');
 const pageSource = readRepositoryFile('vercel/workspace-pages.ts');
 const modelSource = readRepositoryFile('vercel/workspace-page-model.ts');
