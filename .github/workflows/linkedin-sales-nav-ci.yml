@@ -94,14 +94,11 @@ jobs:
         run: pnpm.cmd build
 
       - name: Capture full Vercel type-check diagnostics
-        id: full_typecheck
         continue-on-error: true
         run: |
           & cmd.exe /d /s /c "pnpm.cmd typecheck:vercel > typecheck-vercel.log 2>&1"
           $exitCode = $LASTEXITCODE
           if (Test-Path typecheck-vercel.log) { Get-Content typecheck-vercel.log | ForEach-Object { Write-Host $_ } }
-          $utf8 = New-Object System.Text.UTF8Encoding($false)
-          [System.IO.File]::AppendAllText($env:GITHUB_OUTPUT, "exit_code=$exitCode`n", $utf8)
           if ($exitCode -ne 0) { exit $exitCode }
 
       - name: Upload full Vercel diagnostics
@@ -120,54 +117,21 @@ jobs:
         run: pnpm.cmd --filter @sales-automation/outreach-email test
 
       - name: Test LinkedIn warm-signal qualification
-        id: warm_signal_tests
-        continue-on-error: true
         run: |
-          & cmd.exe /d /s /c "pnpm.cmd --dir packages/prospect-discovery exec tsx src/linkedin-warm-signals.test.ts > linkedin-warm-signal-tests.log 2>&1"
-          $exitCode = $LASTEXITCODE
-          if (Test-Path linkedin-warm-signal-tests.log) { Get-Content linkedin-warm-signal-tests.log | ForEach-Object { Write-Host $_ } }
-          $utf8 = New-Object System.Text.UTF8Encoding($false)
-          [System.IO.File]::AppendAllText($env:GITHUB_OUTPUT, "exit_code=$exitCode`n", $utf8)
-          if ($exitCode -ne 0) { exit $exitCode }
-
-      - name: Upload LinkedIn warm-signal diagnostics
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: linkedin-warm-signal-tests
-          path: linkedin-warm-signal-tests.log
-          if-no-files-found: error
-          retention-days: 7
+          & cmd.exe /d /s /c "pnpm.cmd --dir packages/prospect-discovery exec tsx src/linkedin-warm-signals.test.ts"
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
       - name: Test automatic Sales Navigator discovery
-        id: sales_nav_tests
-        continue-on-error: true
         run: |
-          & cmd.exe /d /s /c "pnpm.cmd --dir packages/prospect-discovery exec tsx src/linkedin-sales-navigator-research.test.ts > linkedin-sales-nav-tests.log 2>&1"
-          $exitCode = $LASTEXITCODE
-          if (Test-Path linkedin-sales-nav-tests.log) { Get-Content linkedin-sales-nav-tests.log | ForEach-Object { Write-Host $_ } }
-          $utf8 = New-Object System.Text.UTF8Encoding($false)
-          [System.IO.File]::AppendAllText($env:GITHUB_OUTPUT, "exit_code=$exitCode`n", $utf8)
-          if ($exitCode -ne 0) { exit $exitCode }
-
-      - name: Upload Sales Navigator diagnostics
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: linkedin-sales-nav-focused-tests
-          path: linkedin-sales-nav-tests.log
-          if-no-files-found: error
-          retention-days: 7
+          & cmd.exe /d /s /c "pnpm.cmd --dir packages/prospect-discovery exec tsx src/linkedin-sales-navigator-research.test.ts"
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
       - name: Capture full prospect-discovery package diagnostics
-        id: full_discovery_tests
         continue-on-error: true
         run: |
           & cmd.exe /d /s /c "pnpm.cmd --filter @sales-automation/prospect-discovery test > prospect-discovery-full-tests.log 2>&1"
           $exitCode = $LASTEXITCODE
           if (Test-Path prospect-discovery-full-tests.log) { Get-Content prospect-discovery-full-tests.log | ForEach-Object { Write-Host $_ } }
-          $utf8 = New-Object System.Text.UTF8Encoding($false)
-          [System.IO.File]::AppendAllText($env:GITHUB_OUTPUT, "exit_code=$exitCode`n", $utf8)
           if ($exitCode -ne 0) { exit $exitCode }
 
       - name: Upload full prospect-discovery diagnostics
@@ -180,40 +144,9 @@ jobs:
           retention-days: 7
 
       - name: Test Vercel runtime contracts
-        id: runtime_tests
-        continue-on-error: true
         run: |
-          & cmd.exe /d /s /c "pnpm.cmd test:vercel-runtime > vercel-runtime-tests.log 2>&1"
-          $exitCode = $LASTEXITCODE
-          if (Test-Path vercel-runtime-tests.log) { Get-Content vercel-runtime-tests.log | ForEach-Object { Write-Host $_ } }
-          $utf8 = New-Object System.Text.UTF8Encoding($false)
-          [System.IO.File]::AppendAllText($env:GITHUB_OUTPUT, "exit_code=$exitCode`n", $utf8)
-          if ($exitCode -ne 0) { exit $exitCode }
+          & cmd.exe /d /s /c "pnpm.cmd test:vercel-runtime"
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
-      - name: Upload runtime-contract diagnostics
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: vercel-runtime-contract-tests
-          path: vercel-runtime-tests.log
-          if-no-files-found: error
-          retention-days: 7
-
-      - name: Enforce focused LinkedIn release gates
-        if: always()
-        run: |
-          $failures = @()
-          if ('${{ steps.warm_signal_tests.outputs.exit_code }}' -ne '0') { $failures += 'LinkedIn warm-signal qualification tests failed.' }
-          if ('${{ steps.sales_nav_tests.outputs.exit_code }}' -ne '0') { $failures += 'Automatic Sales Navigator discovery tests failed.' }
-          if ('${{ steps.runtime_tests.outputs.exit_code }}' -ne '0') { $failures += 'Vercel runtime-contract tests failed.' }
-          if ($failures.Count -gt 0) {
-            Write-Error ($failures -join ' ')
-            exit 1
-          }
-          Write-Host 'Focused LinkedIn and Sales Navigator build, type-check and tests passed.'
-          if ('${{ steps.full_typecheck.outputs.exit_code }}' -ne '0') {
-            Write-Host 'Repository-wide Vercel type-check still reports baseline dashboard/operations diagnostics outside this PR.'
-          }
-          if ('${{ steps.full_discovery_tests.outputs.exit_code }}' -ne '0') {
-            Write-Host 'The broad prospect-discovery package suite has a separate diagnostic; focused LinkedIn tests passed.'
-          }
+      - name: Confirm focused LinkedIn release gate
+        run: Write-Host 'Focused LinkedIn and Sales Navigator build, type-check and tests passed.'
