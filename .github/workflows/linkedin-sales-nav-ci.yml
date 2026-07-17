@@ -85,20 +85,22 @@ jobs:
         run: |
           corepack enable
           corepack prepare pnpm@9.15.9 --activate
-          pnpm --version
+          pnpm.cmd --version
 
       - name: Install workspace dependencies
-        run: pnpm install --no-frozen-lockfile
+        run: pnpm.cmd install --no-frozen-lockfile
 
       - name: Build workspace packages
-        run: pnpm build
+        run: pnpm.cmd build
 
       - name: Capture full Vercel type-check diagnostics
         continue-on-error: true
         run: |
           New-Item -Path typecheck-vercel.log -ItemType File -Force | Out-Null
-          pnpm typecheck:vercel 2>&1 | Tee-Object -FilePath typecheck-vercel.log
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          $output = & pnpm.cmd typecheck:vercel 2>&1
+          $exitCode = $LASTEXITCODE
+          $output | Tee-Object -FilePath typecheck-vercel.log
+          if ($exitCode -ne 0) { exit $exitCode }
 
       - name: Upload full Vercel diagnostics
         if: always()
@@ -110,47 +112,25 @@ jobs:
           retention-days: 7
 
       - name: Type-check LinkedIn and Sales Navigator runtime
-        run: pnpm exec tsc -p tsconfig.linkedin-sales-nav.json --noEmit
+        run: pnpm.cmd exec tsc -p tsconfig.linkedin-sales-nav.json --noEmit
 
       - name: Test unified signal mailbox
-        run: pnpm --filter @sales-automation/outreach-email test
+        run: pnpm.cmd --filter @sales-automation/outreach-email test
 
       - name: Test LinkedIn warm-signal qualification
-        run: |
-          New-Item -Path linkedin-warm-signal-tests.log -ItemType File -Force | Out-Null
-          pnpm --dir packages/prospect-discovery exec tsx src/linkedin-warm-signals.test.ts 2>&1 | Tee-Object -FilePath linkedin-warm-signal-tests.log
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-
-      - name: Upload LinkedIn warm-signal diagnostics
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: linkedin-warm-signal-tests
-          path: linkedin-warm-signal-tests.log
-          if-no-files-found: error
-          retention-days: 7
+        run: pnpm.cmd --dir packages/prospect-discovery exec tsx src/linkedin-warm-signals.test.ts
 
       - name: Test automatic Sales Navigator discovery
-        run: |
-          New-Item -Path linkedin-sales-nav-tests.log -ItemType File -Force | Out-Null
-          pnpm --dir packages/prospect-discovery exec tsx src/linkedin-sales-navigator-research.test.ts 2>&1 | Tee-Object -FilePath linkedin-sales-nav-tests.log
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-
-      - name: Upload Sales Navigator diagnostics
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: linkedin-sales-nav-focused-tests
-          path: linkedin-sales-nav-tests.log
-          if-no-files-found: error
-          retention-days: 7
+        run: pnpm.cmd --dir packages/prospect-discovery exec tsx src/linkedin-sales-navigator-research.test.ts
 
       - name: Capture full prospect-discovery package diagnostics
         continue-on-error: true
         run: |
           New-Item -Path prospect-discovery-full-tests.log -ItemType File -Force | Out-Null
-          pnpm --filter @sales-automation/prospect-discovery test 2>&1 | Tee-Object -FilePath prospect-discovery-full-tests.log
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          $output = & pnpm.cmd --filter @sales-automation/prospect-discovery test 2>&1
+          $exitCode = $LASTEXITCODE
+          $output | Tee-Object -FilePath prospect-discovery-full-tests.log
+          if ($exitCode -ne 0) { exit $exitCode }
 
       - name: Upload full prospect-discovery diagnostics
         if: always()
@@ -162,19 +142,7 @@ jobs:
           retention-days: 7
 
       - name: Test Vercel runtime contracts
-        run: |
-          New-Item -Path vercel-runtime-tests.log -ItemType File -Force | Out-Null
-          pnpm test:vercel-runtime 2>&1 | Tee-Object -FilePath vercel-runtime-tests.log
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-
-      - name: Upload runtime-contract diagnostics
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: vercel-runtime-contract-tests
-          path: vercel-runtime-tests.log
-          if-no-files-found: error
-          retention-days: 7
+        run: pnpm.cmd test:vercel-runtime
 
       - name: Confirm focused LinkedIn release gate
         run: Write-Host 'Focused LinkedIn and Sales Navigator build, type-check and tests passed.'
