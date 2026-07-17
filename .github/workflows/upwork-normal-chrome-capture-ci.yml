@@ -39,16 +39,30 @@ jobs:
 
       - name: Resolve installed acquisition Python
         run: |
+          $candidates = New-Object System.Collections.Generic.List[string]
           $command = Get-Command python.exe -ErrorAction SilentlyContinue
-          $python = if ($command) { $command.Source } else {
-            Get-ChildItem "$env:USERPROFILE\Codistan\*\workers\acquisition\.venv\Scripts\python.exe" -ErrorAction SilentlyContinue |
-              Sort-Object FullName |
-              Select-Object -First 1 -ExpandProperty FullName
+          if ($command) { $candidates.Add($command.Source) }
+          $pyCommand = Get-Command py.exe -ErrorAction SilentlyContinue
+          if ($pyCommand) { $candidates.Add($pyCommand.Source) }
+
+          @(
+            'C:\Users\*\Codistan\*\workers\acquisition\.venv\Scripts\python.exe',
+            'C:\Users\*\AppData\Local\Programs\Python\Python*\python.exe',
+            'C:\Program Files\Python*\python.exe',
+            'C:\Program Files\Python*\Scripts\python.exe'
+          ) | ForEach-Object {
+            Get-ChildItem $_ -ErrorAction SilentlyContinue | ForEach-Object { $candidates.Add($_.FullName) }
           }
-          if ([string]::IsNullOrWhiteSpace($python) -or -not (Test-Path $python)) {
-            throw 'Python was not found. Run the normal-Chrome Upwork installer on this PC first.'
+
+          $python = $candidates |
+            Where-Object { $_ -and (Test-Path $_) -and ([IO.Path]::GetFileName($_) -ieq 'python.exe') } |
+            Select-Object -First 1
+          if ([string]::IsNullOrWhiteSpace($python)) {
+            throw 'Python was not found in the installed acquisition worker or standard Windows locations.'
           }
           Write-Host "Using Python: $python"
+          & $python --version
+          if ($LASTEXITCODE -ne 0) { throw 'The discovered Python executable could not run.' }
           $utf8 = New-Object System.Text.UTF8Encoding($false)
           [System.IO.File]::AppendAllText($env:GITHUB_ENV, "CODISTAN_ACQUISITION_PYTHON=$python`n", $utf8)
 
