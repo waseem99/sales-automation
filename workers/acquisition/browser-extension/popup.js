@@ -17,7 +17,7 @@
 
   captureButton.addEventListener("click", async () => {
     captureButton.disabled = true;
-    setStatus("Reading visible jobs from this saved search…");
+    setStatus("Reading visible jobs from this approved saved search…");
     try {
       const tab = await activeTab();
       const result = await chrome.tabs.sendMessage(tab.id, {
@@ -35,7 +35,7 @@
         trigger: "manual_extension_fallback"
       });
       if (!response || !response.ok) throw new Error(response?.error || "Capture failed.");
-      setStatus(`Captured ${response.accepted || 0} new job(s). Current report: ${response.total_extracted || 0} opportunities.`);
+      setStatus(`${response.saved_search_name || "Approved search"}: captured ${response.accepted || 0} new job(s). Current report: ${response.total_extracted || 0} opportunities.`);
     } catch (error) {
       setStatus(error instanceof Error ? error.message : String(error));
     } finally {
@@ -52,7 +52,10 @@
       `Processor ready. Current report: ${service.extracted || 0} opportunities.`
     ];
     if (last?.error) parts.push(`Last capture issue: ${last.error}`);
-    else if (last?.at) parts.push(`Last capture: ${new Date(last.at).toLocaleString()}.`);
+    else if (last?.at) {
+      const label = last.saved_search_name ? `${last.profile_owner || "Profile"}: ${last.saved_search_name}` : "Approved search";
+      parts.push(`Last capture: ${label} at ${new Date(last.at).toLocaleString()}.`);
+    }
     setStatus(parts.join(" "));
   }).catch(() => setStatus("The local Codistan capture processor is not running."));
 })();
