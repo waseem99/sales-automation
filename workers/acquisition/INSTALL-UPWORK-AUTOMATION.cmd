@@ -1,35 +1,39 @@
 @echo off
 setlocal
-title Codistan Upwork Automation Installer
+title Codistan Upwork Stability Installer
 
 echo ============================================================
-echo   CODISTAN - INSTALL AUTOMATIC UPWORK ACQUISITION
+echo   CODISTAN - UPWORK STABILITY INSTALLATION
 echo ============================================================
 echo.
-echo This is a one-time installation. It creates a weekday Windows
-echo schedule and uses the saved Upwork Chrome profile automatically.
+echo This installer updates the worker, keeps the recurring task
+echo disabled, and runs one controlled three-search test in a
+echo single visible Chrome tab.
 echo.
-echo The worker never submits proposals, sends messages, solves a
-
-echo CAPTCHA, or bypasses Upwork security verification.
+echo The 30-minute schedule is enabled only when all three saved
+echo searches complete and a valid report is created.
+echo.
+echo No proposal or message is sent.
 echo.
 
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File "%~dp0scripts\windows\install-upwork-automation.ps1"
-if errorlevel 1 goto :failed
+set EXITCODE=%ERRORLEVEL%
+if not "%EXITCODE%"=="0" goto :notaccepted
 
 echo.
 echo ============================================================
-echo Automatic Upwork acquisition has been installed.
+echo Stability test passed. Automatic acquisition is enabled.
 echo ============================================================
 pause
 exit /b 0
 
-:failed
+:notaccepted
 echo.
 echo ============================================================
-echo Installation stopped because of an error.
-echo Share only the visible non-sensitive error text.
-echo Never share passwords, OTPs, cookies, recovery codes or tokens.
+echo The controlled test did not pass or installation stopped.
+echo The recurring task remains disabled.
+echo Review the newest report and diagnostic files before retrying.
+echo Share only non-sensitive error text or screenshots.
 echo ============================================================
 pause
-exit /b 1
+exit /b %EXITCODE%
