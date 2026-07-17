@@ -130,7 +130,7 @@ class NormalChromeCaptureTests(unittest.TestCase):
             self.assertEqual(sum(first["priority_counts"].values()), 1)
             self.assertTrue((output / "report.html").exists())
             opportunities = json.loads((output / "opportunities.json").read_text(encoding="utf-8"))
-            attributes = opportunities[0]["record"]["evidence"]["attributes"]
+            attributes = opportunities["items"][0]["record"]["evidence"]["attributes"]
             self.assertEqual(attributes["upwork_profile_owner"], "Waseem")
             self.assertEqual(attributes["upwork_saved_search_name"], "AI + Fullstack AI 16 July 2026")
             self.assertTrue(checkpoint.exists())
