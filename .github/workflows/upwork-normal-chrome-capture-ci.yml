@@ -37,42 +37,20 @@ jobs:
       - name: Check out repository
         uses: actions/checkout@v4
 
-      - name: Resolve installed acquisition Python
-        run: |
-          $candidates = New-Object System.Collections.Generic.List[string]
-          $command = Get-Command python.exe -ErrorAction SilentlyContinue
-          if ($command) { $candidates.Add($command.Source) }
-          $pyCommand = Get-Command py.exe -ErrorAction SilentlyContinue
-          if ($pyCommand) { $candidates.Add($pyCommand.Source) }
-
-          @(
-            'C:\Users\*\Codistan\*\workers\acquisition\.venv\Scripts\python.exe',
-            'C:\Users\*\AppData\Local\Programs\Python\Python*\python.exe',
-            'C:\Program Files\Python*\python.exe',
-            'C:\Program Files\Python*\Scripts\python.exe'
-          ) | ForEach-Object {
-            Get-ChildItem $_ -ErrorAction SilentlyContinue | ForEach-Object { $candidates.Add($_.FullName) }
-          }
-
-          $python = $candidates |
-            Where-Object { $_ -and (Test-Path $_) -and ([IO.Path]::GetFileName($_) -ieq 'python.exe') } |
-            Select-Object -First 1
-          if ([string]::IsNullOrWhiteSpace($python)) {
-            throw 'Python was not found in the installed acquisition worker or standard Windows locations.'
-          }
-          Write-Host "Using Python: $python"
-          & $python --version
-          if ($LASTEXITCODE -ne 0) { throw 'The discovered Python executable could not run.' }
-          $utf8 = New-Object System.Text.UTF8Encoding($false)
-          [System.IO.File]::AppendAllText($env:GITHUB_ENV, "CODISTAN_ACQUISITION_PYTHON=$python`n", $utf8)
+      - name: Set up isolated Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          architecture: 'x64'
+          check-latest: false
 
       - name: Install acquisition worker
         working-directory: workers/acquisition
-        run: '& $env:CODISTAN_ACQUISITION_PYTHON -m pip install -e .'
+        run: python -m pip install -e .
 
       - name: Run exact-search and safe-boundary tests
         working-directory: workers/acquisition
-        run: '& $env:CODISTAN_ACQUISITION_PYTHON -m unittest discover -s tests -p "test_upwork_normal_chrome_capture.py" -v'
+        run: python -m unittest discover -s tests -p "test_upwork_normal_chrome_capture.py" -v
 
       - name: Confirm capture boundary
         run: Write-Host 'Exact Upwork saved-search mapping, visible-card capture, report metadata, deduplication and no-navigation/no-stealth checks passed.'
