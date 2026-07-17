@@ -46,60 +46,51 @@ interface NavigationGroup {
   links: NavigationLink[];
 }
 
+interface WorkspaceTab {
+  href: string;
+  text: string;
+  activeRoutes?: string[];
+}
+
 const navigationGroups: NavigationGroup[] = [
   {
-    id: 'overview',
-    label: 'Overview',
+    id: 'daily-work',
+    label: 'Daily work',
     links: [
-      { href: '/prospects', text: 'All prospects' },
-      { href: '/priorities', text: 'Priority queue' },
-      { href: '/leads/research', text: 'Research queue' },
+      { href: '/prospects', text: 'Prospects' },
+      { href: '/priorities', text: 'Priorities' },
+      { href: '/operations', text: 'Operations' },
     ],
   },
   {
-    id: 'warm-leads',
-    label: 'Warm leads',
+    id: 'more',
+    label: 'More',
     links: [
-      { href: '/leads/linkedin', text: 'LinkedIn warm leads' },
-      { href: '/leads/upwork', text: 'Upwork saved searches' },
+      { href: '/linkedin-signals', text: 'LinkedIn intake' },
       { href: '/lead-signals', text: 'Signal intake' },
-      { href: '/linkedin-signals', text: 'LinkedIn signals' },
-    ],
-  },
-  {
-    id: 'procurement',
-    label: 'Procurement',
-    links: [
-      { href: '/leads/rfq', text: 'RFQs' },
-      { href: '/leads/rfp', text: 'RFPs' },
-      { href: '/leads/eoi', text: 'EOIs' },
-      { href: '/leads/rfi', text: 'RFIs' },
-      { href: '/leads/tenders', text: 'All tenders' },
       { href: '/tenders', text: 'Tender intelligence' },
-    ],
-  },
-  {
-    id: 'services',
-    label: 'Services',
-    links: [
-      { href: '/services', text: 'Services overview' },
-      { href: '/services/ai', text: 'AI and automation' },
-      { href: '/services/software', text: 'Software and SaaS' },
-      { href: '/services/cybersecurity', text: 'Cybersecurity' },
-      { href: '/services/immersive', text: '3D, AR and VR' },
-      { href: '/services/marketing', text: 'Web and marketing' },
-    ],
-  },
-  {
-    id: 'growth-system',
-    label: 'Growth and system',
-    links: [
-      { href: '/leads/partnerships', text: 'Partnership leads' },
       { href: '/re-engagement', text: 'Re-engagement' },
       { href: '/portfolio', text: 'Portfolio proof' },
-      { href: '/operations', text: 'Operations' },
       { href: '/delivery-health', text: 'Delivery health' },
     ],
+  },
+];
+
+const workspaceTabs: WorkspaceTab[] = [
+  { href: '/prospects', text: 'All' },
+  { href: '/leads/linkedin', text: 'LinkedIn' },
+  { href: '/leads/upwork', text: 'Upwork' },
+  {
+    href: '/leads/tenders',
+    text: 'Tenders',
+    activeRoutes: ['/leads/rfq', '/leads/rfp', '/leads/eoi', '/leads/rfi', '/leads/tenders'],
+  },
+  { href: '/leads/research', text: 'Research' },
+  { href: '/leads/partnerships', text: 'Partnerships' },
+  {
+    href: '/services',
+    text: 'Services',
+    activeRoutes: ['/services', '/services/ai', '/services/software', '/services/cybersecurity', '/services/immersive', '/services/marketing'],
   },
 ];
 
@@ -125,6 +116,10 @@ export function applyWorkspacePageChrome(
   output = output.replace(
     /<tr><td colspan="7" class="empty">[\s\S]*?<\/td><\/tr>/,
     `<tr><td colspan="7" class="empty">${escapeHtml(page.emptyMessage)}</td></tr>`,
+  );
+  output = output.replace(
+    /(<form class="toolbar server-toolbar")/,
+    `${renderWorkspaceTabs(page.route)}$1`,
   );
   output = output.replace(/<section class="lower-grid"[\s\S]*?<\/section>\s*<section class="panel runs-panel">[\s\S]*?<\/section>/, '');
   return injectVersionedAssets(output);
@@ -169,7 +164,15 @@ function renderSidebarSummary(summary: WorkspaceSidebarSummary): string {
 
 function renderNavigationGroup(group: NavigationGroup, activeRoute: string): string {
   const active = group.links.some((link) => isActiveRoute(activeRoute, link.href));
-  return `<details class="nav-group" data-nav-group="${escapeAttribute(group.id)}" ${active ? 'open' : ''}><summary><span>${escapeHtml(group.label)}</span><span class="nav-chevron" aria-hidden="true">⌄</span></summary><div class="nav-links">${group.links.map((link) => `<a class="nav-item ${isActiveRoute(activeRoute, link.href) ? 'active' : ''}" href="${escapeAttribute(link.href)}" ${isActiveRoute(activeRoute, link.href) ? 'aria-current="page"' : ''}><span>${escapeHtml(link.text)}</span>${link.badge ? `<small>${escapeHtml(link.badge)}</small>` : ''}</a>`).join('')}</div></details>`;
+  const open = group.id === 'daily-work' || active;
+  return `<details class="nav-group" data-nav-group="${escapeAttribute(group.id)}" ${open ? 'open' : ''}><summary><span>${escapeHtml(group.label)}</span><span class="nav-chevron" aria-hidden="true">⌄</span></summary><div class="nav-links">${group.links.map((link) => `<a class="nav-item ${isActiveRoute(activeRoute, link.href) ? 'active' : ''}" href="${escapeAttribute(link.href)}" ${isActiveRoute(activeRoute, link.href) ? 'aria-current="page"' : ''}><span>${escapeHtml(link.text)}</span>${link.badge ? `<small>${escapeHtml(link.badge)}</small>` : ''}</a>`).join('')}</div></details>`;
+}
+
+function renderWorkspaceTabs(activeRoute: string): string {
+  return `<nav class="workspace-tabs" aria-label="Prospect views">${workspaceTabs.map((tab) => {
+    const active = tab.activeRoutes?.includes(activeRoute) ?? activeRoute === tab.href;
+    return `<a href="${escapeAttribute(tab.href)}" class="workspace-tab ${active ? 'active' : ''}" ${active ? 'aria-current="page"' : ''}>${escapeHtml(tab.text)}</a>`;
+  }).join('')}</nav>`;
 }
 
 function injectVersionedAssets(html: string): string {
@@ -181,7 +184,7 @@ function injectVersionedAssets(html: string): string {
 
 function isActiveRoute(activeRoute: string, href: string): boolean {
   if (activeRoute === href) return true;
-  if (href === '/leads/tenders' && activeRoute === '/tenders') return true;
+  if (href === '/prospects' && (activeRoute.startsWith('/leads/') || activeRoute.startsWith('/services'))) return true;
   return false;
 }
 
