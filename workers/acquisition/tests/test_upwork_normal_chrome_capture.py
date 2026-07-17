@@ -2,9 +2,14 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+import tempfile
 import unittest
 
-from acquisition.upwork_extension_service import SEARCH_PATHS, _segment_for_page
+from acquisition.upwork_extension_service import (
+    CaptureServiceState,
+    SEARCH_PATHS,
+    _segment_for_page,
+)
 
 
 class NormalChromeCaptureTests(unittest.TestCase):
@@ -38,6 +43,50 @@ class NormalChromeCaptureTests(unittest.TestCase):
         self.assertNotIn("playwright install", lowered)
         self.assertNotIn(".[browser]", lowered)
         self.assertIn('pip install -e "."', setup)
+
+    def test_capture_writes_report_and_deduplicates_immediately(self) -> None:
+        root = Path(__file__).resolve().parents[1]
+        with tempfile.TemporaryDirectory() as directory:
+            temp = Path(directory)
+            output = temp / "output"
+            checkpoint = temp / "seen.json"
+            state = CaptureServiceState(
+                config_path=root / "config" / "upwork-automation.toml",
+                qualification_config_path=root / "config" / "qualification.example.toml",
+                output_directory=output,
+                checkpoint_path=checkpoint,
+                state_directory=temp / "state",
+            )
+            payload = {
+                "segment": "ai-jobs",
+                "page_url": "https://www.upwork.com/nx/find-work/9652811",
+                "page_title": "AI Jobs",
+                "trigger": "test",
+                "cards": [{
+                    "source_url": "https://www.upwork.com/jobs/AI-Agent_~022077770760696635841/",
+                    "title": "AI Voice Agent for SaaS Product",
+                    "description": (
+                        "Build a production AI voice agent for our SaaS product with website knowledge, "
+                        "customer support workflows, integrations, analytics and a long-term enhancement roadmap."
+                    ),
+                    "card_text": (
+                        "Posted 20 minutes ago Proposals: 5 to 10 Fixed-price Expert "
+                        "Est. Budget: $8,000 Payment verified $50K+ spent United States "
+                        "AI Voice Agent for SaaS Product"
+                    ),
+                    "skills": ["AI Agent Development", "Voice AI"],
+                }],
+            }
+            first = state.capture(payload)
+            second = state.capture(payload)
+
+            self.assertEqual(first["accepted"], 1)
+            self.assertEqual(sum(first["priority_counts"].values()), 1)
+            self.assertTrue((output / "report.html").exists())
+            self.assertTrue((output / "opportunities.json").exists())
+            self.assertTrue(checkpoint.exists())
+            self.assertEqual(second["accepted"], 0)
+            self.assertEqual(second["duplicates"], 1)
 
 
 if __name__ == "__main__":
