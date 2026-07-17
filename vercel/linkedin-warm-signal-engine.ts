@@ -26,14 +26,6 @@ export interface ProcessLinkedInWarmSignalBatchInput {
 
 export interface ProcessLinkedInWarmSignalBatchResult {
   ingestion: LinkedInWarmSignalIngestionResult;
-  salesNavigatorResearch: {
-    totalInput: number;
-    extractedCandidates: number;
-    created: number;
-    duplicates: number;
-    skippedWithoutTarget: number;
-    errors: Array<{ messageId?: string; message: string }>;
-  };
   assigned: number;
   guidance: GuidanceAuditResult;
   contactEnrichment: {
@@ -55,43 +47,20 @@ export interface ProcessLinkedInWarmSignalBatchResult {
 export async function processLinkedInWarmSignalBatch(
   input: ProcessLinkedInWarmSignalBatchInput,
 ): Promise<ProcessLinkedInWarmSignalBatchResult> {
-  const [evaluator, fixtures, discovery, web, salesNavigatorResearch] = await Promise.all([
+  const [evaluator, fixtures, discovery, web] = await Promise.all([
     import('@sales-automation/evaluator'),
     import('@sales-automation/fixtures'),
     import('@sales-automation/prospect-discovery'),
     import('@sales-automation/web'),
-    import('./linkedin-sales-navigator-research-engine.js'),
   ]);
   const generatedAt = input.generatedAt ?? new Date().toISOString();
-  const split = salesNavigatorResearch.splitLinkedInSignals(input.signals);
-  const warmIngestion = discovery.ingestLinkedInWarmSignals({
+  const ingestion = discovery.ingestLinkedInWarmSignals({
     repository: input.state.repository,
     portfolioItems: fixtures.samplePortfolioItems,
-    signals: split.warmSignals,
+    signals: input.signals,
     actor: input.actor,
     generatedAt,
   });
-  const researchIngestion = await salesNavigatorResearch.ingestSalesNavigatorResearchSignals({
-    state: input.state,
-    signals: split.researchSignals,
-    actor: input.actor,
-    generatedAt,
-    fetchImpl: input.fetchImpl,
-  });
-  const ingestion: LinkedInWarmSignalIngestionResult = {
-    totalInput: warmIngestion.totalInput + researchIngestion.totalInput,
-    created: warmIngestion.created + researchIngestion.created,
-    duplicates: warmIngestion.duplicates + researchIngestion.duplicates,
-    rejected: warmIngestion.rejected,
-    research: warmIngestion.research + researchIngestion.created,
-    priorityA: warmIngestion.priorityA,
-    priorityB: warmIngestion.priorityB,
-    captured: [...warmIngestion.captured, ...researchIngestion.captured],
-    rejectedSignals: warmIngestion.rejectedSignals,
-    duplicateLeadIds: unique([...warmIngestion.duplicateLeadIds, ...researchIngestion.duplicateLeadIds]),
-    rejectionReasonCounts: warmIngestion.rejectionReasonCounts,
-  };
-
   const workload = discovery.buildOwnerWorkload(input.state.repository.listLeads().map((record) => record.lead));
   let assigned = 0;
 
@@ -146,14 +115,6 @@ export async function processLinkedInWarmSignalBatch(
 
   return {
     ingestion,
-    salesNavigatorResearch: {
-      totalInput: researchIngestion.totalInput,
-      extractedCandidates: researchIngestion.extractedCandidates,
-      created: researchIngestion.created,
-      duplicates: researchIngestion.duplicates,
-      skippedWithoutTarget: researchIngestion.skippedWithoutTarget,
-      errors: researchIngestion.errors,
-    },
     assigned,
     guidance,
     contactEnrichment,
@@ -188,8 +149,4 @@ function emptyGuidance(): GuidanceAuditResult {
     rejected: 0,
     leadIds: [],
   };
-}
-
-function unique(values: string[]): string[] {
-  return [...new Set(values)];
 }
