@@ -19,7 +19,7 @@ from .storage import HttpIngestionSink, JsonlSink
 from .upwork_assisted import AssistedCaptureStopped, run_upwork_assisted_pilot
 from .upwork_pilot import HumanActionRequired, PilotNoData, run_upwork_pilot
 from .upwork_schedule import evaluate_acquisition_schedule, write_schedule_status
-from .upwork_scheduled_runtime import run_upwork_scheduled
+from .upwork_stability_guard import run_upwork_scheduled
 
 
 class _SanitizingFormatter(logging.Formatter):
