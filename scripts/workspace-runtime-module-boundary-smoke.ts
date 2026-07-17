@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
+import ts from 'typescript';
 import { matchesProspectWorkspaceScope } from '@sales-automation/neon-state';
 import type { Lead } from '@sales-automation/shared';
 import { WORKSPACE_PAGES } from '../vercel/workspace-page-model.ts';
@@ -9,11 +10,10 @@ const pageSource = readFileSync(new URL('../vercel/workspace-pages.ts', import.m
 const modelSource = readFileSync(new URL('../vercel/workspace-page-model.ts', import.meta.url), 'utf8');
 const neonStateSource = readFileSync(new URL('../packages/neon-state/src/index.ts', import.meta.url), 'utf8');
 const prospectQuerySource = readFileSync(new URL('../packages/neon-state/src/prospect-query.ts', import.meta.url), 'utf8');
-const staticSalesAutomationImport = /import\s+(?!type\b)[\s\S]*?from\s+['"]@sales-automation\//m;
 
-assert.equal(staticSalesAutomationImport.test(runtimeSource), false);
-assert.equal(staticSalesAutomationImport.test(pageSource), false);
-assert.equal(staticSalesAutomationImport.test(modelSource), false);
+assert.equal(hasStaticSalesAutomationRuntimeImport(runtimeSource, 'workspace-dashboard-runtime.ts'), false);
+assert.equal(hasStaticSalesAutomationRuntimeImport(pageSource, 'workspace-pages.ts'), false);
+assert.equal(hasStaticSalesAutomationRuntimeImport(modelSource, 'workspace-page-model.ts'), false);
 assert.equal(runtimeSource.includes("import('@sales-automation/neon-state')"), true);
 assert.equal(runtimeSource.includes("import('@sales-automation/prospect-discovery')"), true);
 assert.equal(runtimeSource.includes("import('@sales-automation/storage')"), true);
@@ -79,6 +79,16 @@ for (const page of WORKSPACE_PAGES) {
 }
 
 console.log('Neon-native workspace pagination keeps dynamic boundaries, uses four warm list statements plus optional detail, and matches established workspace predicates');
+
+function hasStaticSalesAutomationRuntimeImport(source: string, fileName: string): boolean {
+  const sourceFile = ts.createSourceFile(fileName, source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TS);
+  return sourceFile.statements.some((statement) => {
+    if (!ts.isImportDeclaration(statement)) return false;
+    if (!ts.isStringLiteral(statement.moduleSpecifier)) return false;
+    if (!statement.moduleSpecifier.text.startsWith('@sales-automation/')) return false;
+    return statement.importClause?.isTypeOnly !== true;
+  });
+}
 
 function workspaceSamples(): Lead[] {
   return [
