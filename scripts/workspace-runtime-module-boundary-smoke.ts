@@ -1,6 +1,5 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import ts from 'typescript';
 import { matchesProspectWorkspaceScope } from '@sales-automation/neon-state';
 import type { Lead } from '@sales-automation/shared';
 import { WORKSPACE_PAGES } from '../vercel/workspace-page-model.ts';
@@ -11,19 +10,19 @@ const modelSource = readFileSync(new URL('../vercel/workspace-page-model.ts', im
 const neonStateSource = readFileSync(new URL('../packages/neon-state/src/index.ts', import.meta.url), 'utf8');
 const prospectQuerySource = readFileSync(new URL('../packages/neon-state/src/prospect-query.ts', import.meta.url), 'utf8');
 
-assert.equal(hasStaticSalesAutomationRuntimeImport(runtimeSource, 'workspace-dashboard-runtime.ts'), false);
-assert.equal(hasStaticSalesAutomationRuntimeImport(pageSource, 'workspace-pages.ts'), false);
-assert.equal(hasStaticSalesAutomationRuntimeImport(modelSource, 'workspace-page-model.ts'), false);
-assert.equal(runtimeSource.includes("import('@sales-automation/neon-state')"), true);
-assert.equal(runtimeSource.includes("import('@sales-automation/prospect-discovery')"), true);
-assert.equal(runtimeSource.includes("import('@sales-automation/storage')"), true);
-assert.equal(runtimeSource.includes("import('@sales-automation/web/prospect-handler')"), true);
-assert.equal(runtimeSource.includes("import('@sales-automation/neon-state/portfolio-catalog')"), false);
-assert.equal(runtimeSource.includes('loadNeonDiscoveryRuns'), false);
-assert.equal(runtimeSource.includes('loadApprovedPortfolioCatalog'), false);
-assert.equal(runtimeSource.includes('persistLeadRecords'), false);
-assert.equal(runtimeSource.includes('loadNeonScopedRecordsWithMetrics'), false);
-assert.equal(runtimeSource.includes('buildWorkspacePage('), false);
+assert.equal(hasStaticSalesAutomationRuntimeImport(runtimeSource), false, 'workspace-dashboard-runtime must not use static @sales-automation runtime imports');
+assert.equal(hasStaticSalesAutomationRuntimeImport(pageSource), false, 'workspace-pages must allow type-only package imports but reject static runtime package imports');
+assert.equal(hasStaticSalesAutomationRuntimeImport(modelSource), false, 'workspace-page-model must allow type-only package imports but reject static runtime package imports');
+assert.equal(runtimeSource.includes("import('@sales-automation/neon-state')"), true, 'workspace runtime must dynamically import neon-state');
+assert.equal(runtimeSource.includes("import('@sales-automation/prospect-discovery')"), true, 'workspace runtime must dynamically import prospect-discovery');
+assert.equal(runtimeSource.includes("import('@sales-automation/storage')"), true, 'workspace runtime must dynamically import storage');
+assert.equal(runtimeSource.includes("import('@sales-automation/web/prospect-handler')"), true, 'workspace runtime must dynamically import prospect-handler');
+assert.equal(runtimeSource.includes("import('@sales-automation/neon-state/portfolio-catalog')"), false, 'workspace runtime must not load the portfolio catalog module');
+assert.equal(runtimeSource.includes('loadNeonDiscoveryRuns'), false, 'workspace runtime must not load discovery runs');
+assert.equal(runtimeSource.includes('loadApprovedPortfolioCatalog'), false, 'workspace runtime must not load the approved portfolio catalog');
+assert.equal(runtimeSource.includes('persistLeadRecords'), false, 'workspace runtime must not persist the full lead collection');
+assert.equal(runtimeSource.includes('loadNeonScopedRecordsWithMetrics'), false, 'workspace runtime must not use the legacy scoped-record loader');
+assert.equal(runtimeSource.includes('buildWorkspacePage('), false, 'workspace runtime must not build pages from a full in-memory collection');
 assert.match(runtimeSource, /loadNeonProspectPageWithMetrics/);
 assert.match(runtimeSource, /loadNeonProspectRecordWithMetrics/);
 assert.match(runtimeSource, /workspace\.queryScope/);
@@ -63,9 +62,9 @@ assert.match(prospectQuerySource, /LOWER\(record::text\)/);
 assert.match(prospectQuerySource, /follow_up_at\(record\)/);
 assert.match(modelSource, /queryScope: ProspectWorkspaceScope/);
 assert.match(modelSource, /queryScopeFor/);
-assert.equal(pageSource.includes("from './workspace-page-model.js'"), true);
-assert.equal(modelSource.includes('normalizeWorkspacePageQuery'), true);
-assert.equal(modelSource.includes('normalizeProspectPageQuery'), false);
+assert.equal(pageSource.includes("from './workspace-page-model.js'"), true, 'workspace-pages must import workspace-page-model using the runtime .js path');
+assert.equal(modelSource.includes('normalizeWorkspacePageQuery'), true, 'workspace-page-model must use normalizeWorkspacePageQuery');
+assert.equal(modelSource.includes('normalizeProspectPageQuery'), false, 'workspace-page-model must not use the legacy normalizeProspectPageQuery');
 
 const samples = workspaceSamples();
 for (const page of WORKSPACE_PAGES) {
@@ -80,14 +79,11 @@ for (const page of WORKSPACE_PAGES) {
 
 console.log('Neon-native workspace pagination keeps dynamic boundaries, uses four warm list statements plus optional detail, and matches established workspace predicates');
 
-function hasStaticSalesAutomationRuntimeImport(source: string, fileName: string): boolean {
-  const sourceFile = ts.createSourceFile(fileName, source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TS);
-  return sourceFile.statements.some((statement) => {
-    if (!ts.isImportDeclaration(statement)) return false;
-    if (!ts.isStringLiteral(statement.moduleSpecifier)) return false;
-    if (!statement.moduleSpecifier.text.startsWith('@sales-automation/')) return false;
-    const declarationText = statement.getText(sourceFile).trimStart();
-    return !/^import\s+type\b/.test(declarationText);
+function hasStaticSalesAutomationRuntimeImport(source: string): boolean {
+  const importDeclarations = source.match(/^\s*import\b[\s\S]*?;\s*$/gm) ?? [];
+  return importDeclarations.some((declaration) => {
+    if (!/from\s+['"]@sales-automation\//.test(declaration)) return false;
+    return !/^\s*import\s+type\b/.test(declaration);
   });
 }
 
