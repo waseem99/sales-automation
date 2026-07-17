@@ -56,20 +56,20 @@ class CaptureServiceState:
         self.session_seen: set[str] = set()
         self.summary = PilotSummary(started_at=utc_now_iso())
         self.items: list[PilotItem] = []
-        self.lock = threading.Lock()
+        self.lock = threading.RLock()
         self.output_directory.mkdir(parents=True, exist_ok=True)
         self.state_directory.mkdir(parents=True, exist_ok=True)
         self._write_outputs()
+        self._write_service_status()
 
     def capture(self, payload: dict[str, Any]) -> dict[str, Any]:
         page_url = str(payload.get("page_url", "")).strip()
-        derived_segment = _segment_for_page(page_url)
-        supplied_segment = str(payload.get("segment", "")).strip()
-        if not derived_segment or derived_segment not in self.allowed_segments:
+        segment = _segment_for_page(page_url)
+        supplied = str(payload.get("segment", "")).strip()
+        if not segment or segment not in self.allowed_segments:
             raise ValueError("Capture is allowed only from the three approved Upwork saved searches.")
-        if supplied_segment and supplied_segment != derived_segment:
+        if supplied and supplied != segment:
             raise ValueError("Saved-search URL and profile category do not match.")
-
         raw_cards = payload.get("cards")
         if not isinstance(raw_cards, list) or not raw_cards:
             raise ValueError("No visible job cards were supplied.")
@@ -77,10 +77,10 @@ class CaptureServiceState:
         accepted = 0
         duplicates = 0
         rejected = 0
-        accepted_priority_counts = {"A": 0, "B": 0, "C": 0}
+        accepted_priorities = {"A": 0, "B": 0, "C": 0}
+        new_source_ids: set[str] = set()
 
         with self.lock:
-            new_source_ids: set[str] = set()
             for raw in raw_cards[:10]:
                 if not isinstance(raw, dict):
                     rejected += 1
@@ -99,56 +99,14 @@ class CaptureServiceState:
 
                 self.summary.reviewed += 1
                 try:
-                    title = str(raw.get("title", "")).strip()[:500]
-                    card_text = str(raw.get("card_text", ""))[:12_000]
-                    body, capture_meta = clean_visible_description(
-                        description=str(raw.get("description", ""))[:10_000],
-                        card_text=card_text,
-                        title=title,
-                    )
-                    if len(body.strip()) < self.pilot_config.min_description_chars:
-                        self.summary.rejected_extraction += 1
-                        rejected += 1
-                        continue
-
-                    attributes = parse_visible_card_metrics(card_text)
-                    attributes.update(capture_meta)
-                    attributes.update({
-                        "skills": [
-                            str(value)[:80]
-                            for value in raw.get("skills", [])[:20]
-                            if str(value).strip()
-                        ] if isinstance(raw.get("skills", []), list) else [],
-                        "captured_from": "normal_chrome_extension_visible_card",
-                        "capture_mode": "user_navigated_normal_chrome_auto_capture",
-                        "capture_trigger": str(payload.get("trigger", "automatic_visible_page"))[:80],
-                        "capture_schema_version": "upwork-normal-chrome-capture.v1",
-                    })
-
-                    evidence = SourceEvidence(
-                        source="upwork",
-                        source_id=source_id,
-                        source_url=source_url,
-                        captured_at=utc_now_iso(),
-                        title=title or "Untitled Upwork opportunity",
-                        body=body,
-                        segment=derived_segment,
-                        attributes=attributes,
-                    )
-                    evidence = annotate_profile_and_market(
-                        evidence,
-                        derived_segment,
-                        visible_client_card_text=card_text,
-                    )
-                    evidence.validate()
-                    record = OpportunityRecord(dedupe_key=_dedupe_key(evidence), evidence=evidence)
-                    decision = apply_market_policy(record, qualify(record, self.qualification_config))
-                    self.items.append(PilotItem(record=record, qualification=decision))
+                    item = self._build_item(raw, segment, payload)
+                    self.items.append(item)
                     self.session_seen.add(source_id)
                     new_source_ids.add(source_id)
                     self.summary.extracted += 1
                     accepted += 1
-                    accepted_priority_counts[decision.priority] = accepted_priority_counts.get(decision.priority, 0) + 1
+                    priority = item.qualification.priority
+                    accepted_priorities[priority] = accepted_priorities.get(priority, 0) + 1
                 except Exception:
                     self.summary.failed += 1
                     rejected += 1
@@ -165,7 +123,7 @@ class CaptureServiceState:
                 "accepted": accepted,
                 "duplicates": duplicates,
                 "rejected": rejected,
-                "accepted_priority_counts": accepted_priority_counts,
+                "accepted_priority_counts": accepted_priorities,
                 "total_extracted": self.summary.extracted,
                 "priority_counts": self._priority_counts(),
                 "report_path": str(self.output_directory / "report.html"),
@@ -173,34 +131,87 @@ class CaptureServiceState:
                 "capture_mode": "normal_chrome_auto_capture",
             }
 
+    def _build_item(self, raw: dict[str, Any], segment: str, payload: dict[str, Any]) -> PilotItem:
+        source_url = canonical_visible_job_url(str(raw.get("source_url", "")))
+        if not source_url:
+            raise ValueError("A concrete Upwork job URL is required.")
+        title = str(raw.get("title", "")).strip()[:500]
+        card_text = str(raw.get("card_text", ""))[:12_000]
+        body, capture_meta = clean_visible_description(
+            description=str(raw.get("description", ""))[:10_000],
+            card_text=card_text,
+            title=title,
+        )
+        if len(body.strip()) < self.pilot_config.min_description_chars:
+            self.summary.rejected_extraction += 1
+            raise ValueError("Visible description was too short for qualification.")
+
+        attributes = parse_visible_card_metrics(card_text)
+        attributes.update(capture_meta)
+        attributes.update({
+            "skills": [
+                str(value)[:80]
+                for value in raw.get("skills", [])[:20]
+                if str(value).strip()
+            ] if isinstance(raw.get("skills", []), list) else [],
+            "captured_from": "normal_chrome_extension_visible_card",
+            "capture_mode": "user_navigated_normal_chrome_auto_capture",
+            "capture_trigger": str(payload.get("trigger", "automatic_visible_page"))[:80],
+            "capture_schema_version": "upwork-normal-chrome-capture.v1",
+        })
+
+        evidence = SourceEvidence(
+            source="upwork",
+            source_id=external_job_id(source_url),
+            source_url=source_url,
+            captured_at=utc_now_iso(),
+            title=title or "Untitled Upwork opportunity",
+            body=body,
+            segment=segment,
+            attributes=attributes,
+        )
+        evidence = annotate_profile_and_market(
+            evidence,
+            segment,
+            visible_client_card_text=card_text,
+        )
+        evidence.validate()
+        record = OpportunityRecord(dedupe_key=_dedupe_key(evidence), evidence=evidence)
+        decision = apply_market_policy(record, qualify(record, self.qualification_config))
+        return PilotItem(record=record, qualification=decision)
+
     def status(self) -> dict[str, Any]:
         with self.lock:
-            return {
-                "ready": True,
-                "mode": "normal_chrome_auto_capture",
-                "started_at": self.summary.started_at,
-                "updated_at": self.summary.completed_at,
-                "links_found": self.summary.links_found,
-                "reviewed": self.summary.reviewed,
-                "extracted": self.summary.extracted,
-                "duplicates": self.summary.duplicates,
-                "failed": self.summary.failed,
-                "priority_counts": self._priority_counts(),
-                "report_path": str(self.output_directory / "report.html"),
-            }
+            return self._status_unlocked()
 
     def snapshot(self) -> dict[str, Any]:
         with self.lock:
             self.summary.completed_at = utc_now_iso()
             self._write_outputs()
             self._write_service_status()
-            return self.status()
+            return self._status_unlocked()
+
+    def _status_unlocked(self) -> dict[str, Any]:
+        return {
+            "ready": True,
+            "mode": "normal_chrome_auto_capture",
+            "started_at": self.summary.started_at,
+            "updated_at": self.summary.completed_at,
+            "links_found": self.summary.links_found,
+            "reviewed": self.summary.reviewed,
+            "extracted": self.summary.extracted,
+            "duplicates": self.summary.duplicates,
+            "failed": self.summary.failed,
+            "priority_counts": self._priority_counts(),
+            "report_path": str(self.output_directory / "report.html"),
+        }
 
     def _priority_counts(self) -> dict[str, int]:
-        result = {"A": 0, "B": 0, "C": 0}
+        counts = {"A": 0, "B": 0, "C": 0}
         for item in self.items:
-            result[item.qualification.priority] = result.get(item.qualification.priority, 0) + 1
-        return result
+            priority = item.qualification.priority
+            counts[priority] = counts.get(priority, 0) + 1
+        return counts
 
     def _write_outputs(self) -> None:
         write_recoverable_snapshot(self.output_directory, self.summary, self.items)
@@ -214,7 +225,7 @@ class CaptureServiceState:
     def _write_service_status(self) -> None:
         payload = {
             "schema_version": "codistan-upwork-normal-chrome-service.v1",
-            **self.status(),
+            **self._status_unlocked(),
         }
         (self.state_directory / "upwork-normal-chrome-service-status.json").write_text(
             json.dumps(payload, ensure_ascii=False, indent=2, sort_keys=True),
@@ -262,10 +273,10 @@ class CaptureHandler(BaseHTTPRequestHandler):
             })
 
     def _read_json(self) -> dict[str, Any]:
-        content_length = int(self.headers.get("Content-Length", "0") or "0")
-        if content_length <= 0 or content_length > MAX_REQUEST_BYTES:
+        length = int(self.headers.get("Content-Length", "0") or "0")
+        if length <= 0 or length > MAX_REQUEST_BYTES:
             raise ValueError("Invalid request size.")
-        value = json.loads(self.rfile.read(content_length).decode("utf-8"))
+        value = json.loads(self.rfile.read(length).decode("utf-8"))
         if not isinstance(value, dict):
             raise ValueError("Request must be a JSON object.")
         return value
@@ -281,10 +292,10 @@ class CaptureHandler(BaseHTTPRequestHandler):
 
     def _cors_headers(self) -> None:
         origin = self.headers.get("Origin", "")
-        if origin.startswith("chrome-extension://"):
-            self.send_header("Access-Control-Allow-Origin", origin)
-        else:
-            self.send_header("Access-Control-Allow-Origin", "http://127.0.0.1:8765")
+        self.send_header(
+            "Access-Control-Allow-Origin",
+            origin if origin.startswith("chrome-extension://") else "http://127.0.0.1:8765",
+        )
         self.send_header("Vary", "Origin")
         self.send_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
         self.send_header("Access-Control-Allow-Headers", "Content-Type")
