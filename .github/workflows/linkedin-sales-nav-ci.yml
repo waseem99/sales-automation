@@ -14,6 +14,8 @@ on:
       - 'packages/storage/**'
       - 'packages/evaluator/**'
       - 'packages/fixtures/**'
+      - 'scripts/windows/**'
+      - 'docs/LOCAL_WINDOWS_CI.md'
       - 'package.json'
       - 'pnpm-workspace.yaml'
       - 'tsconfig*.json'
@@ -29,8 +31,12 @@ concurrency:
 jobs:
   validate:
     name: Build, type-check and test
-    runs-on: ubuntu-latest
-    timeout-minutes: 30
+    runs-on: [self-hosted, Windows, X64, codistan-local]
+    timeout-minutes: 45
+
+    defaults:
+      run:
+        shell: powershell
 
     steps:
       - name: Check out repository
@@ -40,6 +46,37 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: '22'
+
+      - name: Resolve and verify local PostgreSQL
+        env:
+          SECRET_LOCAL_DATABASE_URL: ${{ secrets.LOCAL_DATABASE_URL }}
+        run: |
+          $databaseUrl = $env:SECRET_LOCAL_DATABASE_URL
+          if ([string]::IsNullOrWhiteSpace($databaseUrl)) {
+            $databaseUrl = [Environment]::GetEnvironmentVariable('LOCAL_DATABASE_URL', 'Machine')
+          }
+          if ([string]::IsNullOrWhiteSpace($databaseUrl)) {
+            throw 'LOCAL_DATABASE_URL is missing. Run scripts/windows/setup-local-postgres-ci.ps1 as Administrator on the runner machine.'
+          }
+
+          Write-Host "::add-mask::$databaseUrl"
+          $utf8 = New-Object System.Text.UTF8Encoding($false)
+          [System.IO.File]::AppendAllText($env:GITHUB_ENV, "DATABASE_URL=$databaseUrl`n", $utf8)
+
+          $psqlCommand = Get-Command psql.exe -ErrorAction SilentlyContinue
+          $psqlPath = if ($psqlCommand) { $psqlCommand.Source } else {
+            Get-ChildItem 'C:\Program Files\PostgreSQL\*\bin\psql.exe' -ErrorAction SilentlyContinue |
+              Sort-Object FullName -Descending |
+              Select-Object -First 1 -ExpandProperty FullName
+          }
+          if ([string]::IsNullOrWhiteSpace($psqlPath) -or -not (Test-Path $psqlPath)) {
+            throw 'psql.exe was not found. Install PostgreSQL locally and rerun scripts/windows/setup-local-postgres-ci.ps1.'
+          }
+
+          & $psqlPath --dbname=$databaseUrl --set ON_ERROR_STOP=1 --command "SELECT current_database() AS database_name, current_user AS database_user;"
+          if ($LASTEXITCODE -ne 0) {
+            throw 'The self-hosted runner could not connect to the local PostgreSQL database.'
+          }
 
       - name: Enable pnpm
         run: |
