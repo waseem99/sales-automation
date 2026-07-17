@@ -3,18 +3,32 @@
 
   const COLLECTOR = "http://127.0.0.1:8765";
   const SEARCHES = {
-    "/nx/find-work/9652811": "ai-jobs",
-    "/nx/find-work/9652860": "roshana-2d-3d",
-    "/nx/find-work/9652877": "nadir-game-ar-vr"
+    "/nx/find-work/9652811": {
+      segment: "ai-jobs",
+      owner: "Waseem",
+      savedSearchName: "AI + Fullstack AI 16 July 2026"
+    },
+    "/nx/find-work/9652860": {
+      segment: "roshana-2d-3d",
+      owner: "Roshana",
+      savedSearchName: "3D Design & Creatives 15 July 2026"
+    },
+    "/nx/find-work/9652877": {
+      segment: "nadir-game-ar-vr",
+      owner: "Nadir",
+      savedSearchName: "Game & AR/VR 16 July 2026"
+    }
   };
   const pendingTimers = new Map();
   const lastAttempts = new Map();
 
-  function segmentForUrl(value) {
+  function searchForUrl(value) {
     try {
       const url = new URL(value);
       if (!["upwork.com", "www.upwork.com"].includes(url.hostname)) return null;
-      return SEARCHES[url.pathname.replace(/\/$/, "")] || null;
+      const path = url.pathname.replace(/\/$/, "");
+      const search = SEARCHES[path];
+      return search ? {...search, path} : null;
     } catch (_error) {
       return null;
     }
@@ -45,14 +59,14 @@
     }
   }
 
-  async function notifyPriorityA(count, reportPath) {
+  async function notifyPriorityA(count, reportPath, savedSearchName) {
     if (!count) return;
     try {
       await chrome.notifications.create({
         type: "basic",
         iconUrl: "icon128.svg",
         title: "Codistan Priority A opportunity",
-        message: `${count} new Priority A Upwork opportunity${count === 1 ? "" : "ies"} captured. Review the latest local report.`,
+        message: `${count} new Priority A Upwork opportunity${count === 1 ? "" : "ies"} captured from ${savedSearchName}.`,
         contextMessage: reportPath || ""
       });
     } catch (_error) {
@@ -60,12 +74,14 @@
     }
   }
 
-  async function storeResult(pageUrl, segment, response, error = "") {
+  async function storeResult(pageUrl, search, response, error = "") {
     await chrome.storage.local.set({
       codistan_last_capture: {
         at: new Date().toISOString(),
         page_url: pageUrl,
-        segment,
+        segment: search?.segment || "",
+        profile_owner: search?.owner || "",
+        saved_search_name: search?.savedSearchName || "",
         response: response || null,
         error
       }
@@ -73,8 +89,8 @@
   }
 
   async function submitCards({pageUrl, pageTitle, cards, trigger, tabId}) {
-    const segment = segmentForUrl(pageUrl);
-    if (!segment) {
+    const search = searchForUrl(pageUrl);
+    if (!search) {
       throw new Error("This is not one of the three approved Upwork saved searches.");
     }
     if (!Array.isArray(cards) || cards.length === 0) {
@@ -82,7 +98,10 @@
     }
 
     const response = await postJson("/capture", {
-      segment,
+      segment: search.segment,
+      profile_owner: search.owner,
+      saved_search_name: search.savedSearchName,
+      saved_search_path: search.path,
       page_url: pageUrl,
       page_title: String(pageTitle || ""),
       cards: cards.slice(0, 10),
@@ -92,8 +111,8 @@
     if (tabId) {
       await updateBadge(tabId, response.accepted > 0 ? String(response.accepted) : "✓", response.accepted > 0 ? "#157347" : "#5f6368");
     }
-    await notifyPriorityA(Number(response.accepted_priority_counts?.A || 0), response.report_path);
-    await storeResult(pageUrl, segment, response);
+    await notifyPriorityA(Number(response.accepted_priority_counts?.A || 0), response.report_path, search.savedSearchName);
+    await storeResult(pageUrl, search, response);
     return response;
   }
 
@@ -106,8 +125,8 @@
 
   async function autoCaptureTab(tabId, tab, attempt = 1) {
     const pageUrl = String(tab?.url || "");
-    const segment = segmentForUrl(pageUrl);
-    if (!segment) return;
+    const search = searchForUrl(pageUrl);
+    if (!search) return;
 
     try {
       const result = await readVisibleCards(tabId, 10);
@@ -128,13 +147,13 @@
     } catch (error) {
       const messageText = error instanceof Error ? error.message : String(error);
       await updateBadge(tabId, "!", "#b3261e");
-      await storeResult(pageUrl, segment, null, messageText);
+      await storeResult(pageUrl, search, null, messageText);
     }
   }
 
   function scheduleAutoCapture(tabId, tab) {
     const pageUrl = String(tab?.url || "");
-    if (!segmentForUrl(pageUrl)) return;
+    if (!searchForUrl(pageUrl)) return;
 
     const key = `${tabId}:${pageUrl}`;
     const now = Date.now();
@@ -151,7 +170,7 @@
 
   chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
     const url = String(changeInfo.url || tab.url || "");
-    if (!segmentForUrl(url)) return;
+    if (!searchForUrl(url)) return;
     if (changeInfo.status === "complete" || Boolean(changeInfo.url)) {
       scheduleAutoCapture(tabId, {...tab, url});
     }
@@ -160,7 +179,7 @@
   chrome.tabs.onActivated.addListener(async ({tabId}) => {
     try {
       const tab = await chrome.tabs.get(tabId);
-      if (segmentForUrl(String(tab.url || ""))) scheduleAutoCapture(tabId, tab);
+      if (searchForUrl(String(tab.url || ""))) scheduleAutoCapture(tabId, tab);
     } catch (_error) {
       // Tab may have closed before inspection.
     }
@@ -182,9 +201,9 @@
     })().catch(async error => {
       const tabId = sender.tab?.id;
       if (tabId) await updateBadge(tabId, "!", "#b3261e");
-      const messageText = error instanceof Error ? error.message : String(error);
-      await storeResult(String(message.page_url || sender.tab?.url || ""), "", null, messageText);
-      sendResponse({ok: false, error: messageText});
+      const pageUrl = String(message.page_url || sender.tab?.url || "");
+      await storeResult(pageUrl, searchForUrl(pageUrl), null, error instanceof Error ? error.message : String(error));
+      sendResponse({ok: false, error: error instanceof Error ? error.message : String(error)});
     });
 
     return true;
