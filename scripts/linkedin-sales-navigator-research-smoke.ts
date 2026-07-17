@@ -72,7 +72,7 @@ assert.equal(record?.lead.contactRole, 'Chief Technology Officer');
 assert.equal(record?.lead.companyName, 'Northstar Health');
 assert.equal(record?.lead.companyWebsite, 'https://northstar-health.example');
 assert.equal(record?.lead.sourceUrl, 'https://www.linkedin.com/in/ayesha-khan-987654');
-assert.ok(record?.notes.some((note) => note.body.includes('sales_navigator_research')));
+assert.ok(record?.notes.some((note) => note.includes('sales_navigator_research')));
 assert.ok(record?.lead.owner);
 
 const warmPost = {
