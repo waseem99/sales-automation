@@ -94,15 +94,11 @@ jobs:
         run: pnpm build
 
       - name: Capture full Vercel type-check diagnostics
-        id: full_typecheck
         continue-on-error: true
         run: |
           New-Item -Path typecheck-vercel.log -ItemType File -Force | Out-Null
           pnpm typecheck:vercel 2>&1 | Tee-Object -FilePath typecheck-vercel.log
-          $exitCode = $LASTEXITCODE
-          $utf8 = New-Object System.Text.UTF8Encoding($false)
-          [System.IO.File]::AppendAllText($env:GITHUB_OUTPUT, "exit_code=$exitCode`n", $utf8)
-          if ($exitCode -ne 0) { exit $exitCode }
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
       - name: Upload full Vercel diagnostics
         if: always()
@@ -120,15 +116,10 @@ jobs:
         run: pnpm --filter @sales-automation/outreach-email test
 
       - name: Test LinkedIn warm-signal qualification
-        id: warm_signal_tests
-        continue-on-error: true
         run: |
           New-Item -Path linkedin-warm-signal-tests.log -ItemType File -Force | Out-Null
           pnpm --dir packages/prospect-discovery exec tsx src/linkedin-warm-signals.test.ts 2>&1 | Tee-Object -FilePath linkedin-warm-signal-tests.log
-          $exitCode = $LASTEXITCODE
-          $utf8 = New-Object System.Text.UTF8Encoding($false)
-          [System.IO.File]::AppendAllText($env:GITHUB_OUTPUT, "exit_code=$exitCode`n", $utf8)
-          if ($exitCode -ne 0) { exit $exitCode }
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
       - name: Upload LinkedIn warm-signal diagnostics
         if: always()
@@ -140,15 +131,10 @@ jobs:
           retention-days: 7
 
       - name: Test automatic Sales Navigator discovery
-        id: sales_nav_tests
-        continue-on-error: true
         run: |
           New-Item -Path linkedin-sales-nav-tests.log -ItemType File -Force | Out-Null
           pnpm --dir packages/prospect-discovery exec tsx src/linkedin-sales-navigator-research.test.ts 2>&1 | Tee-Object -FilePath linkedin-sales-nav-tests.log
-          $exitCode = $LASTEXITCODE
-          $utf8 = New-Object System.Text.UTF8Encoding($false)
-          [System.IO.File]::AppendAllText($env:GITHUB_OUTPUT, "exit_code=$exitCode`n", $utf8)
-          if ($exitCode -ne 0) { exit $exitCode }
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
       - name: Upload Sales Navigator diagnostics
         if: always()
@@ -160,15 +146,11 @@ jobs:
           retention-days: 7
 
       - name: Capture full prospect-discovery package diagnostics
-        id: full_discovery_tests
         continue-on-error: true
         run: |
           New-Item -Path prospect-discovery-full-tests.log -ItemType File -Force | Out-Null
           pnpm --filter @sales-automation/prospect-discovery test 2>&1 | Tee-Object -FilePath prospect-discovery-full-tests.log
-          $exitCode = $LASTEXITCODE
-          $utf8 = New-Object System.Text.UTF8Encoding($false)
-          [System.IO.File]::AppendAllText($env:GITHUB_OUTPUT, "exit_code=$exitCode`n", $utf8)
-          if ($exitCode -ne 0) { exit $exitCode }
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
       - name: Upload full prospect-discovery diagnostics
         if: always()
@@ -180,15 +162,10 @@ jobs:
           retention-days: 7
 
       - name: Test Vercel runtime contracts
-        id: runtime_tests
-        continue-on-error: true
         run: |
           New-Item -Path vercel-runtime-tests.log -ItemType File -Force | Out-Null
           pnpm test:vercel-runtime 2>&1 | Tee-Object -FilePath vercel-runtime-tests.log
-          $exitCode = $LASTEXITCODE
-          $utf8 = New-Object System.Text.UTF8Encoding($false)
-          [System.IO.File]::AppendAllText($env:GITHUB_OUTPUT, "exit_code=$exitCode`n", $utf8)
-          if ($exitCode -ne 0) { exit $exitCode }
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
       - name: Upload runtime-contract diagnostics
         if: always()
@@ -199,21 +176,5 @@ jobs:
           if-no-files-found: error
           retention-days: 7
 
-      - name: Enforce focused LinkedIn release gates
-        if: always()
-        run: |
-          $failures = @()
-          if ('${{ steps.warm_signal_tests.outputs.exit_code }}' -ne '0') { $failures += 'LinkedIn warm-signal qualification tests failed.' }
-          if ('${{ steps.sales_nav_tests.outputs.exit_code }}' -ne '0') { $failures += 'Automatic Sales Navigator discovery tests failed.' }
-          if ('${{ steps.runtime_tests.outputs.exit_code }}' -ne '0') { $failures += 'Vercel runtime-contract tests failed.' }
-          if ($failures.Count -gt 0) {
-            Write-Error ($failures -join ' ')
-            exit 1
-          }
-          Write-Host 'Focused LinkedIn and Sales Navigator release gates passed.'
-          if ('${{ steps.full_typecheck.outputs.exit_code }}' -ne '0') {
-            Write-Host 'Repository-wide Vercel type-check still reports baseline dashboard/operations diagnostics outside this PR.'
-          }
-          if ('${{ steps.full_discovery_tests.outputs.exit_code }}' -ne '0') {
-            Write-Host 'The broad prospect-discovery package suite has a separate diagnostic; focused LinkedIn tests passed.'
-          }
+      - name: Confirm focused LinkedIn release gate
+        run: Write-Host 'Focused LinkedIn and Sales Navigator build, type-check and tests passed.'
