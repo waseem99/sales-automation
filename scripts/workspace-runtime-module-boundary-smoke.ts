@@ -86,7 +86,8 @@ function hasStaticSalesAutomationRuntimeImport(source: string, fileName: string)
     if (!ts.isImportDeclaration(statement)) return false;
     if (!ts.isStringLiteral(statement.moduleSpecifier)) return false;
     if (!statement.moduleSpecifier.text.startsWith('@sales-automation/')) return false;
-    return statement.importClause?.isTypeOnly !== true;
+    const declarationText = statement.getText(sourceFile).trimStart();
+    return !/^import\s+type\b/.test(declarationText);
   });
 }
 
