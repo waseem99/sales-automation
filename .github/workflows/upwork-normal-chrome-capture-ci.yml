@@ -37,20 +37,49 @@ jobs:
       - name: Check out repository
         uses: actions/checkout@v4
 
-      - name: Set up isolated Python 3.12
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.12'
-          architecture: 'x64'
-          check-latest: false
+      - name: Create disposable Python test environment
+        run: |
+          $task = Get-ScheduledTask -TaskName 'Codistan Upwork Capture Service' -ErrorAction Stop
+          $arguments = [string]$task.Actions[0].Arguments
+          $runnerScript = $null
+          if ($arguments -match '-File\s+"([^"]+)"') {
+            $runnerScript = $Matches[1]
+          } elseif ($arguments -match '-File\s+([^\s]+)') {
+            $runnerScript = $Matches[1]
+          }
+          if ([string]::IsNullOrWhiteSpace($runnerScript) -or -not (Test-Path $runnerScript)) {
+            throw 'Could not resolve the installed Upwork capture service script.'
+          }
+
+          $scriptsDirectory = Split-Path $runnerScript -Parent
+          $workerRoot = (Resolve-Path (Join-Path $scriptsDirectory '..\..')).Path
+          $basePython = Join-Path $workerRoot '.venv\Scripts\python.exe'
+          if (-not (Test-Path $basePython)) {
+            throw "The installed acquisition Python environment was not found at $basePython"
+          }
+
+          $testVenv = Join-Path $env:RUNNER_TEMP 'upwork-normal-chrome-ci-venv'
+          if (Test-Path $testVenv) { Remove-Item -Recurse -Force $testVenv }
+          & $basePython -m venv $testVenv
+          if ($LASTEXITCODE -ne 0) { throw 'Could not create the disposable acquisition test environment.' }
+
+          $testPython = Join-Path $testVenv 'Scripts\python.exe'
+          "CI_PYTHON=$testPython" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          & $testPython --version
 
       - name: Install acquisition worker
         working-directory: workers/acquisition
-        run: python -m pip install -e .
+        run: |
+          & $env:CI_PYTHON -m pip install --upgrade pip
+          if ($LASTEXITCODE -ne 0) { throw 'pip upgrade failed.' }
+          & $env:CI_PYTHON -m pip install -e .
+          if ($LASTEXITCODE -ne 0) { throw 'Acquisition worker installation failed.' }
 
       - name: Run exact-search and safe-boundary tests
         working-directory: workers/acquisition
-        run: python -m unittest discover -s tests -p "test_upwork_normal_chrome_capture.py" -v
+        run: |
+          & $env:CI_PYTHON -m unittest discover -s tests -p "test_upwork_normal_chrome_capture.py" -v
+          if ($LASTEXITCODE -ne 0) { throw 'Focused Upwork capture tests failed.' }
 
       - name: Confirm capture boundary
-        run: Write-Host 'Exact Upwork saved-search mapping, visible-card capture, report metadata, deduplication and no-navigation/no-stealth checks passed.'
+        run: Write-Host 'Exact saved-search mapping, one-click user-initiated launch, visible-card capture, report metadata, deduplication and no-stealth checks passed.'
