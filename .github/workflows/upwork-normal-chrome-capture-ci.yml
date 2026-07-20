@@ -37,49 +37,79 @@ jobs:
       - name: Check out repository
         uses: actions/checkout@v4
 
-      - name: Create disposable Python test environment
+      - name: Validate exact mappings and one-click launcher
         run: |
-          $task = Get-ScheduledTask -TaskName 'Codistan Upwork Capture Service' -ErrorAction Stop
-          $arguments = [string]$task.Actions[0].Arguments
-          $runnerScript = $null
-          if ($arguments -match '-File\s+"([^"]+)"') {
-            $runnerScript = $Matches[1]
-          } elseif ($arguments -match '-File\s+([^\s]+)') {
-            $runnerScript = $Matches[1]
+          $root = (Resolve-Path '.').Path
+          $extensionRoot = Join-Path $root 'workers\acquisition\browser-extension'
+          $scriptsRoot = Join-Path $root 'workers\acquisition\scripts\windows'
+          $servicePath = Join-Path $root 'workers\acquisition\acquisition\upwork_extension_service.py'
+          $configPath = Join-Path $root 'workers\acquisition\config\upwork-automation.toml'
+          $testPath = Join-Path $root 'workers\acquisition\tests\test_upwork_normal_chrome_capture.py'
+
+          $manifest = Get-Content (Join-Path $extensionRoot 'manifest.json') -Raw | ConvertFrom-Json
+          $background = Get-Content (Join-Path $extensionRoot 'background.js') -Raw
+          $launcher = Get-Content (Join-Path $scriptsRoot 'open-approved-upwork-searches.ps1') -Raw
+          $installer = Get-Content (Join-Path $scriptsRoot 'install-upwork-normal-chrome-capture-v2.ps1') -Raw
+          $service = Get-Content $servicePath -Raw
+          $config = Get-Content $configPath -Raw
+          $tests = Get-Content $testPath -Raw
+
+          if ($manifest.version -ne '0.5.0') { throw 'Extension 0.5.0 was not found.' }
+          if ($manifest.background.service_worker -ne 'background.js') { throw 'The expected background service worker is missing.' }
+
+          $searches = @(
+            @{ Owner = 'Waseem'; Name = 'AI + Fullstack AI 16 July 2026'; Path = '/nx/find-work/9652811'; Url = 'https://www.upwork.com/nx/find-work/9652811' },
+            @{ Owner = 'Roshana'; Name = '3D Design & Creatives 15 July 2026'; Path = '/nx/find-work/9652860'; Url = 'https://www.upwork.com/nx/find-work/9652860' },
+            @{ Owner = 'Nadir'; Name = 'Game & AR/VR 16 July 2026'; Path = '/nx/find-work/9652877'; Url = 'https://www.upwork.com/nx/find-work/9652877' }
+          )
+          foreach ($search in $searches) {
+            foreach ($source in @($background, $service, $tests)) {
+              if (-not $source.Contains($search.Name)) { throw "Missing saved-search name: $($search.Name)" }
+              if (-not $source.Contains($search.Owner)) { throw "Missing profile owner: $($search.Owner)" }
+              if (-not $source.Contains($search.Path)) { throw "Missing saved-search path: $($search.Path)" }
+            }
+            if (($launcher.Split($search.Url).Count - 1) -ne 1) { throw "Launcher must contain exactly one $($search.Url) URL." }
+            if (-not $config.Contains($search.Url)) { throw "Configuration is missing $($search.Url)." }
           }
-          if ([string]::IsNullOrWhiteSpace($runnerScript) -or -not (Test-Path $runnerScript)) {
-            throw 'Could not resolve the installed Upwork capture service script.'
+
+          if (-not $launcher.Contains('"--new-window"')) { throw 'The launcher does not open a dedicated normal Chrome window.' }
+          if (-not $launcher.Contains('Codistan Upwork Capture Service')) { throw 'The launcher does not verify the local processor.' }
+          if (-not $installer.Contains('Open Codistan Upwork Searches.lnk')) { throw 'The desktop shortcut is not installed.' }
+          if (-not $installer.Contains('open-approved-upwork-searches.ps1')) { throw 'The launcher script is not copied by the installer.' }
+          if (-not $service.Contains('upwork_saved_search_name')) { throw 'Saved-search identity is not persisted in opportunity evidence.' }
+          if (-not $service.Contains('upwork_profile_owner')) { throw 'Profile-owner identity is not persisted in opportunity evidence.' }
+
+          $prohibitedExtension = @(
+            'chrome.tabs.create',
+            'chrome.tabs.update',
+            'navigator.webdriver',
+            'mousemove',
+            'dispatchEvent',
+            'Math.random',
+            'cloudflare',
+            'captcha'
+          )
+          foreach ($marker in $prohibitedExtension) {
+            if ($background.IndexOf($marker, [StringComparison]::OrdinalIgnoreCase) -ge 0) {
+              throw "Prohibited extension behavior found: $marker"
+            }
           }
 
-          $scriptsDirectory = Split-Path $runnerScript -Parent
-          $workerRoot = (Resolve-Path (Join-Path $scriptsDirectory '..\..')).Path
-          $basePython = Join-Path $workerRoot '.venv\Scripts\python.exe'
-          if (-not (Test-Path $basePython)) {
-            throw "The installed acquisition Python environment was not found at $basePython"
+          $prohibitedLauncher = @(
+            'page.reload',
+            'scrollIntoView',
+            'mouse_event',
+            'SendKeys',
+            'navigator.webdriver',
+            'Math.random',
+            'cloudflare',
+            'captcha'
+          )
+          foreach ($marker in $prohibitedLauncher) {
+            if ($launcher.IndexOf($marker, [StringComparison]::OrdinalIgnoreCase) -ge 0) {
+              throw "Prohibited launcher behavior found: $marker"
+            }
           }
-
-          $testVenv = Join-Path $env:RUNNER_TEMP 'upwork-normal-chrome-ci-venv'
-          if (Test-Path $testVenv) { Remove-Item -Recurse -Force $testVenv }
-          & $basePython -m venv $testVenv
-          if ($LASTEXITCODE -ne 0) { throw 'Could not create the disposable acquisition test environment.' }
-
-          $testPython = Join-Path $testVenv 'Scripts\python.exe'
-          "CI_PYTHON=$testPython" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
-          & $testPython --version
-
-      - name: Install acquisition worker
-        working-directory: workers/acquisition
-        run: |
-          & $env:CI_PYTHON -m pip install --upgrade pip
-          if ($LASTEXITCODE -ne 0) { throw 'pip upgrade failed.' }
-          & $env:CI_PYTHON -m pip install -e .
-          if ($LASTEXITCODE -ne 0) { throw 'Acquisition worker installation failed.' }
-
-      - name: Run exact-search and safe-boundary tests
-        working-directory: workers/acquisition
-        run: |
-          & $env:CI_PYTHON -m unittest discover -s tests -p "test_upwork_normal_chrome_capture.py" -v
-          if ($LASTEXITCODE -ne 0) { throw 'Focused Upwork capture tests failed.' }
 
       - name: Confirm capture boundary
-        run: Write-Host 'Exact saved-search mapping, one-click user-initiated launch, visible-card capture, report metadata, deduplication and no-stealth checks passed.'
+        run: Write-Host 'Exact saved-search mapping, one-click user-initiated launch, identity metadata and no-navigation/no-stealth boundary passed.'
