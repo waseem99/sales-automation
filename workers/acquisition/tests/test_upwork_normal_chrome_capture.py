@@ -85,6 +85,33 @@ class NormalChromeCaptureTests(unittest.TestCase):
         self.assertNotIn(".[browser]", lowered)
         self.assertIn('pip install -e "."', setup)
 
+    def test_one_click_launcher_opens_only_the_three_approved_searches(self) -> None:
+        root = Path(__file__).resolve().parents[1]
+        launcher = (root / "scripts" / "windows" / "open-approved-upwork-searches.ps1").read_text(encoding="utf-8")
+        installer = (root / "scripts" / "windows" / "install-upwork-normal-chrome-capture-v2.ps1").read_text(encoding="utf-8")
+        lowered = launcher.casefold()
+        expected_urls = (
+            "https://www.upwork.com/nx/find-work/9652811",
+            "https://www.upwork.com/nx/find-work/9652860",
+            "https://www.upwork.com/nx/find-work/9652877",
+        )
+        for url in expected_urls:
+            self.assertEqual(launcher.count(url), 1)
+        self.assertIn('"--new-window"', launcher)
+        self.assertIn("Open Codistan Upwork Searches.lnk", installer)
+        self.assertIn("open-approved-upwork-searches.ps1", installer)
+        for marker in (
+            "page.reload",
+            "scroll",
+            "mousemove",
+            "sendkeys",
+            "cloudflare",
+            "captcha",
+            "navigator.webdriver",
+            "math.random",
+        ):
+            self.assertNotIn(marker, lowered)
+
     def test_capture_writes_identity_report_and_deduplicates_immediately(self) -> None:
         root = Path(__file__).resolve().parents[1]
         with tempfile.TemporaryDirectory() as directory:
