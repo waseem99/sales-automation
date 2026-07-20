@@ -68,7 +68,8 @@ jobs:
               if (-not $source.Contains($search.Owner)) { throw "Missing profile owner: $($search.Owner)" }
               if (-not $source.Contains($search.Path)) { throw "Missing saved-search path: $($search.Path)" }
             }
-            if (($launcher.Split($search.Url).Count - 1) -ne 1) { throw "Launcher must contain exactly one $($search.Url) URL." }
+            $urlCount = [regex]::Matches($launcher, [regex]::Escape($search.Url)).Count
+            if ($urlCount -ne 1) { throw "Launcher must contain exactly one $($search.Url) URL; found $urlCount." }
             if (-not $config.Contains($search.Url)) { throw "Configuration is missing $($search.Url)." }
           }
 
