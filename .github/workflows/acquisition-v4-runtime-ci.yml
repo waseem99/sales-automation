@@ -18,7 +18,7 @@ concurrency:
 
 jobs:
   validate:
-    name: Test dual collectors and source extensions
+    name: Test collectors, extensions and closeability queue
     runs-on: ubuntu-latest
     timeout-minutes: 10
 
@@ -43,7 +43,7 @@ jobs:
       - name: Compile runtime
         run: python -m compileall -q acquisition_v4 tests
 
-      - name: Run runtime regression tests
+      - name: Run runtime and closeability regression tests
         env:
           PYTHONPATH: .
         run: python -m unittest discover -s tests -v
@@ -54,7 +54,7 @@ jobs:
       - name: Validate LinkedIn extension contract
         run: node tests/linkedin_extension_contract.mjs
 
-      - name: Run localhost integration gate
+      - name: Run localhost closeability integration gate
         env:
           PYTHONPATH: .
         run: |
@@ -65,8 +65,21 @@ jobs:
           trap 'kill "$runtime_pid" 2>/dev/null || true' EXIT
           sleep 1
           python -m acquisition_v4.status --json
-          python -m acquisition_v4.fixture_submit upwork fixtures/upwork-capture.json
-          python -m acquisition_v4.fixture_submit linkedin fixtures/linkedin-capture.json
+
+          upwork_result="$(python -m acquisition_v4.fixture_submit upwork fixtures/upwork-capture.json)"
+          echo "$upwork_result"
+          echo "$upwork_result" | grep '"priority_a": 1'
+
+          linkedin_result="$(python -m acquisition_v4.fixture_submit linkedin fixtures/linkedin-capture.json)"
+          echo "$linkedin_result"
+          echo "$linkedin_result" | grep '"priority_a": 1'
+
+          test -s "$state_root/review/index.html"
+          test -s "$state_root/review/queue.json"
+          grep 'Build a private RAG workflow' "$state_root/review/index.html"
+          grep 'Digital marketing agency requirement' "$state_root/review/index.html"
+          grep 'Every external action remains manual' "$state_root/review/index.html"
+
           python -m acquisition_v4.fixture_submit upwork fixtures/upwork-capture.json | grep '"duplicates": 1'
           kill "$runtime_pid"
           wait "$runtime_pid" || true
@@ -77,4 +90,4 @@ jobs:
           trap 'kill "$runtime_pid" 2>/dev/null || true' EXIT
           sleep 1
           python -m acquisition_v4.fixture_submit linkedin fixtures/linkedin-capture.json | grep '"duplicates": 1'
-          python -m acquisition_v4.status --json
+          python -m acquisition_v4.status --json | grep '"priority_a": 1'
