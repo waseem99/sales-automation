@@ -10,14 +10,22 @@
       "source_url": "https://www.linkedin.com/posts/jane-doe_we-are-looking-for-an-agency-activity-1234567890123456789-abcd",
       "source_native_id": "urn:li:activity:1234567890123456789",
       "title": "Digital marketing agency requirement",
-      "body": "We are looking for a digital marketing agency for social media, content and performance campaigns.",
+      "body": "We are looking for a digital marketing agency for social media, content and performance campaigns. Please send a proposal.",
       "author": {
         "name": "Jane Doe",
+        "profile_url": "https://www.linkedin.com/in/jane-doe",
         "headline": "Marketing Director",
         "company": "Example Company"
       },
       "posted_age": "2h",
+      "commercial_evidence": {
+        "signal_type": "direct_service_requirement",
+        "service_lanes": ["digital_growth"],
+        "intent_phrases": ["looking for"],
+        "contact_routes": ["proposal"]
+      },
       "raw_evidence": {
+        "original_author_name": "Jane Doe",
         "request_phrase": "looking for a digital marketing agency"
       }
     }
