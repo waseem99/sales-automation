@@ -1,0 +1,69 @@
+name: Acquisition V4 Runtime CI
+
+on:
+  pull_request:
+    branches:
+      - main
+    paths:
+      - '.github/workflows/acquisition-v4-runtime-ci.yml'
+      - 'workers/acquisition/**'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: acquisition-v4-runtime-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  validate:
+    name: Test dual local collectors
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    defaults:
+      run:
+        working-directory: workers/acquisition
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Compile runtime
+        run: python -m compileall -q acquisition_v4 tests
+
+      - name: Run regression tests
+        env:
+          PYTHONPATH: .
+        run: python -m unittest discover -s tests -v
+
+      - name: Run localhost integration gate
+        env:
+          PYTHONPATH: .
+        run: |
+          set -euo pipefail
+          state_root="$(mktemp -d)"
+          python -m acquisition_v4.supervisor --state-root "$state_root" >"$state_root/supervisor.log" 2>&1 &
+          runtime_pid=$!
+          trap 'kill "$runtime_pid" 2>/dev/null || true' EXIT
+          sleep 1
+          python -m acquisition_v4.status --json
+          python -m acquisition_v4.fixture_submit upwork fixtures/upwork-capture.json
+          python -m acquisition_v4.fixture_submit linkedin fixtures/linkedin-capture.json
+          python -m acquisition_v4.fixture_submit upwork fixtures/upwork-capture.json | grep '"duplicates": 1'
+          kill "$runtime_pid"
+          wait "$runtime_pid" || true
+          trap - EXIT
+
+          python -m acquisition_v4.supervisor --state-root "$state_root" >"$state_root/restart.log" 2>&1 &
+          runtime_pid=$!
+          trap 'kill "$runtime_pid" 2>/dev/null || true' EXIT
+          sleep 1
+          python -m acquisition_v4.fixture_submit linkedin fixtures/linkedin-capture.json | grep '"duplicates": 1'
+          python -m acquisition_v4.status --json
