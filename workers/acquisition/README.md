@@ -12,7 +12,7 @@ This directory contains the clean local runtime for the Upwork and LinkedIn Chro
 - No Vercel or production database requirement
 - No proposal, application, message, connection request or other external action
 
-The shared schema, health, persistence, deduplication and restart contract implement #200. The Upwork extension and exact-search launcher advance #201. The LinkedIn direct-requirement extension advances #202. Commercial prioritization remains under #204.
+The shared runtime implements #200. The Upwork extension advances #201, the LinkedIn direct-requirement extension advances #202, deterministic closeability implements the core #204 contract, and the combined read-only action queue advances #220.
 
 ## One-time Windows setup
 
@@ -34,7 +34,7 @@ Repeat the relevant **Prepare** command and click **Reload** on that unpacked ex
    - Roshana — 3D Design & Creatives 15 July 2026
    - Nadir — Game & AR/VR 16 July 2026
 3. The extension reads visible job cards after each user-opened page loads.
-4. The popup provides a manual capture fallback and local status.
+4. The popup shows new records plus Priority A and Priority B counts.
 
 The Upwork extension retains canonical job identity plus visible value, buyer, competition, freshness, duration, workload and skill evidence needed for bidding decisions. It never refreshes, scrolls, clicks a job, handles verification, submits a proposal, changes a profile or sends a message.
 
@@ -49,9 +49,40 @@ The Upwork extension retains canonical job identity plus visible value, buyer, c
    - cybersecurity consultant requirements.
 3. The extension reviews only visible posts after the user-opened search pages load.
 4. It submits only explicit supported service requirements and keeps the original post URL and original author.
-5. The popup provides a manual capture fallback and local status.
+5. The popup shows new records plus Priority A and Priority B counts.
 
 The LinkedIn extension filters permanent vacancies, job seekers, freelancer self-promotion and generic content before local ingestion. It retains service lanes, intent phrases, available contact-route types and repost/original-author evidence. It never messages, connects, follows, reacts or comments.
+
+## Closeability decisions
+
+Every accepted record is scored immediately under configuration `acquisition-v4-closeability-1.0.0`.
+
+### Upwork dimensions
+
+- service fit;
+- commercial value;
+- buyer quality;
+- competition and timing.
+
+### LinkedIn dimensions
+
+- service fit;
+- explicit buyer intent;
+- available response route;
+- buyer identity;
+- freshness.
+
+The stored decision includes Priority A, Priority B, Research or Reject; score; confidence; service route; positive reasons; missing evidence; risks; and the recommended manual next action. Missing information is shown explicitly and is never invented.
+
+## Combined action queue
+
+After every capture, the runtime rewrites:
+
+- `%LOCALAPPDATA%\Codistan\Acquisition\review\index.html`
+- `%LOCALAPPDATA%\Codistan\Acquisition\review\queue.json`
+- `%LOCALAPPDATA%\Codistan\Acquisition\review\queue.csv`
+
+Double-click `OPEN-ACQUISITION-REVIEW.cmd` to open the readable queue. Priority A appears first, then Priority B, Research and Reject. Source titles are clickable and open the original Upwork job or LinkedIn post. The page cannot submit proposals or send outreach.
 
 ## Developer validation
 
