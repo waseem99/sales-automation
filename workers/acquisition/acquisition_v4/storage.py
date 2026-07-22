@@ -5,8 +5,6 @@ import os
 from pathlib import Path
 from typing import Iterable
 
-from .models import NormalizedRecord
-
 
 def atomic_write_text(path: Path, content: str) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -79,6 +77,9 @@ class AtomicRecordStore:
             json.dumps(status, ensure_ascii=False, indent=2, sort_keys=True) + "\n",
         )
 
-    def append_atomically(self, existing: list[dict[str, object]], accepted: list[NormalizedRecord]) -> None:
-        combined = [*existing, *(record.as_dict() for record in accepted)]
-        self.persist_records(combined)
+    def append_atomically(
+        self,
+        existing: list[dict[str, object]],
+        accepted: list[dict[str, object]],
+    ) -> None:
+        self.persist_records([*existing, *accepted])
