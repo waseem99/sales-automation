@@ -34,7 +34,8 @@
         trigger: "manual_extension_fallback"
       });
       if (!response?.ok) throw new Error(response?.error || "Capture failed.");
-      setStatus(`${response.accepted || 0} new requirement(s), ${response.duplicates || 0} duplicate. Total stored: ${response.total_records || 0}.`);
+      const priorities = response.accepted_priority_counts || {};
+      setStatus(`${response.accepted || 0} new, ${response.duplicates || 0} duplicate. Priority A: ${priorities.priority_a || 0}; Priority B: ${priorities.priority_b || 0}. Open Acquisition Review for outreach action.`);
     } catch (error) {
       setStatus(error instanceof Error ? error.message : String(error));
     } finally {
@@ -47,7 +48,8 @@
     chrome.storage.local.get("codistan_linkedin_last_capture")
   ]).then(([service, stored]) => {
     const last = stored.codistan_linkedin_last_capture;
-    const parts = [`Processor ready. Stored requirements: ${service.accepted || 0}.`];
+    const priorities = service.priority_counts || {};
+    const parts = [`Processor ready. Requirements: ${service.accepted || 0}; A: ${priorities.priority_a || 0}; B: ${priorities.priority_b || 0}.`];
     if (last?.error) parts.push(`Last capture issue: ${last.error}`);
     else if (last?.at) parts.push(`Last capture at ${new Date(last.at).toLocaleString()}.`);
     setStatus(parts.join(" "));
