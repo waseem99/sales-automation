@@ -28,6 +28,13 @@ def _safe_error(error: Exception) -> str:
     return f"{error.__class__.__name__}: local processing failed"
 
 
+def _safe_counter(value: Any) -> int:
+    try:
+        return max(0, int(value))
+    except (TypeError, ValueError):
+        return 0
+
+
 def _validate_page_url(source: str, value: Any) -> str:
     raw = str(value or "").strip()
     parsed = urlsplit(raw)
@@ -51,13 +58,14 @@ class CollectorState:
         self.store = AtomicRecordStore(self.state_root, self.source)
         self.records = self.store.load_records()
         self.seen = self.store.load_seen()
+        previous_status = self.store.load_status()
         self.lock = threading.RLock()
-        self.last_capture_at = ""
-        self.last_error = ""
-        self.total_received = 0
+        self.last_capture_at = str(previous_status.get("last_capture_at", ""))[:100]
+        self.last_error = str(previous_status.get("last_error", ""))[:300]
+        self.total_received = _safe_counter(previous_status.get("received"))
         self.total_accepted = len(self.records)
-        self.total_duplicates = 0
-        self.total_rejected = 0
+        self.total_duplicates = _safe_counter(previous_status.get("duplicates"))
+        self.total_rejected = _safe_counter(previous_status.get("rejected"))
         self._write_status()
 
     def capture(self, payload: dict[str, Any]) -> dict[str, Any]:
@@ -65,6 +73,7 @@ class CollectorState:
             try:
                 result = self._capture_locked(payload)
                 self.last_error = ""
+                self._write_status()
                 return result
             except Exception as error:
                 self.last_error = _safe_error(error)
@@ -127,7 +136,6 @@ class CollectorState:
         self.total_duplicates += duplicates
         self.total_rejected += rejected
         self.last_capture_at = utc_now_iso()
-        self._write_status()
         return {
             "source": self.source,
             "accepted": len(accepted),
