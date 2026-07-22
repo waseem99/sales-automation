@@ -47,6 +47,10 @@ class AtomicRecordStore:
                 records.append(value)
         return records
 
+    def load_status(self) -> dict[str, object]:
+        value = load_json(self.status_path, {})
+        return value if isinstance(value, dict) else {}
+
     def load_seen(self) -> set[str]:
         value = load_json(self.checkpoint_path, [])
         seen = {str(item) for item in value} if isinstance(value, list) else set()
