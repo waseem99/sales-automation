@@ -12,23 +12,31 @@ This directory contains the clean local runtime for the Upwork and LinkedIn Chro
 - No Vercel or production database requirement
 - No proposal, application, message, connection request or other external action
 
-The shared runtime implements #200. The Upwork extension advances #201, the LinkedIn direct-requirement extension advances #202, deterministic closeability implements the core #204 contract, and the combined read-only action queue advances #220.
+The shared runtime implements #200. The Upwork extension advances #201, the LinkedIn direct-requirement extension advances #202, deterministic closeability implements the core #204 contract, the combined read-only action queue advances #220, and the install/recovery bundle advances #221.
 
 ## One-time Windows setup
 
-1. Double-click `START-ACQUISITION-V4.cmd` and leave the minimized runtime running.
-2. Double-click `PREPARE-UPWORK-EXTENSION.cmd`.
-3. Double-click `PREPARE-LINKEDIN-EXTENSION.cmd`.
-4. In `chrome://extensions/`, enable Developer mode and load these unpacked folders:
+1. Download or check out the PR #223 branch.
+2. Open `workers\acquisition`.
+3. Double-click `START-HERE-ACQUISITION-V4.cmd`.
+4. The installer:
+   - installs Python 3.12 through `winget` when required;
+   - copies replaceable application files to `%LOCALAPPDATA%\Codistan\Acquisition\app-current`;
+   - preserves captured records, review output and deduplication state outside that folder;
+   - keeps the prior application version as `app-previous`;
+   - copies both unpacked extensions to stable local folders;
+   - starts both collectors and verifies ports `8765` and `8775`;
+   - creates daily-operation, health, diagnostics and rollback shortcuts on the desktop;
+   - starts the runtime automatically when the Windows user signs in.
+5. In `chrome://extensions/`, enable Developer mode and load these unpacked folders once:
    - `%LOCALAPPDATA%\Codistan\Acquisition\extensions\upwork`
    - `%LOCALAPPDATA%\Codistan\Acquisition\extensions\linkedin`
-5. Run `CHECK-ACQUISITION-V4.cmd`. Both collectors must show healthy.
 
-Repeat the relevant **Prepare** command and click **Reload** on that unpacked extension after an extension update.
+After an application update, rerun `START-HERE-ACQUISITION-V4.cmd` and click **Reload** on both unpacked extensions. Their folder locations remain stable.
 
 ## Daily Upwork flow
 
-1. Double-click `OPEN-UPWORK-SEARCHES.cmd`.
+1. Double-click the desktop shortcut **Open Upwork Searches**.
 2. The launcher opens only these approved searches:
    - Waseem — AI + Fullstack AI 16 July 2026
    - Roshana — 3D Design & Creatives 15 July 2026
@@ -40,7 +48,7 @@ The Upwork extension retains canonical job identity plus visible value, buyer, c
 
 ## Daily LinkedIn flow
 
-1. Double-click `OPEN-LINKEDIN-LEAD-SEARCHES.cmd`.
+1. Double-click the desktop shortcut **Open LinkedIn Lead Searches**.
 2. The launcher opens five high-intent content searches:
    - software development agency requirements;
    - AI automation partner requirements;
@@ -82,7 +90,13 @@ After every capture, the runtime rewrites:
 - `%LOCALAPPDATA%\Codistan\Acquisition\review\queue.json`
 - `%LOCALAPPDATA%\Codistan\Acquisition\review\queue.csv`
 
-Double-click `OPEN-ACQUISITION-REVIEW.cmd` to open the readable queue. Priority A appears first, then Priority B, Research and Reject. Source titles are clickable and open the original Upwork job or LinkedIn post. The page cannot submit proposals or send outreach.
+Double-click the desktop shortcut **Open Acquisition Review**. Priority A appears first, then Priority B, Research and Reject. Source titles are clickable and open the original Upwork job or LinkedIn post. The page cannot submit proposals or send outreach.
+
+## Health, diagnostics and rollback
+
+- **Check Acquisition V4** shows whether both collectors are healthy and reports current A/B counts.
+- **Diagnose Acquisition V4** creates a ZIP containing health, versions and file metadata only. It excludes captured opportunity bodies, cookies and credentials.
+- **Rollback Acquisition V4** swaps `app-current` with `app-previous`, refreshes both stable extension folders and restarts the runtime. Captured records and deduplication state remain intact.
 
 ## Developer validation
 
