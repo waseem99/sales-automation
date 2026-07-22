@@ -18,7 +18,7 @@ concurrency:
 
 jobs:
   validate:
-    name: Test dual local collectors
+    name: Test dual collectors and Upwork extension
     runs-on: ubuntu-latest
     timeout-minutes: 10
 
@@ -35,13 +35,21 @@ jobs:
         with:
           python-version: '3.12'
 
+      - name: Set up Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
       - name: Compile runtime
         run: python -m compileall -q acquisition_v4 tests
 
-      - name: Run regression tests
+      - name: Run runtime regression tests
         env:
           PYTHONPATH: .
         run: python -m unittest discover -s tests -v
+
+      - name: Validate Upwork extension contract
+        run: node tests/upwork_extension_contract.mjs
 
       - name: Run localhost integration gate
         env:
