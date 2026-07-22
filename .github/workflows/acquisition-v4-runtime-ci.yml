@@ -18,7 +18,7 @@ concurrency:
 
 jobs:
   validate:
-    name: Test dual collectors and Upwork extension
+    name: Test dual collectors and source extensions
     runs-on: ubuntu-latest
     timeout-minutes: 10
 
@@ -50,6 +50,9 @@ jobs:
 
       - name: Validate Upwork extension contract
         run: node tests/upwork_extension_contract.mjs
+
+      - name: Validate LinkedIn extension contract
+        run: node tests/linkedin_extension_contract.mjs
 
       - name: Run localhost integration gate
         env:
