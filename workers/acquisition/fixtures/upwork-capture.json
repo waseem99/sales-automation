@@ -11,12 +11,16 @@
       "source_native_id": "~0123456789abcdef",
       "title": "Build a private RAG workflow",
       "body": "We need an experienced team to build a secure private RAG workflow and admin portal.",
+      "posted_age": "2 hours ago",
       "commercial_evidence": {
         "fixed_budget_usd": 12000,
-        "payment_verified": true
+        "payment_verified": true,
+        "client_spend_usd": 50000,
+        "hire_rate_percent": 75,
+        "proposals": "Less than 5 proposals"
       },
       "raw_evidence": {
-        "proposal_range": "Less than 5"
+        "skills": ["Python", "RAG", "SaaS"]
       }
     }
   ]
