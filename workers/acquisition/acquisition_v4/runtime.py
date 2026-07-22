@@ -12,6 +12,7 @@ from urllib.parse import urlsplit
 
 from . import __version__
 from .models import NormalizedRecord, SUPPORTED_SOURCES, utc_now_iso
+from .qualification import qualify_record
 from .storage import AtomicRecordStore
 
 MAX_REQUEST_BYTES = 1_000_000
@@ -97,7 +98,8 @@ class CollectorState:
         if len(raw_records) > MAX_RECORDS_PER_CAPTURE:
             raise ValueError("Too many records were supplied in one capture.")
 
-        accepted: list[NormalizedRecord] = []
+        accepted: list[dict[str, Any]] = []
+        accepted_keys: list[str] = []
         duplicates = 0
         rejected = 0
         batch_seen: set[str] = set()
@@ -123,13 +125,16 @@ class CollectorState:
                 duplicates += 1
                 continue
             batch_seen.add(record.dedupe_key)
-            accepted.append(record)
+            record_value = record.as_dict()
+            record_value["qualification"] = qualify_record(record_value)
+            accepted.append(record_value)
+            accepted_keys.append(record.dedupe_key)
 
         if accepted:
             self.store.append_atomically(self.records, accepted)
-            next_seen = {*self.seen, *(record.dedupe_key for record in accepted)}
+            next_seen = {*self.seen, *accepted_keys}
             self.store.persist_seen(next_seen)
-            self.records.extend(record.as_dict() for record in accepted)
+            self.records.extend(accepted)
             self.seen = next_seen
 
         self.total_accepted += len(accepted)
@@ -143,8 +148,22 @@ class CollectorState:
             "rejected": rejected,
             "total_records": len(self.records),
             "records_path": str(self.store.records_path),
+            "accepted_priority_counts": self._priority_counts(accepted),
+            "priority_counts": self._priority_counts(self.records),
             "external_action_performed": False,
         }
+
+    @staticmethod
+    def _priority_counts(records: list[dict[str, Any]]) -> dict[str, int]:
+        counts = {"priority_a": 0, "priority_b": 0, "research": 0, "reject": 0}
+        for record in records:
+            qualification = record.get("qualification")
+            if not isinstance(qualification, dict):
+                continue
+            disposition = str(qualification.get("disposition", ""))
+            if disposition in counts:
+                counts[disposition] += 1
+        return counts
 
     def health(self) -> dict[str, Any]:
         with self.lock:
@@ -167,6 +186,7 @@ class CollectorState:
             "rejected": self.total_rejected,
             "records_path": str(self.store.records_path),
             "status_path": str(self.store.status_path),
+            "priority_counts": self._priority_counts(self.records),
             "external_actions_enabled": False,
         }
 
