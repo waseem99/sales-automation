@@ -13,6 +13,7 @@ from urllib.parse import urlsplit
 from . import __version__
 from .models import NormalizedRecord, SUPPORTED_SOURCES, utc_now_iso
 from .qualification import qualify_record
+from .review import write_review_outputs
 from .storage import AtomicRecordStore
 
 MAX_REQUEST_BYTES = 1_000_000
@@ -141,6 +142,7 @@ class CollectorState:
         self.total_duplicates += duplicates
         self.total_rejected += rejected
         self.last_capture_at = utc_now_iso()
+        review = write_review_outputs(self.state_root)
         return {
             "source": self.source,
             "accepted": len(accepted),
@@ -150,6 +152,7 @@ class CollectorState:
             "records_path": str(self.store.records_path),
             "accepted_priority_counts": self._priority_counts(accepted),
             "priority_counts": self._priority_counts(self.records),
+            "review": review,
             "external_action_performed": False,
         }
 
