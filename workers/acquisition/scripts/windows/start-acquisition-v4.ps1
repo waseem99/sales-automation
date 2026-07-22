@@ -21,5 +21,5 @@ New-Item -ItemType Directory -Force -Path $StateRoot | Out-Null
 
 Write-Host "Starting Codistan Acquisition V4..."
 Write-Host "State: $StateRoot"
-& $pythonExe @pythonArgs -m acquisition_v4.supervisor --state-root $StateRoot
+& $pythonExe @pythonArgs -m acquisition_v4.supervisor --state-root $StateRoot --pid-file (Join-Path $StateRoot "runtime.pid")
 exit $LASTEXITCODE
