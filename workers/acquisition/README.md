@@ -12,25 +12,46 @@ This directory contains the clean local runtime for the Upwork and LinkedIn Chro
 - No Vercel or production database requirement
 - No proposal, application, message, connection request or other external action
 
-The shared schema, health, persistence, deduplication and restart contract implement #200. The Upwork extension and exact-search launcher advance #201. LinkedIn extraction and commercial qualification remain under #202 and #204.
+The shared schema, health, persistence, deduplication and restart contract implement #200. The Upwork extension and exact-search launcher advance #201. The LinkedIn direct-requirement extension advances #202. Commercial prioritization remains under #204.
 
-## Windows operator flow — Upwork
+## One-time Windows setup
 
 1. Double-click `START-ACQUISITION-V4.cmd` and leave the minimized runtime running.
-2. Double-click `PREPARE-UPWORK-EXTENSION.cmd` once after installation or an extension update.
-3. In `chrome://extensions/`, enable Developer mode, choose **Load unpacked**, and select:
-   `%LOCALAPPDATA%\Codistan\Acquisition\extensions\upwork`
-4. Double-click `OPEN-UPWORK-SEARCHES.cmd` each working session.
-5. The extension automatically reads visible cards after the three approved searches load. Its popup provides a manual capture fallback and current collector status.
-6. Run `CHECK-ACQUISITION-V4.cmd` whenever capture status is unclear.
+2. Double-click `PREPARE-UPWORK-EXTENSION.cmd`.
+3. Double-click `PREPARE-LINKEDIN-EXTENSION.cmd`.
+4. In `chrome://extensions/`, enable Developer mode and load these unpacked folders:
+   - `%LOCALAPPDATA%\Codistan\Acquisition\extensions\upwork`
+   - `%LOCALAPPDATA%\Codistan\Acquisition\extensions\linkedin`
+5. Run `CHECK-ACQUISITION-V4.cmd`. Both collectors must show healthy.
 
-The launcher opens only these approved searches:
+Repeat the relevant **Prepare** command and click **Reload** on that unpacked extension after an extension update.
 
-- Waseem — AI + Fullstack AI 16 July 2026
-- Roshana — 3D Design & Creatives 15 July 2026
-- Nadir — Game & AR/VR 16 July 2026
+## Daily Upwork flow
 
-The extension never refreshes, scrolls, clicks a job, handles verification, submits a proposal, changes a profile, or sends a message.
+1. Double-click `OPEN-UPWORK-SEARCHES.cmd`.
+2. The launcher opens only these approved searches:
+   - Waseem — AI + Fullstack AI 16 July 2026
+   - Roshana — 3D Design & Creatives 15 July 2026
+   - Nadir — Game & AR/VR 16 July 2026
+3. The extension reads visible job cards after each user-opened page loads.
+4. The popup provides a manual capture fallback and local status.
+
+The Upwork extension retains canonical job identity plus visible value, buyer, competition, freshness, duration, workload and skill evidence needed for bidding decisions. It never refreshes, scrolls, clicks a job, handles verification, submits a proposal, changes a profile or sends a message.
+
+## Daily LinkedIn flow
+
+1. Double-click `OPEN-LINKEDIN-LEAD-SEARCHES.cmd`.
+2. The launcher opens five high-intent content searches:
+   - software development agency requirements;
+   - AI automation partner requirements;
+   - digital marketing agency requirements;
+   - video and animation agency requirements;
+   - cybersecurity consultant requirements.
+3. The extension reviews only visible posts after the user-opened search pages load.
+4. It submits only explicit supported service requirements and keeps the original post URL and original author.
+5. The popup provides a manual capture fallback and local status.
+
+The LinkedIn extension filters permanent vacancies, job seekers, freelancer self-promotion and generic content before local ingestion. It retains service lanes, intent phrases, available contact-route types and repost/original-author evidence. It never messages, connects, follows, reacts or comments.
 
 ## Developer validation
 
@@ -39,6 +60,7 @@ From this directory:
 ```bash
 python -m unittest discover -s tests -v
 node tests/upwork_extension_contract.mjs
+node tests/linkedin_extension_contract.mjs
 ```
 
 ## Run both collectors
@@ -75,7 +97,5 @@ Submitting the same fixture twice must return a duplicate on the second run. Res
 - `records`: one to fifty visible records.
 
 Every normalized record retains a canonical source URL, source-native or deterministic identity, visible evidence, page identity, parser version, timestamps and a stable deduplication key.
-
-The Upwork extension additionally retains fixed/hourly value, client spend, hire rate, payment verification, proposal range, posted age, duration, weekly hours, experience level, skills, approved saved-search name and profile owner where visible.
 
 Health endpoints expose only operational metadata. They do not expose captured post/job bodies, cookies, credentials or private session data.
