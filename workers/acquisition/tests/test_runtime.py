@@ -83,10 +83,14 @@ class RuntimeTests(unittest.TestCase):
             duplicate = upwork.capture(upwork_payload())
             self.assertEqual(duplicate["accepted"], 0)
             self.assertEqual(duplicate["duplicates"], 1)
+            last_capture_at = upwork.health()["last_capture_at"]
 
             restarted = CollectorState("upwork", root, "test")
+            self.assertEqual(restarted.health()["last_capture_at"], last_capture_at)
+            self.assertEqual(restarted.health()["duplicates"], 1)
             after_restart = restarted.capture(upwork_payload())
             self.assertEqual(after_restart["duplicates"], 1)
+            self.assertEqual(restarted.health()["duplicates"], 2)
 
             linkedin = CollectorState("linkedin", root, "test")
             linked = linkedin.capture(linkedin_payload())
