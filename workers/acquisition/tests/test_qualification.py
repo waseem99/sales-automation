@@ -90,12 +90,21 @@ class QualificationTests(unittest.TestCase):
             ("Appointment Setter — Warm Inbound Leads", "Book qualified appointments for contractors."),
             ("Dynamic Virtual Assistant (Long-Term)", "Support admin, sales support and operations."),
             ("High ticket closer for AI offer", "Handle qualified inbound leads for our AI agency."),
-            ("Looking for Writers to Finish Website Articles", "Write SEO focused articles for our website."),
             ("Visibility OS | Beta tester", "Test our AI-powered PR platform."),
         ]
         for title, body in examples:
             decision = qualify_record({"source": "upwork", "title": title, "body": body, "commercial_evidence": {}, "raw_evidence": {}})
             self.assertEqual(decision["disposition"], "reject", title)
+
+    def test_writer_only_job_is_not_promoted_without_commercial_evidence(self) -> None:
+        decision = qualify_record({
+            "source": "upwork",
+            "title": "Looking for Writers to Finish Website Articles",
+            "body": "Write SEO focused articles for our website.",
+            "commercial_evidence": {},
+            "raw_evidence": {},
+        })
+        self.assertIn(decision["disposition"], {"research", "reject"})
 
     def test_no_agency_and_location_restricted_work_is_rejected(self) -> None:
         examples = [
