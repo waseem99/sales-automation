@@ -27,6 +27,8 @@ for (const id of ["9652811", "9652860", "9652877"]) assert(background.includes(i
 assert(background.includes("/^\\/nx\\/find-work\\/\\d+$/"), "numeric find-work paths must be accepted dynamically");
 assert(background.includes("activeSavedSearchName"));
 assert(content.includes("active_saved_search_name"));
+assert(content.includes("commercialTextForCard"));
+assert(content.includes("commercial_fields_detected"));
 assert(popup.includes("active_saved_search_name"));
 
 for (const marker of [
@@ -51,14 +53,26 @@ vm.runInContext(evidenceSource, context);
 const helper = context.globalThis.CodistanUpworkEvidence;
 assert(helper);
 assert.equal(helper.nativeIdFromUrl("https://www.upwork.com/jobs/~0123456789abcdef?x=1"), "~0123456789abcdef");
-const parsed = helper.parseCommercialEvidence(
-  "Posted 2 hours ago Fixed-price Est. Budget: $12,000 Payment verified $50K+ spent 75% hire rate Less than 5 proposals Expert"
+
+const fixed = helper.parseCommercialEvidence(
+  "Posted 2 hours ago Fixed-price Est. Budget: $12,000 Payment verified $50K+ spent 75% hire rate Fewer than 5 proposals Expert"
 );
-assert.equal(parsed.fixed_budget_usd, 12000);
-assert.equal(parsed.client_spend_usd, 50000);
-assert.equal(parsed.hire_rate_percent, 75);
-assert.equal(parsed.payment_verified, true);
-assert.equal(parsed.proposals, "Less than 5 proposals");
-assert.equal(parsed.experience_level, "Expert");
+assert.equal(fixed.fixed_budget_usd, 12000);
+assert.equal(fixed.client_spend_usd, 50000);
+assert.equal(fixed.hire_rate_percent, 75);
+assert.equal(fixed.payment_verified, true);
+assert.equal(fixed.proposals, "Fewer than 5 proposals");
+assert.equal(fixed.experience_level, "Expert");
+
+const hourly = helper.parseCommercialEvidence(
+  "Posted 3 minutes ago Proposals: Fewer than 5 Hourly: $60-$90 Intermediate Est. Time: 1 to 3 months, 30+ hrs/week Payment verified $7K+ spent"
+);
+assert.equal(hourly.hourly_min_usd, 60);
+assert.equal(hourly.hourly_max_usd, 90);
+assert.equal(hourly.client_spend_usd, 7000);
+assert.equal(hourly.proposals, "Fewer than 5 proposals");
+assert.equal(hourly.duration, "1 to 3 months");
+assert.equal(hourly.weekly_hours, "30+ hrs/week");
+assert(helper.evidenceScore("Fixed-price Est. Budget: $5,000 Payment verified") >= 2);
 
 console.log("Upwork extension contract passed.");
