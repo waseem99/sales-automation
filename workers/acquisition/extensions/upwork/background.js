@@ -2,7 +2,7 @@
   "use strict";
 
   const COLLECTOR = "http://127.0.0.1:8765";
-  const PARSER_VERSION = "upwork-extension-1.0.2";
+  const PARSER_VERSION = "upwork-extension-1.0.3";
   const APPROVED_SEARCHES = {
     "AI + Fullstack AI 16 July 2026": {segment: "ai-jobs", owner: "Waseem"},
     "3D Design & Creatives 15 July 2026": {segment: "roshana-2d-3d", owner: "Roshana"},
