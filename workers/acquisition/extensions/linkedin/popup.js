@@ -9,6 +9,21 @@
     statusNode.textContent = message;
   }
 
+  function diagnosticSummary(diagnostics = {}) {
+    const containers = Number(diagnostics.visible_post_containers || 0);
+    const readable = Number(diagnostics.posts_with_readable_text || 0);
+    const classified = Number(diagnostics.classified_candidates || 0);
+    const missingUrl = Number(diagnostics.missing_canonical_url || 0);
+    const rejections = Object.entries(diagnostics.rejection_reasons || {})
+      .filter(([, count]) => Number(count) > 0)
+      .map(([reason, count]) => `${reason}: ${count}`)
+      .join(", ");
+    const parts = [`Scanned ${containers} visible containers; ${readable} readable posts; ${classified} buyer-intent matches.`];
+    if (missingUrl) parts.push(`${missingUrl} matched posts lacked a canonical permalink.`);
+    if (rejections) parts.push(`Filtered — ${rejections}.`);
+    return parts.join(" ");
+  }
+
   async function activeTab() {
     const tabs = await chrome.tabs.query({active: true, currentWindow: true});
     if (!tabs.length || !tabs[0].id) throw new Error("No active browser tab was found.");
@@ -23,7 +38,7 @@
       const result = await chrome.tabs.sendMessage(tab.id, {type: "CODISTAN_CAPTURE_VISIBLE_LINKEDIN_POSTS", limit: 20});
       if (!result?.ok) throw new Error(result?.error || "Visible-post capture failed.");
       if (!Array.isArray(result.records) || result.records.length === 0) {
-        setStatus("No direct supported service requirements were found on the visible page.");
+        setStatus(`No direct supported service requirements were captured. ${diagnosticSummary(result.diagnostics)}`);
         return;
       }
       const response = await chrome.runtime.sendMessage({
@@ -35,7 +50,7 @@
       });
       if (!response?.ok) throw new Error(response?.error || "Capture failed.");
       const priorities = response.accepted_priority_counts || {};
-      setStatus(`${response.accepted || 0} new, ${response.duplicates || 0} duplicate. Priority A: ${priorities.priority_a || 0}; Priority B: ${priorities.priority_b || 0}. Open Acquisition Review for outreach action.`);
+      setStatus(`${response.accepted || 0} new, ${response.duplicates || 0} duplicate. Priority A: ${priorities.priority_a || 0}; Priority B: ${priorities.priority_b || 0}. ${diagnosticSummary(result.diagnostics)} Open Acquisition Review for outreach action.`);
     } catch (error) {
       setStatus(error instanceof Error ? error.message : String(error));
     } finally {
