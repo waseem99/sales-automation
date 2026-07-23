@@ -71,7 +71,7 @@ UNSUPPORTED_ROLE_TITLE = re.compile(
     re.I,
 )
 AGENCY_EXCLUSION = re.compile(
-    r"(?:do not apply|don['’]t apply|do not respond|don['’]t respond).{0,100}\b(?:agency|agencies|tech agency|development shop)\b|\b(?:no agencies|individual freelancers? only|not (?:a )?tech agency)\b",
+    r"(?:do not apply|don['’]t apply|do not respond|don['’]t respond).{0,120}\b(?:agency|agencies|tech agency|development shop)\b|\b(?:agency|agencies|tech agency|development shop)\b.{0,120}(?:do not apply|don['’]t apply|do not respond|don['’]t respond)|\b(?:no agencies|individual freelancers? only|not (?:a )?tech agency)\b",
     re.I | re.S,
 )
 HARD_LOCATION_RESTRICTION = re.compile(
