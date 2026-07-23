@@ -35,5 +35,6 @@ $urls = @(
     "https://www.upwork.com/nx/find-work/9652860",
     "https://www.upwork.com/nx/find-work/9652877"
 )
-Start-Process -FilePath $chrome -ArgumentList @("--new-window") + $urls
+$chromeArguments = @("--new-window") + $urls
+Start-Process -FilePath $chrome -ArgumentList $chromeArguments
 Write-Host "Opened the three approved Upwork searches in normal Chrome."
