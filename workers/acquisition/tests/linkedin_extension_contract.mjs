@@ -7,10 +7,12 @@ const root = path.resolve("extensions/linkedin");
 const manifest = JSON.parse(fs.readFileSync(path.join(root, "manifest.json"), "utf8"));
 const background = fs.readFileSync(path.join(root, "background.js"), "utf8");
 const content = fs.readFileSync(path.join(root, "content.js"), "utf8");
+const popup = fs.readFileSync(path.join(root, "popup.js"), "utf8");
 const signalSource = fs.readFileSync(path.join(root, "signal.js"), "utf8");
 
 assert.equal(manifest.manifest_version, 3);
-assert.equal(manifest.version, "1.0.0");
+assert.equal(manifest.version, "1.0.1");
+assert(background.includes('linkedin-extension-1.0.1'));
 assert.deepEqual(manifest.content_scripts[0].js, ["signal.js", "content.js"]);
 assert(manifest.host_permissions.includes("http://127.0.0.1:8775/*"));
 
@@ -20,6 +22,17 @@ for (const marker of [
   'source_subtype: "content_search_post"',
   'parser_version: PARSER_VERSION'
 ]) assert(background.includes(marker), `missing payload marker: ${marker}`);
+
+for (const marker of [
+  'data-view-name="feed-full-update"',
+  'data-chameleon-result-urn',
+  'posts_with_readable_text',
+  'classified_candidates',
+  'missing_canonical_url',
+  'linkedin-dom-1.0.1'
+]) assert(content.includes(marker), `missing LinkedIn DOM marker: ${marker}`);
+assert(popup.includes("Scanned ${containers} visible containers"));
+assert(popup.includes("lacked a canonical permalink"));
 
 const prohibited = [
   "chrome.tabs.create", "chrome.tabs.update", "scrollIntoView", "window.scrollTo",
@@ -57,6 +70,13 @@ const projectNetwork = helper.classifyOpportunity(
 assert.equal(projectNetwork.candidate, true);
 assert(projectNetwork.service_lanes.includes("cybersecurity"));
 assert(projectNetwork.contact_routes.includes("direct_message"));
+
+const videoAgency = helper.classifyOpportunity(
+  "Looking for an AI video production agency! Need a team that can move fast and produce long-form branded videos."
+);
+assert.equal(videoAgency.candidate, true);
+assert(videoAgency.service_lanes.includes("creative_animation"));
+assert(videoAgency.service_lanes.includes("ai_automation"));
 
 const vacancy = helper.classifyOpportunity(
   "We are hiring a full-time senior software engineer. Apply now and send your CV."
