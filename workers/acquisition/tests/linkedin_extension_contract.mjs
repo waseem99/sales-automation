@@ -51,6 +51,13 @@ assert.equal(software.candidate, true);
 assert(software.service_lanes.includes("software"));
 assert(software.service_lanes.includes("ai_automation"));
 
+const projectNetwork = helper.classifyOpportunity(
+  "Calling Cybersecurity Freelancers & Independent Consultants! We are expanding our network for upcoming freelance and project-based engagements. Please reach out."
+);
+assert.equal(projectNetwork.candidate, true);
+assert(projectNetwork.service_lanes.includes("cybersecurity"));
+assert(projectNetwork.contact_routes.includes("direct_message"));
+
 const vacancy = helper.classifyOpportunity(
   "We are hiring a full-time senior software engineer. Apply now and send your CV."
 );
