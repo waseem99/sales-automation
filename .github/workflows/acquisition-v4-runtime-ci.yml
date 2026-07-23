@@ -48,10 +48,50 @@ jobs:
           PYTHONPATH: .
         run: python -m unittest discover -s tests -p 'test_runtime.py' -v
 
-      - name: Test closeability qualification
-        env:
-          PYTHONPATH: .
-        run: python -m unittest discover -s tests -p 'test_qualification.py' -v
+      - name: Closeability — strong Upwork job
+        env: &qualification_env
+          PYTHONPATH: .:tests
+        run: python -m unittest test_qualification.QualificationTests.test_strong_upwork_job_is_priority_a -v
+
+      - name: Closeability — credible missing-budget work
+        env: *qualification_env
+        run: python -m unittest test_qualification.QualificationTests.test_missing_budget_credible_upwork_job_remains_reviewable -v
+
+      - name: Closeability — low-value rejection
+        env: *qualification_env
+        run: python -m unittest test_qualification.QualificationTests.test_low_value_upwork_job_is_rejected -v
+
+      - name: Closeability — AI video and 3D creative routing
+        env: *qualification_env
+        run: python -m unittest test_qualification.QualificationTests.test_ai_video_and_3d_rendering_route_to_creative_delivery -v
+
+      - name: Closeability — individual contributor rejection
+        env: *qualification_env
+        run: python -m unittest test_qualification.QualificationTests.test_individual_roles_from_live_queue_are_rejected -v
+
+      - name: Closeability — agency and location exclusion
+        env: *qualification_env
+        run: python -m unittest test_qualification.QualificationTests.test_no_agency_and_location_restricted_work_is_rejected -v
+
+      - name: Closeability — generic compliance is not cybersecurity
+        env: *qualification_env
+        run: python -m unittest test_qualification.QualificationTests.test_generic_compliance_language_does_not_create_cybersecurity_fit -v
+
+      - name: Closeability — employment vacancy rejection
+        env: *qualification_env
+        run: python -m unittest test_qualification.QualificationTests.test_employment_style_engineering_vacancy_is_rejected -v
+
+      - name: Closeability — direct LinkedIn buyer requirement
+        env: *qualification_env
+        run: python -m unittest test_qualification.QualificationTests.test_direct_linkedin_requirement_is_priority_a -v
+
+      - name: Closeability — LinkedIn missing access route
+        env: *qualification_env
+        run: python -m unittest test_qualification.QualificationTests.test_linkedin_without_access_route_is_priority_b -v
+
+      - name: Closeability — prohibited work rejection
+        env: *qualification_env
+        run: python -m unittest test_qualification.QualificationTests.test_prohibited_work_is_rejected -v
 
       - name: Test combined review output
         env:
