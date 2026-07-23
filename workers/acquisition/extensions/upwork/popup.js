@@ -36,8 +36,8 @@
         trigger: "manual_extension_fallback"
       });
       if (!response?.ok) throw new Error(response?.error || "Capture failed.");
-      const priorities = response.accepted_priority_counts || {};
-      setStatus(`${response.saved_search_name || "Approved search"}: ${response.accepted || 0} new, ${response.duplicates || 0} duplicate. Priority A: ${priorities.priority_a || 0}; Priority B: ${priorities.priority_b || 0}. Open Acquisition Review for action.`);
+      const priorities = response.priority_counts || {};
+      setStatus(`${response.saved_search_name || "Approved search"}: ${response.accepted || 0} new, ${response.duplicates || 0} duplicate, ${response.enriched || 0} enriched. Queue totals — A: ${priorities.priority_a || 0}; B: ${priorities.priority_b || 0}; Research: ${priorities.research || 0}; Reject: ${priorities.reject || 0}.`);
     } catch (error) {
       setStatus(error instanceof Error ? error.message : String(error));
     } finally {
@@ -51,7 +51,7 @@
   ]).then(([service, stored]) => {
     const last = stored.codistan_upwork_last_capture;
     const priorities = service.priority_counts || {};
-    const parts = [`Processor ready. Jobs: ${service.accepted || 0}; A: ${priorities.priority_a || 0}; B: ${priorities.priority_b || 0}.`];
+    const parts = [`Processor ready. Jobs: ${service.accepted || 0}; enriched: ${service.enriched || 0}; A: ${priorities.priority_a || 0}; B: ${priorities.priority_b || 0}.`];
     if (last?.error) parts.push(`Last capture issue: ${last.error}`);
     else if (last?.at) parts.push(`Last capture: ${last.saved_search_name || "approved search"} at ${new Date(last.at).toLocaleString()}.`);
     setStatus(parts.join(" "));
