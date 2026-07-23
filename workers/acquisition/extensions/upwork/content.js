@@ -4,6 +4,12 @@
   const evidence = globalThis.CodistanUpworkEvidence;
   if (!evidence) return;
 
+  const APPROVED_SAVED_SEARCH_NAMES = [
+    "AI + Fullstack AI 16 July 2026",
+    "3D Design & Creatives 15 July 2026",
+    "Game & AR/VR 16 July 2026"
+  ];
+
   const CARD_SELECTORS = [
     'article[data-test="JobTile"]',
     'section[data-test="job-tile"]',
@@ -79,6 +85,47 @@
       if (node && isVisible(node)) return node;
     }
     return null;
+  }
+
+  function isSelectedSearchControl(node) {
+    const controls = [node, node.closest('button, a, [role="tab"], [role="button"]')].filter(Boolean);
+    return controls.some(control => {
+      const ariaSelected = String(control.getAttribute("aria-selected") || "").toLowerCase();
+      const ariaPressed = String(control.getAttribute("aria-pressed") || "").toLowerCase();
+      const ariaCurrent = String(control.getAttribute("aria-current") || "").toLowerCase();
+      const stateText = [control.className, control.getAttribute("data-test"), control.getAttribute("data-qa")]
+        .map(value => String(value || "").toLowerCase())
+        .join(" ");
+      return ariaSelected === "true" || ariaPressed === "true" || ariaCurrent === "page" || /(^|\s)(active|selected|current)(\s|$)/.test(stateText);
+    });
+  }
+
+  function activeSavedSearchName() {
+    const candidates = [];
+    for (const node of document.querySelectorAll('button, a, [role="tab"], [role="button"], span')) {
+      if (!isVisible(node)) continue;
+      const text = evidence.normalizeText(node.textContent);
+      if (!APPROVED_SAVED_SEARCH_NAMES.includes(text)) continue;
+      candidates.push({name: text, selected: isSelectedSearchControl(node)});
+    }
+    const selected = candidates.find(candidate => candidate.selected);
+    if (selected) return selected.name;
+
+    const titleText = evidence.normalizeText(document.title);
+    const titleMatch = APPROVED_SAVED_SEARCH_NAMES.find(name => titleText.includes(name));
+    if (titleMatch) return titleMatch;
+
+    return "";
+  }
+
+  function visibleApprovedSearchNames() {
+    const names = new Set();
+    for (const node of document.querySelectorAll('button, a, [role="tab"], [role="button"], span')) {
+      if (!isVisible(node)) continue;
+      const text = evidence.normalizeText(node.textContent);
+      if (APPROVED_SAVED_SEARCH_NAMES.includes(text)) names.add(text);
+    }
+    return Array.from(names);
   }
 
   function canonicalJobUrl(href) {
@@ -245,6 +292,8 @@
         ok: true,
         page_url: window.location.href,
         page_title: document.title,
+        active_saved_search_name: activeSavedSearchName(),
+        visible_approved_search_names: visibleApprovedSearchNames(),
         cards,
         diagnostics: {
           job_links_detected: Array.from(document.querySelectorAll('a[href]'))
