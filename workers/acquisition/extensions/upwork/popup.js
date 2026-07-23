@@ -24,10 +24,14 @@
       if (!result?.ok || !Array.isArray(result.cards) || result.cards.length === 0) {
         throw new Error(result?.error || "No visible Upwork job cards were detected.");
       }
+      if (!result.active_saved_search_name) {
+        throw new Error("Select one of the three approved saved-search chips, wait for its jobs to load, then capture again.");
+      }
       const response = await chrome.runtime.sendMessage({
         type: "CODISTAN_SUBMIT_UPWORK_CARDS",
         page_url: result.page_url,
         page_title: result.page_title,
+        active_saved_search_name: result.active_saved_search_name,
         cards: result.cards,
         trigger: "manual_extension_fallback"
       });
