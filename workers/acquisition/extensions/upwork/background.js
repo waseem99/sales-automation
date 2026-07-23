@@ -2,25 +2,48 @@
   "use strict";
 
   const COLLECTOR = "http://127.0.0.1:8765";
-  const PARSER_VERSION = "upwork-extension-1.0.0";
-  const SEARCHES = {
-    "/nx/find-work/9652811": {segment: "ai-jobs", owner: "Waseem", savedSearchName: "AI + Fullstack AI 16 July 2026"},
-    "/nx/find-work/9652860": {segment: "roshana-2d-3d", owner: "Roshana", savedSearchName: "3D Design & Creatives 15 July 2026"},
-    "/nx/find-work/9652877": {segment: "nadir-game-ar-vr", owner: "Nadir", savedSearchName: "Game & AR/VR 16 July 2026"}
+  const PARSER_VERSION = "upwork-extension-1.0.1";
+  const APPROVED_SEARCHES = {
+    "AI + Fullstack AI 16 July 2026": {segment: "ai-jobs", owner: "Waseem"},
+    "3D Design & Creatives 15 July 2026": {segment: "roshana-2d-3d", owner: "Roshana"},
+    "Game & AR/VR 16 July 2026": {segment: "nadir-game-ar-vr", owner: "Nadir"}
+  };
+  const LEGACY_SEARCHES_BY_PATH = {
+    "/nx/find-work/9652811": "AI + Fullstack AI 16 July 2026",
+    "/nx/find-work/9652860": "3D Design & Creatives 15 July 2026",
+    "/nx/find-work/9652877": "Game & AR/VR 16 July 2026"
   };
   const pendingTimers = new Map();
   const lastAttempts = new Map();
 
-  function searchForUrl(value) {
+  function normalizeText(value) {
+    return String(value || "").replace(/\s+/g, " ").trim();
+  }
+
+  function pagePath(value) {
     try {
       const url = new URL(value);
-      if (!["upwork.com", "www.upwork.com"].includes(url.hostname)) return null;
-      const path = url.pathname.replace(/\/$/, "");
-      const search = SEARCHES[path];
-      return search ? {...search, path} : null;
+      if (!["upwork.com", "www.upwork.com"].includes(url.hostname)) return "";
+      return url.pathname.replace(/\/$/, "");
     } catch (_error) {
-      return null;
+      return "";
     }
+  }
+
+  function isFindWorkPage(value) {
+    return /^\/nx\/find-work\/\d+$/.test(pagePath(value));
+  }
+
+  function resolveSearch(pageUrl, activeSavedSearchName) {
+    const suppliedName = normalizeText(activeSavedSearchName);
+    const approved = APPROVED_SEARCHES[suppliedName];
+    const path = pagePath(pageUrl);
+    if (approved && isFindWorkPage(pageUrl)) {
+      return {...approved, savedSearchName: suppliedName, path};
+    }
+    const legacyName = LEGACY_SEARCHES_BY_PATH[path];
+    const legacy = legacyName ? APPROVED_SEARCHES[legacyName] : null;
+    return legacy ? {...legacy, savedSearchName: legacyName, path} : null;
   }
 
   async function request(path, options = {}) {
@@ -54,9 +77,11 @@
     }).catch(() => {});
   }
 
-  async function submitCards({pageUrl, pageTitle, cards, trigger, tabId}) {
-    const search = searchForUrl(pageUrl);
-    if (!search) throw new Error("This is not one of the three approved Upwork saved searches.");
+  async function submitCards({pageUrl, pageTitle, activeSavedSearchName, cards, trigger, tabId}) {
+    const search = resolveSearch(pageUrl, activeSavedSearchName);
+    if (!search) {
+      throw new Error("Select one of the three approved saved-search chips before capturing this Upwork page.");
+    }
     if (!Array.isArray(cards) || cards.length === 0) throw new Error("No visible Upwork job cards were detected.");
 
     const response = await request("/capture", {
@@ -95,8 +120,7 @@
 
   async function autoCaptureTab(tabId, tab, attempt = 1) {
     const pageUrl = String(tab?.url || "");
-    const search = searchForUrl(pageUrl);
-    if (!search) return;
+    if (!isFindWorkPage(pageUrl)) return;
     try {
       const result = await readVisibleCards(tabId, 10);
       if (!result?.ok || !Array.isArray(result.cards) || result.cards.length === 0) {
@@ -109,6 +133,7 @@
       await submitCards({
         pageUrl: result.page_url || pageUrl,
         pageTitle: result.page_title || tab.title || "",
+        activeSavedSearchName: result.active_saved_search_name || "",
         cards: result.cards,
         trigger: "normal_chrome_saved_search_loaded",
         tabId
@@ -116,13 +141,13 @@
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       await updateBadge(tabId, "!", "#b3261e");
-      await storeResult(pageUrl, search, null, message);
+      await storeResult(pageUrl, resolveSearch(pageUrl, ""), null, message);
     }
   }
 
   function scheduleAutoCapture(tabId, tab) {
     const pageUrl = String(tab?.url || "");
-    if (!searchForUrl(pageUrl)) return;
+    if (!isFindWorkPage(pageUrl)) return;
     const key = `${tabId}:${pageUrl}`;
     const now = Date.now();
     if (now - Number(lastAttempts.get(key) || 0) < 45000) return;
@@ -137,14 +162,14 @@
 
   chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
     const url = String(changeInfo.url || tab.url || "");
-    if (!searchForUrl(url)) return;
+    if (!isFindWorkPage(url)) return;
     if (changeInfo.status === "complete" || Boolean(changeInfo.url)) scheduleAutoCapture(tabId, {...tab, url});
   });
 
   chrome.tabs.onActivated.addListener(async ({tabId}) => {
     try {
       const tab = await chrome.tabs.get(tabId);
-      if (searchForUrl(String(tab.url || ""))) scheduleAutoCapture(tabId, tab);
+      if (isFindWorkPage(String(tab.url || ""))) scheduleAutoCapture(tabId, tab);
     } catch (_error) {
       // The tab may have closed before inspection.
     }
@@ -157,6 +182,7 @@
       const response = await submitCards({
         pageUrl,
         pageTitle: String(message.page_title || sender.tab?.title || ""),
+        activeSavedSearchName: String(message.active_saved_search_name || ""),
         cards: message.cards,
         trigger: String(message.trigger || "manual_extension_fallback"),
         tabId: sender.tab?.id
@@ -166,7 +192,7 @@
       const tabId = sender.tab?.id;
       if (tabId) await updateBadge(tabId, "!", "#b3261e");
       const pageUrl = String(message.page_url || sender.tab?.url || "");
-      await storeResult(pageUrl, searchForUrl(pageUrl), null, error instanceof Error ? error.message : String(error));
+      await storeResult(pageUrl, resolveSearch(pageUrl, message.active_saved_search_name), null, error instanceof Error ? error.message : String(error));
       sendResponse({ok: false, error: error instanceof Error ? error.message : String(error)});
     });
     return true;
