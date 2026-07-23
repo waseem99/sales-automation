@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Codistan LinkedIn Opportunity Capture V4",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "description": "Capture visible direct agency, vendor and delivery-partner requirements from LinkedIn into the local Acquisition V4 runtime.",
   "permissions": ["activeTab", "tabs", "storage"],
   "host_permissions": [
@@ -18,7 +18,7 @@
   "content_scripts": [
     {
       "matches": ["https://www.linkedin.com/*"],
-      "js": ["signal.js", "content.js"],
+      "js": ["signal.js", "dom-adapter.js", "content.js"],
       "run_at": "document_idle"
     }
   ]
