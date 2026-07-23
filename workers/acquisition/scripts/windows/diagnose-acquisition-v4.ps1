@@ -18,6 +18,8 @@ $metadata = [ordered]@{
     powershell_version = $PSVersionTable.PSVersion.ToString()
     state_root = "%LOCALAPPDATA%\Codistan\Acquisition"
     runtime_pid_present = Test-Path (Join-Path $StateRoot "runtime.pid")
+    watchdog_pid_present = Test-Path (Join-Path $StateRoot "watchdog.pid")
+    watchdog_lock_present = Test-Path (Join-Path $StateRoot "watchdog.lock")
 }
 $metadata | ConvertTo-Json | Set-Content (Join-Path $working "metadata.json") -Encoding UTF8
 
@@ -31,8 +33,18 @@ foreach ($source in @("upwork", "linkedin")) {
     $manifest = Join-Path $StateRoot "extensions\$source\manifest.json"
     if (Test-Path $manifest) { Copy-Item $manifest (Join-Path $working "$source-manifest.json") }
 }
+
+$watchdogLog = Join-Path $StateRoot "logs\watchdog.log"
+if (Test-Path $watchdogLog) {
+    Get-Content $watchdogLog -Tail 200 | Set-Content (Join-Path $working "watchdog-tail.log") -Encoding UTF8
+}
+$runtimeLog = Join-Path $StateRoot "logs\runtime.log"
+if (Test-Path $runtimeLog) {
+    Get-Content $runtimeLog -Tail 200 | Set-Content (Join-Path $working "runtime-tail.log") -Encoding UTF8
+}
+
 $zip = Join-Path $diagnosticsRoot "acquisition-v4-diagnostics-$timestamp.zip"
 Compress-Archive -Path (Join-Path $working "*") -DestinationPath $zip -Force
 Remove-Item $working -Recurse -Force
 Write-Host "Safe diagnostic bundle created: $zip"
-Write-Host "It contains health, versions and file metadata only; no opportunity bodies, cookies or credentials."
+Write-Host "It contains health, versions, process metadata and runtime log tails only; no opportunity bodies, cookies or credentials."
