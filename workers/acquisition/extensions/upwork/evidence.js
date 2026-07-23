@@ -35,7 +35,9 @@
     const hourlySingle = /(?:Hourly\s*:?\s*)\$([\d,.]+)|\$([\d,.]+)\s*\/\s*hr/i.exec(text);
     const spend = /\$([\d,.]+)\s*([KMB])?\+?\s+spent/i.exec(text);
     const hireRate = /(\d{1,3})%\s*hire rate/i.exec(text);
-    const proposals = firstMatch(text, /(?:Less than|Fewer than)\s+\d+\s+proposals?|\d+\s+to\s+\d+\s+proposals?|\d+\+\s+proposals?/i);
+    const proposalSuffix = firstMatch(text, /(?:Less than|Fewer than)\s+\d+\s+proposals?|\d+\s+to\s+\d+\s+proposals?|\d+\+\s+proposals?/i);
+    const proposalPrefix = /Proposals?\s*:\s*((?:Less than|Fewer than)\s+\d+|\d+\s+to\s+\d+|\d+\+)/i.exec(text);
+    const proposals = proposalSuffix || (proposalPrefix ? `${normalizeText(proposalPrefix[1])} proposals` : "");
     const postedAge = firstMatch(text, /Posted\s+(?:yesterday|\d+\s+(?:minute|hour|day|week)s?\s+ago)/i);
     const duration = firstMatch(text, /(?:Less than 1 month|1 to 3 months|3 to 6 months|More than 6 months)/i);
     const weeklyHours = firstMatch(text, /(?:Less than 30 hrs\/week|More than 30 hrs\/week|30\+ hrs\/week|\d+\s*-\s*\d+ hrs\/week)/i);
