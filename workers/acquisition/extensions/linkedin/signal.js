@@ -26,7 +26,10 @@
     /\bsubmit (?:a )?(?:proposal|quotation|quote|portfolio)\b/i,
     /\bvendor (?:needed|required|selection|search)\b/i,
     /\bagency (?:needed|required|search)\b/i,
-    /\bpartner with\b/i
+    /\bpartner with\b/i,
+    /\bcalling (?:all )?(?:agencies|vendors|consultants|freelancers|partners|service providers)\b/i,
+    /\b(?:expanding|building) (?:our|a) network of\b/i,
+    /\b(?:freelance|project[- ]based) engagements?\b/i
   ];
 
   const SELF_PROMOTION = /\b(?:open to work|available for freelance|available for work|looking for opportunities|seeking (?:a )?(?:job|role|position)|my portfolio|hire me|actively looking for a new role)\b/i;
