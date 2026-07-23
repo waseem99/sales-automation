@@ -11,7 +11,8 @@ const popup = fs.readFileSync(path.join(root, "popup.js"), "utf8");
 const evidenceSource = fs.readFileSync(path.join(root, "evidence.js"), "utf8");
 
 assert.equal(manifest.manifest_version, 3);
-assert.equal(manifest.version, "1.0.1");
+assert.equal(manifest.version, "1.0.2");
+assert(background.includes('upwork-extension-1.0.2'));
 assert.deepEqual(manifest.content_scripts[0].js, ["evidence.js", "content.js"]);
 assert(manifest.host_permissions.includes("http://127.0.0.1:8765/*"));
 
@@ -30,6 +31,7 @@ assert(content.includes("active_saved_search_name"));
 assert(content.includes("commercialTextForCard"));
 assert(content.includes("commercial_fields_detected"));
 assert(popup.includes("active_saved_search_name"));
+assert(popup.includes("enriched"));
 
 for (const marker of [
   'source: "upwork"',
