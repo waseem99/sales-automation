@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Codistan Upwork Opportunity Capture V4",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "description": "Capture visible jobs from Codistan's three approved Upwork saved searches into the local Acquisition V4 runtime.",
   "permissions": ["activeTab", "tabs", "storage"],
   "host_permissions": [
