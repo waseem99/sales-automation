@@ -12,7 +12,8 @@ const popup = fs.readFileSync(path.join(root, "popup.js"), "utf8");
 const signalSource = fs.readFileSync(path.join(root, "signal.js"), "utf8");
 
 assert.equal(manifest.manifest_version, 3);
-assert.equal(manifest.version, "1.0.2");
+assert.equal(manifest.version, "1.0.3");
+assert(background.includes('linkedin-extension-1.0.3'));
 assert.deepEqual(manifest.content_scripts[0].js, ["signal.js", "dom-adapter.js", "content.js"]);
 assert(manifest.host_permissions.includes("http://127.0.0.1:8775/*"));
 
@@ -24,23 +25,28 @@ for (const marker of [
 ]) assert(background.includes(marker), `missing payload marker: ${marker}`);
 
 for (const marker of [
-  'data-view-name="feed-full-update"',
-  'data-chameleon-result-urn',
-  'posts_with_readable_text',
-  'classified_candidates',
+  'data-codistan-opportunity-card="true"',
+  'looseActivityUrn',
+  'nodeAttributeValues',
+  'containers_with_activity_id',
+  'containers_with_permalink_hint',
   'missing_canonical_url',
-  'linkedin-dom-1.0.1'
+  'linkedin-dom-1.0.3'
 ]) assert(content.includes(marker), `missing LinkedIn DOM marker: ${marker}`);
 
 for (const marker of [
   "data-codistan-opportunity-card",
-  "nearestCard",
-  "hasActorLink",
-  "MutationObserver",
-  'setAttribute("data-view-name", "feed-full-update")'
+  "nearestCardFromActor",
+  "distinctActorHrefs",
+  "pruneNestedCards",
+  "activityEvidence",
+  "removeAttribute(MARKER)",
+  "MutationObserver"
 ]) assert(adapter.includes(marker), `missing LinkedIn adapter marker: ${marker}`);
+assert(!adapter.includes('setAttribute("data-view-name", "feed-full-update")'));
 
-assert(popup.includes("Scanned ${containers} visible containers"));
+assert(popup.includes("(${marked} adapter cards)"));
+assert(popup.includes("cards exposed activity IDs"));
 assert(popup.includes("lacked a canonical permalink"));
 
 const prohibited = [
@@ -73,6 +79,12 @@ const software = helper.classifyOpportunity(
 assert.equal(software.candidate, true);
 assert(software.service_lanes.includes("software"));
 assert(software.service_lanes.includes("ai_automation"));
+
+const serviceProviders = helper.classifyOpportunity(
+  "Seeking IT Service Providers and Development Partners. We are accelerating a fraud analytics portal for finance companies."
+);
+assert.equal(serviceProviders.candidate, true);
+assert(serviceProviders.service_lanes.includes("software"));
 
 const projectNetwork = helper.classifyOpportunity(
   "Calling Cybersecurity Freelancers & Independent Consultants! We are expanding our network for upcoming freelance and project-based engagements. Please reach out."
