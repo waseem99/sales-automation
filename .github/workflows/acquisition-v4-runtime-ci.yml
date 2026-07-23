@@ -69,6 +69,10 @@ jobs:
         env: *qualification_env
         run: python -m unittest test_qualification.QualificationTests.test_individual_roles_from_live_queue_are_rejected -v
 
+      - name: Closeability — writer-only work not promoted
+        env: *qualification_env
+        run: python -m unittest test_qualification.QualificationTests.test_writer_only_job_is_not_promoted_without_commercial_evidence -v
+
       - name: Closeability — agency and location exclusion
         env: *qualification_env
         run: python -m unittest test_qualification.QualificationTests.test_no_agency_and_location_restricted_work_is_rejected -v
