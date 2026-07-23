@@ -1,5 +1,6 @@
 name: Acquisition V4 Runtime CI
 
+# Release gate includes Upwork V4 1.0.3 stable job-ID card expansion.
 on:
   pull_request:
     branches:
