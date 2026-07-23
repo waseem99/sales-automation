@@ -43,10 +43,25 @@ jobs:
       - name: Compile runtime
         run: python -m compileall -q acquisition_v4 tests
 
-      - name: Run runtime and closeability regression tests
+      - name: Test runtime persistence and enrichment
         env:
           PYTHONPATH: .
-        run: python -m unittest discover -s tests -v
+        run: python -m unittest discover -s tests -p 'test_runtime.py' -v
+
+      - name: Test closeability qualification
+        env:
+          PYTHONPATH: .
+        run: python -m unittest discover -s tests -p 'test_qualification.py' -v
+
+      - name: Test combined review output
+        env:
+          PYTHONPATH: .
+        run: python -m unittest discover -s tests -p 'test_review.py' -v
+
+      - name: Test Windows operating bundle
+        env:
+          PYTHONPATH: .
+        run: python -m unittest discover -s tests -p 'test_windows_bundle.py' -v
 
       - name: Validate Upwork extension contract
         run: node tests/upwork_extension_contract.mjs
