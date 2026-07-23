@@ -3,16 +3,37 @@ from __future__ import annotations
 import re
 from typing import Any
 
-CONFIGURATION_VERSION = "acquisition-v4-closeability-1.0.0"
+CONFIGURATION_VERSION = "acquisition-v4-closeability-1.1.0"
 
 SERVICE_PATTERNS: dict[str, re.Pattern[str]] = {
-    "software_product": re.compile(r"\b(?:software|website|web app|mobile app|saas|mvp|platform|portal|e-?commerce|marketplace|react|node(?:\.js)?|python|development team|developers?|api integration)\b", re.I),
-    "ai_automation": re.compile(r"\b(?:ai|artificial intelligence|automation|agentic|agents?|rag|llm|chatbot|copilot|voice ai|machine learning|document intelligence)\b", re.I),
-    "cybersecurity": re.compile(r"\b(?:cybersecurity|cyber security|vapt|penetration test|security assessment|cloud security|iam|iso 27001|soc 2|hipaa|cmmc|compliance)\b", re.I),
-    "digital_growth": re.compile(r"\b(?:digital marketing|social media|content strategy|content marketing|content creation|performance marketing|paid ads?|meta ads?|google ads?|seo|gmb|branding|growth marketing)\b", re.I),
-    "creative_animation": re.compile(r"\b(?:video production|video editing|animation|motion design|motion graphics|2d|3d|product visualization|creative studio|ai creative)\b", re.I),
-    "immersive_game": re.compile(r"\b(?:game development|unity|unreal|ar\/?vr|augmented reality|virtual reality|immersive|interactive experience)\b", re.I),
-    "delivery_partner": re.compile(r"\b(?:white[- ]label|subcontract|outsourc(?:e|ing)|overflow|delivery partner|implementation partner|development partner|agency partner|managed team)\b", re.I),
+    "software_product": re.compile(
+        r"\b(?:software (?:development|engineering)|web(?:site| app| application)|mobile app|saas|mvp|platform|portal|e-?commerce|marketplace|full[- ]stack|backend|frontend|react|node(?:\.js)?|python|api integration|blockchain (?:development|solution)|legal tech)\b",
+        re.I,
+    ),
+    "ai_automation": re.compile(
+        r"\b(?:ai[- ]powered|artificial intelligence|ai automation|automation workflow|agentic|ai agents?|rag|llm|chatbot|copilot|voice ai|machine learning|document intelligence|claude|anthropic|mcp|model context protocol|generative ai)\b",
+        re.I,
+    ),
+    "cybersecurity": re.compile(
+        r"\b(?:cybersecurity|cyber security|vapt|penetration test|security assessment|cloud security|identity and access management|\biam\b|iso 27001|soc 2|hipaa|cmmc|pci dss|fedramp|grc)\b",
+        re.I,
+    ),
+    "digital_growth": re.compile(
+        r"\b(?:digital marketing|social media management|content strategy|content marketing|performance marketing|paid ads?|meta ads?|google ads?|seo|search engine optimization|generative engine optimization|answer engine optimization|ai visibility|gmb|google business profile|branding|growth marketing)\b",
+        re.I,
+    ),
+    "creative_animation": re.compile(
+        r"\b(?:video production|video creator|video editing|video editor|ai video|animation|motion design|motion graphics|vfx|2d animation|3d (?:modeling|modelling|rendering|renders?|visualization)|product visualization|premiere pro|after effects|creative studio)\b",
+        re.I,
+    ),
+    "immersive_game": re.compile(
+        r"\b(?:game development|unity|unreal engine|ar\/?vr|augmented reality|virtual reality|immersive|interactive experience)\b",
+        re.I,
+    ),
+    "delivery_partner": re.compile(
+        r"\b(?:white[- ]label|subcontract|outsourc(?:e|ing)|overflow|delivery partner|implementation partner|development partner|agency partner|managed team)\b",
+        re.I,
+    ),
 }
 
 LANE_ALIASES = {
@@ -25,6 +46,16 @@ LANE_ALIASES = {
     "delivery_partner": "delivery_partner",
 }
 
+LANE_PRIORITY = [
+    "creative_animation",
+    "immersive_game",
+    "cybersecurity",
+    "digital_growth",
+    "ai_automation",
+    "software_product",
+    "delivery_partner",
+]
+
 PROHIBITED = re.compile(
     r"\b(?:take my exam|complete my exam|academic cheating|write my assignment|do my homework|fake review|credential stuffing|malware|ransomware|phishing kit)\b",
     re.I,
@@ -35,6 +66,24 @@ EXPLICIT_INTENT = re.compile(
     re.I,
 )
 
+UNSUPPORTED_ROLE_TITLE = re.compile(
+    r"\b(?:appointment setter|high[- ]ticket closer|sales closer|virtual assistant|executive assistant|content writer|copywriter|beta tester|data entry|bookkeeper|architectural cad technician|draftsperson|quantity surveyor|stone quantity estimate)\b",
+    re.I,
+)
+AGENCY_EXCLUSION = re.compile(
+    r"(?:do not apply|don['’]t apply|do not respond|don['’]t respond).{0,100}\b(?:agency|agencies|tech agency|development shop)\b|\b(?:no agencies|individual freelancers? only|not (?:a )?tech agency)\b",
+    re.I | re.S,
+)
+HARD_LOCATION_RESTRICTION = re.compile(
+    r"\b(?:must|should|required to) be based in\b|\b(?:uk|u\.s\.|us|canada|india|bengaluru|bangalore|europe)[- ]based\b|\b(?:looking for|seeking|hiring)\b.{0,100}\bbased in (?:bengaluru|bangalore|india|the uk|united kingdom|the us|united states)\b",
+    re.I | re.S,
+)
+EMPLOYMENT_SIGNAL = re.compile(
+    r"\b(?:join our team|full[- ]time role|permanent role|employee position|hiring for one of our clients|years of professional experience)\b",
+    re.I,
+)
+EMPLOYMENT_TITLE = re.compile(r"\b(?:backend engineer|frontend engineer|software engineer|developer|sales representative|account executive)\b", re.I)
+
 
 def _text(record: dict[str, Any]) -> str:
     raw = record.get("raw_evidence") if isinstance(record.get("raw_evidence"), dict) else {}
@@ -43,6 +92,10 @@ def _text(record: dict[str, Any]) -> str:
         str(value or "")
         for value in (record.get("title"), record.get("body"), " ".join(str(item) for item in skills))
     )
+
+
+def _title(record: dict[str, Any]) -> str:
+    return str(record.get("title") or "")
 
 
 def _commercial(record: dict[str, Any]) -> dict[str, Any]:
@@ -67,6 +120,31 @@ def _service_lanes(record: dict[str, Any]) -> list[str]:
         if pattern.search(content):
             lanes.add(lane)
     return sorted(lane for lane in lanes if lane in SERVICE_PATTERNS)
+
+
+def _primary_lane(record: dict[str, Any], lanes: list[str]) -> str:
+    title = _title(record)
+    for lane in LANE_PRIORITY:
+        if lane in lanes and SERVICE_PATTERNS[lane].search(title):
+            return lane
+    for lane in LANE_PRIORITY:
+        if lane in lanes:
+            return lane
+    return ""
+
+
+def _early_rejection_reason(record: dict[str, Any]) -> str | None:
+    title = _title(record)
+    content = _text(record)
+    if UNSUPPORTED_ROLE_TITLE.search(title):
+        return "individual contributor role outside Codistan managed-service delivery"
+    if AGENCY_EXCLUSION.search(content):
+        return "buyer explicitly excludes agencies or delivery teams"
+    if HARD_LOCATION_RESTRICTION.search(content):
+        return "hard candidate-location restriction conflicts with delivery location"
+    if EMPLOYMENT_TITLE.search(title) and EMPLOYMENT_SIGNAL.search(content):
+        return "employment-style vacancy rather than an outsourceable project"
+    return None
 
 
 def _freshness_score(value: Any) -> tuple[int, str | None]:
@@ -108,10 +186,13 @@ def _upwork_decision(record: dict[str, Any], lanes: list[str]) -> dict[str, Any]
     positives: list[str] = []
     missing: list[str] = []
     risks: list[str] = []
+    primary = _primary_lane(record, lanes)
 
-    fit = min(30, 18 + 4 * len(lanes)) if lanes else 0
-    if lanes:
-        positives.append(f"service fit: {', '.join(lanes)}")
+    fit = 0
+    if primary:
+        fit = 26 + (2 if len(lanes) > 1 else 0) + (2 if "delivery_partner" in lanes else 0)
+        fit = min(30, fit)
+        positives.append(f"service fit: {primary}")
     else:
         risks.append("no supported service lane")
 
@@ -151,7 +232,7 @@ def _upwork_decision(record: dict[str, Any], lanes: list[str]) -> dict[str, Any]
         if not commercial.get("weekly_hours"):
             missing.append("weekly workload")
     else:
-        commercial_score = 10
+        commercial_score = 8
         missing.append("budget or hourly range")
 
     buyer = 0
@@ -190,7 +271,7 @@ def _upwork_decision(record: dict[str, Any], lanes: list[str]) -> dict[str, Any]
     buyer = min(20, buyer)
 
     proposals = str(commercial.get("proposals", "")).lower()
-    if "less than" in proposals:
+    if "less than" in proposals or "fewer than" in proposals:
         competition = 12
         positives.append("low visible proposal competition")
     elif re.search(r"\b5\s+to\s+10\b", proposals):
@@ -217,19 +298,19 @@ def _upwork_decision(record: dict[str, Any], lanes: list[str]) -> dict[str, Any]
     timing_competition = min(20, competition + freshness)
 
     total = min(100, fit + commercial_score + buyer + timing_competition)
-    hard_reject = not lanes or (fixed is not None and fixed < 500) or (hourly_min is not None and hourly_min < 10)
+    hard_reject = not primary or (fixed is not None and fixed < 500) or (hourly_min is not None and hourly_min < 10)
     if hard_reject:
         disposition = "reject"
     elif total >= 75 and (fixed is not None or hourly_min is not None) and buyer >= 8 and competition >= 3:
         disposition = "priority_a"
-    elif total >= 50:
+    elif total >= 52:
         disposition = "priority_b"
     else:
         disposition = "research"
 
     next_action = {
         "priority_a": "Review immediately and submit a tailored Upwork proposal manually within four hours.",
-        "priority_b": "Complete human BD review today; clarify missing commercial evidence before bidding.",
+        "priority_b": "Complete human BD review today; verify missing commercial evidence before bidding.",
         "research": "Open the original job and verify missing buyer, budget or delivery evidence before deciding.",
         "reject": "Do not bid; retain the structured rejection evidence for calibration.",
     }[disposition]
@@ -246,7 +327,7 @@ def _upwork_decision(record: dict[str, Any], lanes: list[str]) -> dict[str, Any]
             "competition_and_timing": timing_competition,
         },
         "service_lanes": lanes,
-        "service_route": lanes[0] if lanes else "",
+        "service_route": primary,
         "positive_reasons": positives,
         "missing_evidence": sorted(set(missing)),
         "risk_reasons": sorted(set(risks)),
@@ -260,15 +341,16 @@ def _linkedin_decision(record: dict[str, Any], lanes: list[str]) -> dict[str, An
     positives: list[str] = []
     missing: list[str] = []
     risks: list[str] = []
+    primary = _primary_lane(record, lanes)
 
     intent_phrases = commercial.get("intent_phrases") if isinstance(commercial.get("intent_phrases"), list) else []
     explicit = bool(intent_phrases) or bool(EXPLICIT_INTENT.search(_text(record)))
     signal_type = str(commercial.get("signal_type", ""))
     contact_routes = commercial.get("contact_routes") if isinstance(commercial.get("contact_routes"), list) else []
 
-    fit = min(30, 18 + 4 * len(lanes)) if lanes else 0
-    if lanes:
-        positives.append(f"service fit: {', '.join(lanes)}")
+    fit = 28 if primary else 0
+    if primary:
+        positives.append(f"service fit: {primary}")
     else:
         risks.append("no supported service lane")
 
@@ -317,7 +399,7 @@ def _linkedin_decision(record: dict[str, Any], lanes: list[str]) -> dict[str, An
         missing.append(freshness_missing)
     total = min(100, fit + intent + access + buyer + min(10, freshness))
 
-    if not lanes or not explicit:
+    if not primary or not explicit:
         disposition = "reject"
     elif total >= 75 and record.get("author_name") and (contact_routes or signal_type == "procurement_request"):
         disposition = "priority_a"
@@ -346,11 +428,33 @@ def _linkedin_decision(record: dict[str, Any], lanes: list[str]) -> dict[str, An
             "freshness": min(10, freshness),
         },
         "service_lanes": lanes,
-        "service_route": lanes[0] if lanes else "",
+        "service_route": primary,
         "positive_reasons": positives,
         "missing_evidence": sorted(set(missing)),
         "risk_reasons": sorted(set(risks)),
         "recommended_next_action": next_action,
+        "configuration_version": CONFIGURATION_VERSION,
+    }
+
+
+def _rejection(source: str, lanes: list[str], reason: str, score: int = 0) -> dict[str, Any]:
+    primary = ""
+    for lane in LANE_PRIORITY:
+        if lane in lanes:
+            primary = lane
+            break
+    return {
+        "source": source,
+        "disposition": "reject",
+        "total_score": score,
+        "confidence": "high",
+        "dimensions": {},
+        "service_lanes": lanes,
+        "service_route": primary,
+        "positive_reasons": [],
+        "missing_evidence": [],
+        "risk_reasons": [reason],
+        "recommended_next_action": "Do not contact or bid.",
         "configuration_version": CONFIGURATION_VERSION,
     }
 
@@ -360,35 +464,12 @@ def qualify_record(record: dict[str, Any]) -> dict[str, Any]:
     content = _text(record)
     lanes = _service_lanes(record)
     if PROHIBITED.search(content):
-        return {
-            "source": source,
-            "disposition": "reject",
-            "total_score": 0,
-            "confidence": "high",
-            "dimensions": {},
-            "service_lanes": lanes,
-            "service_route": lanes[0] if lanes else "",
-            "positive_reasons": [],
-            "missing_evidence": [],
-            "risk_reasons": ["prohibited or deceptive work"],
-            "recommended_next_action": "Do not contact or bid.",
-            "configuration_version": CONFIGURATION_VERSION,
-        }
+        return _rejection(source, lanes, "prohibited or deceptive work")
     if EXPLOITATIVE.search(content):
-        return {
-            "source": source,
-            "disposition": "reject",
-            "total_score": 5,
-            "confidence": "high",
-            "dimensions": {},
-            "service_lanes": lanes,
-            "service_route": lanes[0] if lanes else "",
-            "positive_reasons": [],
-            "missing_evidence": [],
-            "risk_reasons": ["exploitative or unpaid commercial terms"],
-            "recommended_next_action": "Do not contact or bid.",
-            "configuration_version": CONFIGURATION_VERSION,
-        }
+        return _rejection(source, lanes, "exploitative or unpaid commercial terms", 5)
+    early_reason = _early_rejection_reason(record)
+    if early_reason:
+        return _rejection(source, lanes, early_reason, 10)
     if source == "upwork":
         return _upwork_decision(record, lanes)
     if source == "linkedin":
