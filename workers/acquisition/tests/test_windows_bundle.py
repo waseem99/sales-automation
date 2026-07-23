@@ -24,6 +24,18 @@ class WindowsBundleTests(unittest.TestCase):
         for prohibited in ["vercel", "database_url", "password=", "linkedin message", "upwork proposal"]:
             self.assertNotIn(prohibited, combined)
 
+    def test_chrome_launchers_build_argument_arrays_before_start_process(self) -> None:
+        root = Path(__file__).resolve().parents[1]
+        launchers = [
+            root / "scripts/windows/open-approved-upwork-searches.ps1",
+            root / "scripts/windows/open-linkedin-lead-searches.ps1",
+        ]
+        for launcher in launchers:
+            content = launcher.read_text(encoding="utf-8")
+            self.assertIn("$chromeArguments", content)
+            self.assertIn("-ArgumentList $chromeArguments", content)
+            self.assertNotIn('-ArgumentList @("--new-window") +', content)
+
 
 if __name__ == "__main__":
     unittest.main()
