@@ -6,14 +6,14 @@ import vm from "node:vm";
 const root = path.resolve("extensions/linkedin");
 const manifest = JSON.parse(fs.readFileSync(path.join(root, "manifest.json"), "utf8"));
 const background = fs.readFileSync(path.join(root, "background.js"), "utf8");
+const adapter = fs.readFileSync(path.join(root, "dom-adapter.js"), "utf8");
 const content = fs.readFileSync(path.join(root, "content.js"), "utf8");
 const popup = fs.readFileSync(path.join(root, "popup.js"), "utf8");
 const signalSource = fs.readFileSync(path.join(root, "signal.js"), "utf8");
 
 assert.equal(manifest.manifest_version, 3);
-assert.equal(manifest.version, "1.0.1");
-assert(background.includes('linkedin-extension-1.0.1'));
-assert.deepEqual(manifest.content_scripts[0].js, ["signal.js", "content.js"]);
+assert.equal(manifest.version, "1.0.2");
+assert.deepEqual(manifest.content_scripts[0].js, ["signal.js", "dom-adapter.js", "content.js"]);
 assert(manifest.host_permissions.includes("http://127.0.0.1:8775/*"));
 
 for (const marker of [
@@ -31,6 +31,15 @@ for (const marker of [
   'missing_canonical_url',
   'linkedin-dom-1.0.1'
 ]) assert(content.includes(marker), `missing LinkedIn DOM marker: ${marker}`);
+
+for (const marker of [
+  "data-codistan-opportunity-card",
+  "nearestCard",
+  "hasActorLink",
+  "MutationObserver",
+  'setAttribute("data-view-name", "feed-full-update")'
+]) assert(adapter.includes(marker), `missing LinkedIn adapter marker: ${marker}`);
+
 assert(popup.includes("Scanned ${containers} visible containers"));
 assert(popup.includes("lacked a canonical permalink"));
 
@@ -41,6 +50,7 @@ const prohibited = [
 ];
 for (const marker of prohibited) {
   assert(!background.toLowerCase().includes(marker.toLowerCase()), `background contains prohibited marker: ${marker}`);
+  assert(!adapter.toLowerCase().includes(marker.toLowerCase()), `adapter contains prohibited marker: ${marker}`);
   assert(!content.toLowerCase().includes(marker.toLowerCase()), `content contains prohibited marker: ${marker}`);
 }
 
