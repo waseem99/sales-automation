@@ -109,7 +109,7 @@ class RuntimeTests(unittest.TestCase):
             sparse_record["commercial_evidence"] = {}
             first = state.capture(sparse)
             self.assertEqual(first["accepted"], 1)
-            self.assertEqual(state.records[0]["qualification"]["disposition"], "priority_b")
+            self.assertEqual(state.records[0]["qualification"]["disposition"], "research")
 
             richer = upwork_payload()
             richer_record = richer["records"][0]
