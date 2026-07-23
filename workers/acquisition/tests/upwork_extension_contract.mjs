@@ -11,8 +11,8 @@ const popup = fs.readFileSync(path.join(root, "popup.js"), "utf8");
 const evidenceSource = fs.readFileSync(path.join(root, "evidence.js"), "utf8");
 
 assert.equal(manifest.manifest_version, 3);
-assert.equal(manifest.version, "1.0.2");
-assert(background.includes('upwork-extension-1.0.2'));
+assert.equal(manifest.version, "1.0.3");
+assert(background.includes('upwork-extension-1.0.3'));
 assert.deepEqual(manifest.content_scripts[0].js, ["evidence.js", "content.js"]);
 assert(manifest.host_permissions.includes("http://127.0.0.1:8765/*"));
 
@@ -30,6 +30,11 @@ assert(background.includes("activeSavedSearchName"));
 assert(content.includes("active_saved_search_name"));
 assert(content.includes("commercialTextForCard"));
 assert(content.includes("commercial_fields_detected"));
+assert(content.includes("uniqueJobIds"));
+assert(content.includes("stable_job_identity_used"));
+assert(content.includes("inferredServiceLanes"));
+assert(content.includes("brand identity"));
+assert(content.includes("content writer"));
 assert(popup.includes("active_saved_search_name"));
 assert(popup.includes("enriched"));
 
@@ -55,6 +60,10 @@ vm.runInContext(evidenceSource, context);
 const helper = context.globalThis.CodistanUpworkEvidence;
 assert(helper);
 assert.equal(helper.nativeIdFromUrl("https://www.upwork.com/jobs/~0123456789abcdef?x=1"), "~0123456789abcdef");
+assert.equal(
+  helper.nativeIdFromUrl("https://www.upwork.com/freelance-jobs/apply/example_~0123456789abcdef"),
+  "~0123456789abcdef"
+);
 
 const fixed = helper.parseCommercialEvidence(
   "Posted 2 hours ago Fixed-price Est. Budget: $12,000 Payment verified $50K+ spent 75% hire rate Fewer than 5 proposals Expert"
