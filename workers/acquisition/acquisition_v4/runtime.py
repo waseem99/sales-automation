@@ -46,6 +46,53 @@ def _validate_page_url(source: str, value: Any) -> str:
     return raw[:2_000]
 
 
+def _has_value(value: Any) -> bool:
+    return value not in {None, "", False} if not isinstance(value, (dict, list)) else bool(value)
+
+
+def _merge_mapping(existing: dict[str, Any], incoming: dict[str, Any]) -> dict[str, Any]:
+    merged = dict(existing)
+    for key, value in incoming.items():
+        if not _has_value(value):
+            continue
+        current = merged.get(key)
+        if isinstance(current, dict) and isinstance(value, dict):
+            merged[key] = _merge_mapping(current, value)
+        elif isinstance(current, list) and isinstance(value, list):
+            seen = {json.dumps(item, sort_keys=True, ensure_ascii=False) for item in current}
+            merged[key] = [*current, *(item for item in value if json.dumps(item, sort_keys=True, ensure_ascii=False) not in seen)]
+        elif not _has_value(current):
+            merged[key] = value
+        elif isinstance(current, str) and isinstance(value, str) and len(value) > len(current):
+            merged[key] = value
+    return merged
+
+
+def _merge_record(existing: dict[str, Any], incoming: dict[str, Any]) -> dict[str, Any]:
+    candidate = dict(existing)
+    for key in (
+        "title", "body", "author_name", "author_profile_url", "author_headline",
+        "company_name", "published_at", "posted_age", "page_url", "page_identity",
+    ):
+        current = candidate.get(key)
+        value = incoming.get(key)
+        if _has_value(value) and (not _has_value(current) or (isinstance(value, str) and isinstance(current, str) and len(value) > len(current))):
+            candidate[key] = value
+    candidate["parser_version"] = incoming.get("parser_version") or candidate.get("parser_version")
+    candidate["commercial_evidence"] = _merge_mapping(
+        candidate.get("commercial_evidence") if isinstance(candidate.get("commercial_evidence"), dict) else {},
+        incoming.get("commercial_evidence") if isinstance(incoming.get("commercial_evidence"), dict) else {},
+    )
+    candidate["raw_evidence"] = _merge_mapping(
+        candidate.get("raw_evidence") if isinstance(candidate.get("raw_evidence"), dict) else {},
+        incoming.get("raw_evidence") if isinstance(incoming.get("raw_evidence"), dict) else {},
+    )
+    candidate["qualification"] = qualify_record(candidate)
+    if candidate != existing:
+        candidate["last_enriched_at"] = utc_now_iso()
+    return candidate
+
+
 @dataclass
 class CollectorState:
     source: str
@@ -67,8 +114,21 @@ class CollectorState:
         self.total_received = _safe_counter(previous_status.get("received"))
         self.total_accepted = len(self.records)
         self.total_duplicates = _safe_counter(previous_status.get("duplicates"))
+        self.total_enriched = _safe_counter(previous_status.get("enriched"))
         self.total_rejected = _safe_counter(previous_status.get("rejected"))
+        self._refresh_existing_qualifications()
         self._write_status()
+
+    def _refresh_existing_qualifications(self) -> None:
+        changed = False
+        for record in self.records:
+            refreshed = qualify_record(record)
+            if record.get("qualification") != refreshed:
+                record["qualification"] = refreshed
+                changed = True
+        if changed:
+            self.store.persist_records(self.records)
+            write_review_outputs(self.state_root)
 
     def capture(self, payload: dict[str, Any]) -> dict[str, Any]:
         with self.lock:
@@ -101,7 +161,14 @@ class CollectorState:
 
         accepted: list[dict[str, Any]] = []
         accepted_keys: list[str] = []
+        working_records = [dict(record) for record in self.records]
+        index_by_key = {
+            str(record.get("dedupe_key")): index
+            for index, record in enumerate(working_records)
+            if record.get("dedupe_key")
+        }
         duplicates = 0
+        enriched = 0
         rejected = 0
         batch_seen: set[str] = set()
         self.total_received += len(raw_records)
@@ -122,24 +189,32 @@ class CollectorState:
             except ValueError:
                 rejected += 1
                 continue
-            if record.dedupe_key in self.seen or record.dedupe_key in batch_seen:
-                duplicates += 1
-                continue
-            batch_seen.add(record.dedupe_key)
             record_value = record.as_dict()
             record_value["qualification"] = qualify_record(record_value)
+            if record.dedupe_key in self.seen or record.dedupe_key in batch_seen:
+                duplicates += 1
+                existing_index = index_by_key.get(record.dedupe_key)
+                if existing_index is not None:
+                    merged = _merge_record(working_records[existing_index], record_value)
+                    if merged != working_records[existing_index]:
+                        working_records[existing_index] = merged
+                        enriched += 1
+                continue
+            batch_seen.add(record.dedupe_key)
             accepted.append(record_value)
             accepted_keys.append(record.dedupe_key)
 
-        if accepted:
-            self.store.append_atomically(self.records, accepted)
+        if accepted or enriched:
+            combined = [*working_records, *accepted]
+            self.store.persist_records(combined)
             next_seen = {*self.seen, *accepted_keys}
             self.store.persist_seen(next_seen)
-            self.records.extend(accepted)
+            self.records = combined
             self.seen = next_seen
 
         self.total_accepted += len(accepted)
         self.total_duplicates += duplicates
+        self.total_enriched += enriched
         self.total_rejected += rejected
         self.last_capture_at = utc_now_iso()
         review = write_review_outputs(self.state_root)
@@ -147,6 +222,7 @@ class CollectorState:
             "source": self.source,
             "accepted": len(accepted),
             "duplicates": duplicates,
+            "enriched": enriched,
             "rejected": rejected,
             "total_records": len(self.records),
             "records_path": str(self.store.records_path),
@@ -186,6 +262,7 @@ class CollectorState:
             "received": self.total_received,
             "accepted": self.total_accepted,
             "duplicates": self.total_duplicates,
+            "enriched": self.total_enriched,
             "rejected": self.total_rejected,
             "records_path": str(self.store.records_path),
             "status_path": str(self.store.status_path),
