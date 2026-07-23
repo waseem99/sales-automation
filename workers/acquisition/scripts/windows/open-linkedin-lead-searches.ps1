@@ -40,5 +40,6 @@ $queries = @(
 $urls = $queries | ForEach-Object {
     "https://www.linkedin.com/search/results/content/?keywords=$([uri]::EscapeDataString($_))&origin=GLOBAL_SEARCH_HEADER"
 }
-Start-Process -FilePath $chrome -ArgumentList @("--new-window") + $urls
+$chromeArguments = @("--new-window") + @($urls)
+Start-Process -FilePath $chrome -ArgumentList $chromeArguments
 Write-Host "Opened the approved LinkedIn direct-requirement searches in normal Chrome."
