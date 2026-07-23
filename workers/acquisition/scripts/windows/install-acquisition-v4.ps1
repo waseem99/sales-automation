@@ -36,11 +36,19 @@ if (-not $pythonCommand) {
 }
 
 New-Item -ItemType Directory -Force -Path $StateRoot | Out-Null
+$watchdogPidFile = Join-Path $StateRoot "watchdog.pid"
+if (Test-Path $watchdogPidFile) {
+    $watchdogProcessId = 0
+    [void][int]::TryParse((Get-Content $watchdogPidFile -Raw).Trim(), [ref]$watchdogProcessId)
+    if ($watchdogProcessId -gt 0) { Stop-Process -Id $watchdogProcessId -Force -ErrorAction SilentlyContinue }
+    Remove-Item $watchdogPidFile -Force -ErrorAction SilentlyContinue
+    Start-Sleep -Seconds 1
+}
 $pidFile = Join-Path $StateRoot "runtime.pid"
 if (Test-Path $pidFile) {
-    $runtimePid = 0
-    [void][int]::TryParse((Get-Content $pidFile -Raw).Trim(), [ref]$runtimePid)
-    if ($runtimePid -gt 0) { Stop-Process -Id $runtimePid -Force -ErrorAction SilentlyContinue }
+    $runtimeProcessId = 0
+    [void][int]::TryParse((Get-Content $pidFile -Raw).Trim(), [ref]$runtimeProcessId)
+    if ($runtimeProcessId -gt 0) { Stop-Process -Id $runtimeProcessId -Force -ErrorAction SilentlyContinue }
     Remove-Item $pidFile -Force -ErrorAction SilentlyContinue
 }
 Get-NetTCPConnection -State Listen -LocalPort 8765,8775 -ErrorAction SilentlyContinue |
