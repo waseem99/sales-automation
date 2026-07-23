@@ -78,7 +78,7 @@ try {
             $process = Get-CimInstance Win32_Process -Filter "ProcessId=$($listener.OwningProcess)" -ErrorAction SilentlyContinue
             $entry = [pscustomobject]@{
                 Port = $listener.LocalPort
-                PID = $listener.OwningProcess
+                ProcessId = $listener.OwningProcess
                 CommandLine = [string]$process.CommandLine
             }
             if ($entry.CommandLine -match "acquisition_v4\.supervisor") { $v4Listeners += $entry }
@@ -86,19 +86,19 @@ try {
         }
 
         if ($foreignListeners.Count -gt 0) {
-            $summary = ($foreignListeners | ForEach-Object { "port $($_.Port), PID $($_.PID)" }) -join "; "
+            $summary = ($foreignListeners | ForEach-Object { "port $($_.Port), PID $($_.ProcessId)" }) -join "; "
             Write-WatchdogLog "Cannot start V4 because another process owns an acquisition port: $summary. Retrying in 30 seconds."
             Start-Sleep -Seconds 30
             continue
         }
 
-        foreach ($pid in ($v4Listeners | Select-Object -ExpandProperty PID -Unique)) {
-            Stop-Process -Id $pid -Force -ErrorAction SilentlyContinue
+        foreach ($listenerProcessId in ($v4Listeners | Select-Object -ExpandProperty ProcessId -Unique)) {
+            Stop-Process -Id $listenerProcessId -Force -ErrorAction SilentlyContinue
         }
         if (Test-Path $runtimePidFile) {
-            $runtimePid = 0
-            [void][int]::TryParse((Get-Content $runtimePidFile -Raw).Trim(), [ref]$runtimePid)
-            if ($runtimePid -gt 0) { Stop-Process -Id $runtimePid -Force -ErrorAction SilentlyContinue }
+            $runtimeProcessId = 0
+            [void][int]::TryParse((Get-Content $runtimePidFile -Raw).Trim(), [ref]$runtimeProcessId)
+            if ($runtimeProcessId -gt 0) { Stop-Process -Id $runtimeProcessId -Force -ErrorAction SilentlyContinue }
             Remove-Item $runtimePidFile -Force -ErrorAction SilentlyContinue
         }
         Start-Sleep -Seconds 2
