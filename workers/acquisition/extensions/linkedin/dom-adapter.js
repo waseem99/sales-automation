@@ -5,7 +5,8 @@
   if (!signal) return;
 
   const MARKER = "data-codistan-opportunity-card";
-  const INTENT_HINT = /\b(?:looking for|seeking|need(?:ing)?|calling|request for proposal|rfp|expression of interest|eoi|outsourc(?:e|ing)|development partner|implementation partner|agency|studio|consultant|project[- ]based engagements?)\b/i;
+  const ACTOR_SELECTOR = 'a[href*="/in/"], a[href*="/company/"]';
+  const INTENT_HINT = /\b(?:looking for|seeking|need(?:ing)?|calling|request for proposal|rfp|expression of interest|eoi|outsourc(?:e|ing)|development partner|implementation partner|service providers?|agency|studio|consultant|project[- ]based engagements?)\b/i;
   let scheduled = 0;
 
   function visible(element) {
@@ -19,30 +20,77 @@
     return signal.normalizeText(element?.innerText || element?.textContent || "");
   }
 
-  function hasActorLink(element) {
-    return Boolean(element.querySelector('a[href*="/in/"], a[href*="/company/"]'));
+  function canonicalActorHref(anchor) {
+    try {
+      const url = new URL(anchor?.href || anchor?.getAttribute?.("href") || "", "https://www.linkedin.com");
+      if (!["linkedin.com", "www.linkedin.com"].includes(url.hostname)) return "";
+      if (!url.pathname.startsWith("/in/") && !url.pathname.startsWith("/company/")) return "";
+      return `${url.hostname}${url.pathname.replace(/\/$/, "")}`.toLowerCase();
+    } catch (_error) {
+      return "";
+    }
+  }
+
+  function distinctActorHrefs(element) {
+    const values = new Set();
+    for (const anchor of element.querySelectorAll(ACTOR_SELECTOR)) {
+      if (!visible(anchor)) continue;
+      const href = canonicalActorHref(anchor);
+      if (href) values.add(href);
+      if (values.size > 6) break;
+    }
+    return values;
+  }
+
+  function activityEvidence(element) {
+    const html = String(element?.outerHTML || "").slice(0, 300000);
+    return /(?:\/posts\/|\/feed\/update\/|urn(?::|%3a)li(?::|%3a)activity(?::|%3a)\d{12,}|activity[-_:]\d{12,})/i.test(html);
   }
 
   function plausibleCard(element) {
     if (!visible(element) || element === document.body || element === document.documentElement) return false;
     const rect = element.getBoundingClientRect();
-    if (rect.width < 280 || rect.width > 1100 || rect.height < 90 || rect.height > 1800) return false;
+    if (rect.width < 300 || rect.width > 920 || rect.height < 95 || rect.height > 1350) return false;
     const text = normalizedText(element);
-    if (text.length < 35 || text.length > 14000 || !INTENT_HINT.test(text)) return false;
-    if (!hasActorLink(element)) return false;
+    if (text.length < 35 || text.length > 9000 || !INTENT_HINT.test(text)) return false;
+    const actors = distinctActorHrefs(element);
+    if (actors.size < 1 || actors.size > 6) return false;
     return signal.classifyOpportunity(text).candidate;
   }
 
-  function nearestCard(start) {
-    let node = start instanceof Element ? start : start?.parentElement;
-    let best = null;
-    for (let depth = 0; node && depth < 14; depth += 1, node = node.parentElement) {
-      if (plausibleCard(node)) {
-        best = node;
-        break;
-      }
+  function nearestCardFromActor(actorLink) {
+    const candidates = [];
+    let node = actorLink instanceof Element ? actorLink.parentElement : null;
+    for (let depth = 0; node && depth < 18; depth += 1, node = node.parentElement) {
+      if (plausibleCard(node)) candidates.push(node);
     }
-    return best;
+    if (!candidates.length) return null;
+    candidates.sort((left, right) => {
+      const leftActors = distinctActorHrefs(left).size;
+      const rightActors = distinctActorHrefs(right).size;
+      if (leftActors !== rightActors) return leftActors - rightActors;
+      const leftEvidence = activityEvidence(left) ? 0 : 1;
+      const rightEvidence = activityEvidence(right) ? 0 : 1;
+      if (leftEvidence !== rightEvidence) return leftEvidence - rightEvidence;
+      const leftRect = left.getBoundingClientRect();
+      const rightRect = right.getBoundingClientRect();
+      return (leftRect.width * leftRect.height) - (rightRect.width * rightRect.height);
+    });
+    return candidates[0];
+  }
+
+  function pruneNestedCards(cards) {
+    const ordered = [...cards].sort((left, right) => {
+      const a = left.getBoundingClientRect();
+      const b = right.getBoundingClientRect();
+      return (a.width * a.height) - (b.width * b.height);
+    });
+    const selected = [];
+    for (const card of ordered) {
+      if (selected.some(existing => existing === card || existing.contains(card) || card.contains(existing))) continue;
+      selected.push(card);
+    }
+    return selected;
   }
 
   function annotate() {
@@ -50,27 +98,31 @@
     const scope = document.querySelector("main") || document.body;
     if (!scope) return;
 
-    let inspected = 0;
-    for (const element of scope.querySelectorAll("span, p, div, a")) {
-      if (inspected >= 7000) break;
-      inspected += 1;
-      if (!visible(element)) continue;
-      const text = normalizedText(element);
-      if (text.length < 20 || text.length > 1600 || !INTENT_HINT.test(text)) continue;
-      const card = nearestCard(element);
-      if (!card || card.hasAttribute(MARKER)) continue;
-      card.setAttribute(MARKER, "true");
-      if (!card.hasAttribute("data-view-name")) card.setAttribute("data-view-name", "feed-full-update");
+    for (const marked of scope.querySelectorAll(`[${MARKER}]`)) marked.removeAttribute(MARKER);
+
+    const candidates = new Set();
+    const actorSeeds = new Set();
+    for (const anchor of scope.querySelectorAll(ACTOR_SELECTOR)) {
+      if (!visible(anchor)) continue;
+      const href = canonicalActorHref(anchor);
+      if (!href) continue;
+      const seedKey = `${href}:${Math.round(anchor.getBoundingClientRect().top)}`;
+      if (actorSeeds.has(seedKey)) continue;
+      actorSeeds.add(seedKey);
+      const card = nearestCardFromActor(anchor);
+      if (card) candidates.add(card);
     }
+
+    for (const card of pruneNestedCards(candidates)) card.setAttribute(MARKER, "true");
   }
 
   function schedule() {
     if (scheduled) window.clearTimeout(scheduled);
-    scheduled = window.setTimeout(annotate, 250);
+    scheduled = window.setTimeout(annotate, 300);
   }
 
   schedule();
-  window.setTimeout(annotate, 1500);
+  window.setTimeout(annotate, 1600);
   const observer = new MutationObserver(schedule);
   observer.observe(document.documentElement, {childList: true, subtree: true});
 })();
