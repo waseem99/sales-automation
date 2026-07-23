@@ -11,14 +11,18 @@
 
   function diagnosticSummary(diagnostics = {}) {
     const containers = Number(diagnostics.visible_post_containers || 0);
+    const marked = Number(diagnostics.adapter_marked_containers || 0);
     const readable = Number(diagnostics.posts_with_readable_text || 0);
     const classified = Number(diagnostics.classified_candidates || 0);
+    const activityIds = Number(diagnostics.containers_with_activity_id || 0);
+    const permalinkHints = Number(diagnostics.containers_with_permalink_hint || 0);
     const missingUrl = Number(diagnostics.missing_canonical_url || 0);
     const rejections = Object.entries(diagnostics.rejection_reasons || {})
       .filter(([, count]) => Number(count) > 0)
       .map(([reason, count]) => `${reason}: ${count}`)
       .join(", ");
-    const parts = [`Scanned ${containers} visible containers; ${readable} readable posts; ${classified} buyer-intent matches.`];
+    const parts = [`Scanned ${containers} visible containers (${marked} adapter cards); ${readable} readable posts; ${classified} buyer-intent matches.`];
+    if (activityIds || permalinkHints) parts.push(`${activityIds} cards exposed activity IDs; ${permalinkHints} exposed permalink hints.`);
     if (missingUrl) parts.push(`${missingUrl} matched posts lacked a canonical permalink.`);
     if (rejections) parts.push(`Filtered — ${rejections}.`);
     return parts.join(" ");
