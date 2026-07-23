@@ -83,6 +83,7 @@ class RuntimeTests(unittest.TestCase):
             duplicate = upwork.capture(upwork_payload())
             self.assertEqual(duplicate["accepted"], 0)
             self.assertEqual(duplicate["duplicates"], 1)
+            self.assertEqual(duplicate["enriched"], 0)
             last_capture_at = upwork.health()["last_capture_at"]
 
             restarted = CollectorState("upwork", root, "test")
@@ -97,6 +98,53 @@ class RuntimeTests(unittest.TestCase):
             self.assertEqual(linked["accepted"], 1)
             self.assertEqual(len(linkedin.records), 1)
             self.assertEqual(len(restarted.records), 1)
+
+    def test_duplicate_capture_enriches_missing_commercial_evidence(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            state = CollectorState("upwork", root, "test")
+            sparse = upwork_payload()
+            sparse_record = sparse["records"][0]
+            assert isinstance(sparse_record, dict)
+            sparse_record["commercial_evidence"] = {}
+            first = state.capture(sparse)
+            self.assertEqual(first["accepted"], 1)
+            self.assertEqual(state.records[0]["qualification"]["disposition"], "priority_b")
+
+            richer = upwork_payload()
+            richer_record = richer["records"][0]
+            assert isinstance(richer_record, dict)
+            richer_record["commercial_evidence"] = {
+                "fixed_budget_usd": 12000,
+                "payment_verified": True,
+                "client_spend_usd": 50000,
+                "hire_rate_percent": 75,
+                "proposals": "Fewer than 5 proposals",
+            }
+            result = state.capture(richer)
+            self.assertEqual(result["accepted"], 0)
+            self.assertEqual(result["duplicates"], 1)
+            self.assertEqual(result["enriched"], 1)
+            self.assertEqual(state.records[0]["commercial_evidence"]["client_spend_usd"], 50000)
+            self.assertEqual(state.records[0]["qualification"]["disposition"], "priority_a")
+            self.assertEqual(len(state.records), 1)
+
+    def test_restart_requalifies_existing_records(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            state = CollectorState("upwork", root, "test")
+            payload = upwork_payload()
+            record = payload["records"][0]
+            assert isinstance(record, dict)
+            record["title"] = "High ticket closer for AI offer"
+            record["body"] = "Close qualified leads for our AI agency."
+            state.capture(payload)
+            persisted = state.records[0]
+            persisted["qualification"] = {"disposition": "priority_b", "configuration_version": "old"}
+            state.store.persist_records(state.records)
+
+            restarted = CollectorState("upwork", root, "test")
+            self.assertEqual(restarted.records[0]["qualification"]["disposition"], "reject")
 
     def test_wrong_source_and_external_action_are_rejected(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
