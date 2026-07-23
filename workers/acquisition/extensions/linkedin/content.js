@@ -5,6 +5,7 @@
   if (!signal) return;
 
   const POST_SELECTORS = [
+    '[data-codistan-opportunity-card="true"]',
     'div[data-view-name="feed-full-update"]',
     'div.feed-shared-update-v2',
     'div.occludable-update',
@@ -51,16 +52,10 @@
   const TIME_SELECTORS = [
     '.update-components-actor__sub-description',
     '.feed-shared-actor__sub-description',
+    'a[href*="/feed/update/"]',
+    'a[href*="/posts/"]',
     'time',
     '[data-test-id*="timestamp"]'
-  ];
-  const URN_ATTRIBUTES = [
-    'data-urn',
-    'data-id',
-    'data-chameleon-result-urn',
-    'data-view-tracking-scope',
-    'data-activity-urn',
-    'id'
   ];
 
   function isVisible(element) {
@@ -91,26 +86,68 @@
     return post;
   }
 
-  function activityUrn(root) {
-    const inspected = [];
-    const add = node => {
-      if (node instanceof Element && !inspected.includes(node)) inspected.push(node);
-    };
-    add(root);
-    add(root.closest?.('[data-urn], [data-id], [data-chameleon-result-urn], [data-view-tracking-scope], [data-activity-urn]'));
-    for (const node of root.querySelectorAll('[data-urn], [data-id], [data-chameleon-result-urn], [data-view-tracking-scope], [data-activity-urn], [id]')) {
-      add(node);
-      if (inspected.length >= 150) break;
-    }
-    for (const node of inspected) {
-      for (const attribute of URN_ATTRIBUTES) {
-        const urn = signal.activityUrnFromValue(node.getAttribute?.(attribute));
-        if (urn) return urn;
+  function decodedVariants(value) {
+    const values = new Set([String(value || "")]);
+    let current = String(value || "");
+    for (let attempt = 0; attempt < 3; attempt += 1) {
+      try {
+        const decoded = decodeURIComponent(current);
+        if (!decoded || decoded === current) break;
+        values.add(decoded);
+        current = decoded;
+      } catch (_error) {
+        break;
       }
     }
-    for (const anchor of root.querySelectorAll('a[href]')) {
-      const urn = signal.activityUrnFromValue(anchor.getAttribute('href'));
-      if (urn) return urn;
+    return [...values];
+  }
+
+  function looseActivityUrn(value) {
+    for (const variant of decodedVariants(value)) {
+      const direct = signal.activityUrnFromValue(variant);
+      if (direct) return direct;
+      const match = /(?:activity[-_:]|activity%3a)(\d{12,})/i.exec(variant);
+      if (match) return `urn:li:activity:${match[1]}`;
+    }
+    return "";
+  }
+
+  function nodeAttributeValues(root, limit = 450) {
+    const values = [];
+    const nodes = [];
+    if (root instanceof Element) nodes.push(root);
+    for (const node of root.querySelectorAll('*')) {
+      nodes.push(node);
+      if (nodes.length >= limit) break;
+    }
+    for (const node of nodes) {
+      for (const attribute of node.attributes || []) {
+        const value = String(attribute.value || "");
+        if (value) values.push(value);
+      }
+    }
+    return values;
+  }
+
+  function activityUrn(root) {
+    if (!(root instanceof Element)) return "";
+    const closest = root.closest?.('[data-urn], [data-id], [data-chameleon-result-urn], [data-view-tracking-scope], [data-activity-urn]');
+    const roots = closest && closest !== root ? [root, closest] : [root];
+    for (const candidateRoot of roots) {
+      for (const value of nodeAttributeValues(candidateRoot)) {
+        const urn = looseActivityUrn(value);
+        if (urn) return urn;
+      }
+      const htmlUrn = looseActivityUrn(String(candidateRoot.outerHTML || "").slice(0, 500000));
+      if (htmlUrn) return htmlUrn;
+    }
+    return "";
+  }
+
+  function canonicalFromValue(value) {
+    for (const variant of decodedVariants(value)) {
+      const canonical = signal.canonicalPostUrl(variant, looseActivityUrn(variant));
+      if (canonical) return canonical;
     }
     return "";
   }
@@ -127,17 +164,23 @@
     return "";
   }
 
-  function postUrl(root, fallbackRoot) {
-    const anchorSet = new Set([
-      ...root.querySelectorAll('a[href]'),
-      ...(root === fallbackRoot ? [] : fallbackRoot.querySelectorAll('a[href]'))
-    ]);
-    for (const anchor of anchorSet) {
-      const href = anchor.getAttribute('href') || '';
-      const value = signal.canonicalPostUrl(href, signal.activityUrnFromValue(href));
-      if (value) return value;
+  function permalinkHint(root) {
+    if (!(root instanceof Element)) return false;
+    for (const value of nodeAttributeValues(root, 300)) {
+      if (canonicalFromValue(value) || looseActivityUrn(value)) return true;
     }
-    const urn = activityUrn(root) || activityUrn(fallbackRoot);
+    return false;
+  }
+
+  function postUrl(root, fallbackRoot, knownUrn = "") {
+    const roots = root === fallbackRoot ? [root] : [root, fallbackRoot];
+    for (const candidateRoot of roots) {
+      for (const value of nodeAttributeValues(candidateRoot)) {
+        const canonical = canonicalFromValue(value);
+        if (canonical) return canonical;
+      }
+    }
+    const urn = knownUrn || activityUrn(root) || activityUrn(fallbackRoot);
     if (urn) return signal.canonicalPostUrl('', urn);
     return currentIndividualPostUrl();
   }
@@ -175,7 +218,7 @@
         }
       }
       const fallback = signal.normalizeText(candidateRoot.innerText || candidateRoot.textContent || "");
-      if (fallback.length >= 35 && fallback.length <= 12000) candidates.push(fallback);
+      if (fallback.length >= 35 && fallback.length <= 9000) candidates.push(fallback);
     };
     collect(root);
     if (root !== fallbackRoot) collect(fallbackRoot);
@@ -190,8 +233,11 @@
     const nodeSet = new Set();
     const diagnostics = {
       visible_post_containers: 0,
+      adapter_marked_containers: 0,
       posts_with_readable_text: 0,
       classified_candidates: 0,
+      containers_with_activity_id: 0,
+      containers_with_permalink_hint: 0,
       missing_canonical_url: 0,
       duplicate_urls: 0,
       rejection_reasons: {}
@@ -206,6 +252,7 @@
       }
     }
     diagnostics.visible_post_containers = nodes.length;
+    diagnostics.adapter_marked_containers = document.querySelectorAll('[data-codistan-opportunity-card="true"]').length;
 
     for (const post of nodes) {
       const originalRoot = findOriginalRoot(post);
@@ -219,7 +266,12 @@
         continue;
       }
       diagnostics.classified_candidates += 1;
-      const sourceUrl = postUrl(originalRoot, post);
+      const knownUrn = activityUrn(originalRoot) || activityUrn(post);
+      if (knownUrn) diagnostics.containers_with_activity_id += 1;
+      if (permalinkHint(originalRoot) || (originalRoot !== post && permalinkHint(post))) {
+        diagnostics.containers_with_permalink_hint += 1;
+      }
+      const sourceUrl = postUrl(originalRoot, post, knownUrn);
       if (!sourceUrl) {
         diagnostics.missing_canonical_url += 1;
         continue;
@@ -230,7 +282,7 @@
       }
       const originalAuthor = actor(originalRoot);
       const reposter = originalRoot === post ? null : actor(post);
-      const urn = signal.activityUrnFromValue(sourceUrl) || activityUrn(originalRoot) || activityUrn(post);
+      const urn = looseActivityUrn(sourceUrl) || knownUrn;
       const postedAge = textFrom(originalRoot, TIME_SELECTORS) || textFrom(post, TIME_SELECTORS);
       const title = body.length > 140 ? `${body.slice(0, 137)}...` : body;
       seenUrls.add(sourceUrl);
@@ -253,7 +305,7 @@
           reposter_name: reposter?.name || "",
           reposter_profile_url: reposter?.profile_url || "",
           classifier_version: "linkedin-direct-requirement-1.0.1",
-          extraction_version: "linkedin-dom-1.0.1"
+          extraction_version: "linkedin-dom-1.0.3"
         }
       });
       if (posts.length >= limit) break;
