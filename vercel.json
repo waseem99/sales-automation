@@ -33,6 +33,7 @@
     { "source": "/login", "destination": "/api/dashboard?__path=/login" },
     { "source": "/prospects", "destination": "/api/dashboard?__path=/prospects" },
     { "source": "/leads/linkedin", "destination": "/api/dashboard?__path=/leads/linkedin" },
+    { "source": "/leads/sales-navigator", "destination": "/api/dashboard?__path=/leads/sales-navigator" },
     { "source": "/leads/upwork", "destination": "/api/dashboard?__path=/leads/upwork" },
     { "source": "/leads/rfq", "destination": "/api/dashboard?__path=/leads/rfq" },
     { "source": "/leads/rfp", "destination": "/api/dashboard?__path=/leads/rfp" },
