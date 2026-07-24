@@ -94,6 +94,8 @@
   }
 
   async function readVisible(tab, limit = MAX_RECORDS) {
+    await sendToTab(tab, {type: "CODISTAN_RESOLVE_LINKEDIN_LINKS"});
+    await sleep(120);
     const result = await sendToTab(tab, {type: "CODISTAN_CAPTURE_VISIBLE_LINKEDIN_POSTS", limit});
     if (!result?.ok) throw new Error(result?.error || "Visible-post capture failed.");
     return result;
@@ -162,11 +164,15 @@
     setStatus("Scanning the current LinkedIn results and loading more visible cards…");
     let tab = null;
     let originalTop = 0;
+    let initialScroller = "unknown";
+    let latestScroller = "unknown";
     try {
       tab = await activeTab();
       const status = await sendToTab(tab, {type: "CODISTAN_LINKEDIN_SCROLL_STATUS"});
       if (!status?.ok) throw new Error(status?.error || "The LinkedIn scroll controller is unavailable.");
       originalTop = Number(status.top || 0);
+      initialScroller = String(status.scroller_kind || "unknown");
+      latestScroller = initialScroller;
 
       const recordMap = new Map();
       let latestResult = await readVisible(tab, MAX_RECORDS);
@@ -182,8 +188,9 @@
           wait_ms: SCROLL_WAIT_MS
         });
         if (!scrollResult?.ok) throw new Error(scrollResult?.error || "LinkedIn result scrolling failed.");
+        latestScroller = String(scrollResult.scroller_kind || latestScroller);
         if (!scrollResult.moved) {
-          stopReason = "end_of_results";
+          stopReason = scrollResult.at_end ? "end_of_results" : "no_movable_scroll_container";
           break;
         }
         scrollSteps += 1;
@@ -203,7 +210,7 @@
       }
 
       const records = [...recordMap.values()].slice(0, MAX_RECORDS);
-      const scanSummary = `Bounded scan completed: ${scrollSteps} scroll steps, ${records.length} unique resolvable opportunities, stop reason ${stopReason}.`;
+      const scanSummary = `Bounded scan completed: ${scrollSteps} scroll steps, ${records.length} unique resolvable opportunities, stop reason ${stopReason}, scroll container ${latestScroller} (initially ${initialScroller}).`;
       if (records.length === 0) {
         setStatus(`No direct supported service requirements were captured. ${scanSummary} ${diagnosticSummary(latestResult.diagnostics)}`);
         return;
