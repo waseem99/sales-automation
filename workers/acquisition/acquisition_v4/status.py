@@ -8,6 +8,7 @@ from urllib.request import urlopen
 DEFAULT_ENDPOINTS = {
     "upwork": "http://127.0.0.1:8765/health",
     "linkedin": "http://127.0.0.1:8775/health",
+    "sales_navigator": "http://127.0.0.1:8785/health",
 }
 
 
@@ -20,7 +21,7 @@ def read_health(url: str) -> dict[str, object]:
 
 
 def build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(description="Check both Codistan acquisition collectors.")
+    parser = argparse.ArgumentParser(description="Check Codistan acquisition collectors.")
     parser.add_argument("--json", action="store_true", dest="as_json")
     return parser
 
@@ -39,11 +40,12 @@ def main(argv: list[str] | None = None) -> int:
     if args.as_json:
         print(json.dumps({"ready": healthy, "sources": results}, indent=2, sort_keys=True))
     else:
-        for source in ("upwork", "linkedin"):
+        labels = {"upwork": "UPWORK", "linkedin": "LINKEDIN", "sales_navigator": "SALES NAV"}
+        for source in DEFAULT_ENDPOINTS:
             value = results[source]
             status = "HEALTHY" if value.get("ready") else "UNHEALTHY"
-            print(f"{source.upper():8} {status:9} {value.get('last_error') or value.get('error') or ''}")
-        print("OVERALL  HEALTHY" if healthy else "OVERALL  UNHEALTHY")
+            print(f"{labels[source]:10} {status:9} {value.get('last_error') or value.get('error') or ''}")
+        print("OVERALL    HEALTHY" if healthy else "OVERALL    UNHEALTHY")
     return 0 if healthy else 1
 
 
