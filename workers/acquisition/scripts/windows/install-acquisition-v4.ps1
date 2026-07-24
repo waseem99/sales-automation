@@ -6,7 +6,7 @@ param(
 $ErrorActionPreference = "Stop"
 $sourceRoot = Join-Path $InstallRoot "workers\acquisition"
 if (-not (Test-Path (Join-Path $sourceRoot "acquisition_v4\supervisor.py"))) {
-    throw "The Acquisition V4 source package was not found."
+    throw "The Acquisition source package was not found."
 }
 
 function Find-Python312 {
@@ -39,7 +39,7 @@ New-Item -ItemType Directory -Force -Path $StateRoot | Out-Null
 $configDirectory = Join-Path $StateRoot "config"
 $configPath = Join-Path $configDirectory "prospect-desk-sync.json"
 New-Item -ItemType Directory -Force -Path $configDirectory | Out-Null
-$enabledSources = @("linkedin", "upwork")
+$enabledSources = @("linkedin", "upwork", "sales_navigator")
 if (-not (Test-Path $configPath)) {
     [ordered]@{
         version = 1
@@ -81,7 +81,7 @@ if (Test-Path $pidFile) {
     if ($runtimeProcessId -gt 0) { Stop-Process -Id $runtimeProcessId -Force -ErrorAction SilentlyContinue }
     Remove-Item $pidFile -Force -ErrorAction SilentlyContinue
 }
-Get-NetTCPConnection -State Listen -LocalPort 8765,8775 -ErrorAction SilentlyContinue |
+Get-NetTCPConnection -State Listen -LocalPort 8765,8775,8785 -ErrorAction SilentlyContinue |
     Select-Object -ExpandProperty OwningProcess -Unique |
     ForEach-Object { Stop-Process -Id $_ -Force -ErrorAction SilentlyContinue }
 Start-Sleep -Seconds 1
@@ -115,28 +115,29 @@ $commands = Join-Path $appCurrent "workers\acquisition"
 $desktop = [Environment]::GetFolderPath("Desktop")
 $startup = [Environment]::GetFolderPath("Startup")
 $shortcutMap = @{
-    "Start Acquisition V4.lnk" = "START-ACQUISITION-V4.cmd"
-    "Check Acquisition V4.lnk" = "CHECK-ACQUISITION-V4.cmd"
+    "Start Acquisition V5.lnk" = "START-ACQUISITION-V4.cmd"
+    "Check Acquisition V5.lnk" = "CHECK-ACQUISITION-V4.cmd"
     "Configure Prospect Desk Sync.lnk" = "CONFIGURE-PROSPECT-DESK-SYNC.cmd"
     "Open Upwork Searches.lnk" = "OPEN-UPWORK-SEARCHES.cmd"
     "Open LinkedIn Lead Searches.lnk" = "OPEN-LINKEDIN-LEAD-SEARCHES.cmd"
     "Open Acquisition Review.lnk" = "OPEN-ACQUISITION-REVIEW.cmd"
-    "Diagnose Acquisition V4.lnk" = "DIAGNOSE-ACQUISITION-V4.cmd"
-    "Rollback Acquisition V4.lnk" = "ROLLBACK-ACQUISITION-V4.cmd"
+    "Diagnose Acquisition V5.lnk" = "DIAGNOSE-ACQUISITION-V4.cmd"
+    "Rollback Acquisition V5.lnk" = "ROLLBACK-ACQUISITION-V4.cmd"
 }
 foreach ($entry in $shortcutMap.GetEnumerator()) {
     New-Shortcut (Join-Path $desktop $entry.Key) (Join-Path $commands $entry.Value) $commands
 }
-New-Shortcut (Join-Path $startup "Codistan Acquisition V4.lnk") (Join-Path $commands "START-ACQUISITION-V4.cmd") $commands
+New-Shortcut (Join-Path $startup "Codistan Acquisition V5.lnk") (Join-Path $commands "START-ACQUISITION-V4.cmd") $commands
 
 Start-Process -FilePath (Join-Path $commands "START-ACQUISITION-V4.cmd") -WindowStyle Minimized
 $healthy = $false
-for ($attempt = 0; $attempt -lt 20; $attempt++) {
+for ($attempt = 0; $attempt -lt 25; $attempt++) {
     Start-Sleep -Seconds 1
     try {
         $upwork = Invoke-RestMethod -Uri "http://127.0.0.1:8765/health" -TimeoutSec 2
         $linkedin = Invoke-RestMethod -Uri "http://127.0.0.1:8775/health" -TimeoutSec 2
-        if ($upwork.ready -and $linkedin.ready) { $healthy = $true; break }
+        $salesNavigator = Invoke-RestMethod -Uri "http://127.0.0.1:8785/health" -TimeoutSec 2
+        if ($upwork.ready -and $linkedin.ready -and $salesNavigator.ready) { $healthy = $true; break }
     } catch {}
 }
 if (-not $healthy) {
@@ -148,10 +149,10 @@ if (-not $healthy) {
 }
 
 Write-Host ""
-Write-Host "Acquisition V4 installed and healthy."
+Write-Host "Acquisition V5 installed and healthy."
 Write-Host "Extensions: $extensionRoot"
 Write-Host "Prospect Desk sync config: $configPath"
-Write-Host "Sync sources: LinkedIn and Upwork"
+Write-Host "Sync sources: LinkedIn warm, Upwork and Sales Navigator cold campaigns"
 Write-Host "Load or reload both unpacked extensions in chrome://extensions/."
+Write-Host "Open the LinkedIn extension popup, then open Sales Navigator campaigns to register an approved lead search."
 Write-Host "Use Configure Prospect Desk Sync once the production endpoint and token are ready."
-Write-Host "Use the new desktop shortcuts for daily operation."
