@@ -25,6 +25,10 @@ for (const marker of [
 ]) assert(api.includes(marker), `missing acquisition API safeguard: ${marker}`);
 
 for (const marker of [
+  "type AcquisitionSource = 'linkedin' | 'upwork'",
+  "record.source === 'upwork'",
+  "'upwork_job'",
+  "'linkedin_warm_post'",
   "codistan-acquisition-sync.v1",
   "loadNeonAppState",
   "persistLeadRecords",
@@ -32,7 +36,6 @@ for (const marker of [
   "applyAutomaticAssignment",
   "buildOwnerWorkload",
   "applyFirstOutreachGuidance",
-  "linkedin_warm_post",
   "partner_prospect",
   "website_portal",
   "ar_3d_unity_unreal",
@@ -46,7 +49,9 @@ for (const marker of [
   "mergeIncomingLead",
   "lastContactedAt: existing.lastContactedAt",
   "lastResponseAt: existing.lastResponseAt",
-  "owner: existing.owner"
+  "owner: existing.owner",
+  "Manual Upwork proposal",
+  "Open the original Upwork job and bid manually"
 ]) assert(runtime.includes(marker), `missing Prospect Desk mapping marker: ${marker}`);
 
 for (const marker of [
@@ -59,13 +64,16 @@ for (const marker of [
   "_record_fingerprint",
   "Prospect Desk sync endpoint is unreachable",
   "last_success_at",
-  "endpoint_host"
+  "endpoint_host",
+  "self.sync_state_path = state_root / \"sync\" / f\"{source}.json\"",
+  '"source": self.source'
 ]) assert(sync.includes(marker), `missing local sync marker: ${marker}`);
 assert(!sync.includes('self._status["token"]'));
 assert(!sync.includes("config.token[:"));
 
 for (const marker of [
   "ProspectDeskSync",
+  "source=self.source",
   "prospect_desk_sync.notify()",
   '"prospect_desk_sync": self.prospect_desk_sync.health()'
 ]) assert(collector.includes(marker), `missing collector sync integration: ${marker}`);
@@ -74,7 +82,9 @@ for (const marker of [
   "Configure Prospect Desk Sync.lnk",
   "prospect-desk-sync.json",
   'enabled = $false',
-  'sources = @(\"linkedin\")'
+  '$enabledSources = @("linkedin", "upwork")',
+  "Sync sources: LinkedIn and Upwork",
+  "$migratedConfig"
 ]) assert(installer.includes(marker), `missing installer sync marker: ${marker}`);
 
 for (const marker of [
@@ -82,8 +92,11 @@ for (const marker of [
   "ACQUISITION_INGEST_TOKEN",
   "Read-Host $Prompt -AsSecureString",
   "Token: stored locally and not printed",
-  'sources = @(\"linkedin\")'
-]) assert(configure.includes(marker), `missing secure sync configuration marker: ${marker}`);
+  '$enabledSources = @("linkedin", "upwork")',
+  "Sources: LinkedIn and Upwork",
+  "http://127.0.0.1:8765/health",
+  "http://127.0.0.1:8775/health"
+]) assert(configure.includes(marker), `missing secure dual-source sync configuration marker: ${marker}`);
 assert(!configure.includes("Write-Host $Token"));
 
 for (const prohibited of [
@@ -97,4 +110,4 @@ for (const prohibited of [
   assert(!`${api}\n${runtime}\n${sync}`.includes(prohibited), `bridge contains prohibited action: ${prohibited}`);
 }
 
-console.log("Prospect Desk acquisition bridge contract passed.");
+console.log("Prospect Desk dual-source acquisition bridge contract passed.");
