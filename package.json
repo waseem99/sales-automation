@@ -27,6 +27,7 @@
     "node": "22.x"
   },
   "dependencies": {
+    "@sales-automation/enrichment": "workspace:*",
     "@sales-automation/evaluator": "workspace:*",
     "@sales-automation/fixtures": "workspace:*",
     "@sales-automation/identity-graph": "workspace:*",
