@@ -10,7 +10,7 @@ const content = fs.readFileSync(path.join(root, "sales-nav.js"), "utf8");
 const optionsHtml = fs.readFileSync(path.join(root, "sales-nav-options.html"), "utf8");
 const optionsJs = fs.readFileSync(path.join(root, "sales-nav-options.js"), "utf8");
 
-assert.equal(manifest.version, "1.4.0");
+assert.equal(manifest.version, "1.4.1");
 assert.equal(manifest.background.service_worker, "background-entry.js");
 assert(entry.includes('sales-nav-background.js'));
 assert(manifest.permissions.includes("alarms"));
@@ -87,6 +87,7 @@ for (const marker of [
   'missing name',
   'missing role',
   'missing company',
+  'Manual pilot required',
 ]) assert(optionsJs.includes(marker), `missing campaign settings behavior: ${marker}`);
 
 const combined = `${background}\n${content}\n${optionsJs}`.toLowerCase();
