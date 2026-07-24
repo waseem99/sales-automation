@@ -44,7 +44,7 @@ for (const marker of [
   'CODISTAN_RUN_LINKEDIN_SCHEDULED_SCAN_NOW',
   'CODISTAN_GET_LINKEDIN_AUTOMATION_STATUS',
   'CODISTAN_SET_LINKEDIN_AUTOMATION',
-  'linkedin.com\\/(?:login|checkpoint|authwall)'
+  'linkedin\\.com\\/(?:login|checkpoint|authwall)'
 ]) assert(background.includes(marker), `missing scheduled LinkedIn marker: ${marker}`);
 
 for (const searchId of [
