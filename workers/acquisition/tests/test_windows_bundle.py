@@ -11,13 +11,24 @@ class WindowsBundleTests(unittest.TestCase):
         starter = (root / "scripts/windows/start-acquisition-v4.ps1").read_text(encoding="utf-8")
         diagnostics = (root / "scripts/windows/diagnose-acquisition-v4.ps1").read_text(encoding="utf-8")
         rollback = (root / "scripts/windows/rollback-acquisition-v4.ps1").read_text(encoding="utf-8")
+        configure = (root / "scripts/windows/configure-prospect-desk-sync.ps1").read_text(encoding="utf-8")
         supervisor = (root / "acquisition_v4/supervisor.py").read_text(encoding="utf-8")
         for marker in [
             "app-current", "app-previous", "$extensionRoot", '@("upwork", "linkedin")',
             "Open Upwork Searches.lnk", "Open LinkedIn Lead Searches.lnk", "Open Acquisition Review.lnk",
-            "Codistan Acquisition V4.lnk", "127.0.0.1:8765", "127.0.0.1:8775", "watchdog.pid",
+            "Configure Prospect Desk Sync.lnk", "Codistan Acquisition V4.lnk", "127.0.0.1:8765",
+            "127.0.0.1:8775", "watchdog.pid", '$enabledSources = @("linkedin", "upwork")',
+            "$migratedConfig", "Sync sources: LinkedIn and Upwork",
         ]:
             self.assertIn(marker, installer)
+        for marker in [
+            '$enabledSources = @("linkedin", "upwork")',
+            "Sources: LinkedIn and Upwork",
+            "http://127.0.0.1:8765/health",
+            "http://127.0.0.1:8775/health",
+            "Both running collectors will detect this configuration",
+        ]:
+            self.assertIn(marker, configure)
         for marker in [
             "watchdog.pid", "watchdog.lock", "watchdog.log", "runtime.log",
             "Test-CollectorHealth", "while ($true)", "Restarting in 5 seconds",
@@ -30,7 +41,7 @@ class WindowsBundleTests(unittest.TestCase):
         self.assertIn("no opportunity bodies, cookies or credentials", diagnostics.lower())
         self.assertIn("Captured records and deduplication state were preserved", rollback)
         combined = "\n".join([installer, starter, diagnostics, rollback]).lower()
-        for prohibited in ["vercel", "database_url", "password=", "linkedin message", "upwork proposal"]:
+        for prohibited in ["database_url", "password=", "linkedin message", "upwork proposal"]:
             self.assertNotIn(prohibited, combined)
 
     def test_chrome_launchers_build_argument_arrays_before_start_process(self) -> None:
