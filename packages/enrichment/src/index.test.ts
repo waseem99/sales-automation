@@ -7,7 +7,7 @@ import {
   enrichmentStateEqual,
   readEnrichmentSnapshot,
   type EnrichmentSnapshot,
-} from './index.js';
+} from './public.js';
 
 const now = '2026-07-24T16:00:00.000Z';
 
