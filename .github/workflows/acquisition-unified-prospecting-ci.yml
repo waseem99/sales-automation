@@ -1,0 +1,132 @@
+name: Acquisition Unified Prospecting CI
+
+on:
+  pull_request:
+    branches:
+      - agent/sales-navigator-cold-campaigns-224
+    paths:
+      - '.github/workflows/acquisition-unified-prospecting-ci.yml'
+      - 'workers/acquisition/**'
+      - 'api/acquisition-ingest.ts'
+      - 'vercel/**'
+      - 'vercel.json'
+      - 'scripts/workspace-navigation-smoke.ts'
+      - 'packages/**'
+      - 'apps/web/**'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: acquisition-unified-prospecting-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  runtime:
+    name: Test all collectors, extensions and source contracts
+    runs-on: ubuntu-latest
+    timeout-minutes: 18
+    defaults:
+      run:
+        working-directory: workers/acquisition
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Set up Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Compile runtime
+        run: python -m compileall -q acquisition_v4 tests
+
+      - name: Preserve local runtime and qualification regressions
+        env:
+          PYTHONPATH: .
+        run: |
+          python -m unittest discover -s tests -p 'test_runtime.py' -v
+          python -m unittest discover -s tests -p 'test_qualification.py' -v
+          python -m unittest discover -s tests -p 'test_review.py' -v
+
+      - name: Preserve Sales Navigator cold-campaign regressions
+        env:
+          PYTHONPATH: .
+        run: |
+          python -m unittest discover -s tests -p 'test_sales_navigator.py' -v
+          python -m unittest discover -s tests -p 'test_sales_navigator_runtime.py' -v
+          python -m unittest discover -s tests -p 'test_sales_navigator_acceptance.py' -v
+
+      - name: Test durable sync and Windows bundle
+        env:
+          PYTHONPATH: .
+        run: |
+          python -m unittest discover -s tests -p 'test_sync.py' -v
+          python -m unittest discover -s tests -p 'test_windows_bundle.py' -v
+
+      - name: Validate all browser extension contracts
+        run: |
+          node tests/upwork_extension_contract.mjs
+          node tests/linkedin_extension_contract.mjs
+          node tests/sales_navigator_extension_contract.mjs
+
+      - name: Validate Prospect Desk bridges
+        run: |
+          node tests/prospect_desk_bridge_contract.mjs
+          node tests/sales_navigator_bridge_contract.mjs
+
+      - name: Run three-source localhost integration
+        env:
+          PYTHONPATH: .
+        shell: bash
+        run: |
+          set -euo pipefail
+          state_root="$(mktemp -d)"
+          python -m acquisition_v4.supervisor --state-root "$state_root" >"$state_root/supervisor.log" 2>&1 &
+          runtime_pid=$!
+          trap 'kill "$runtime_pid" 2>/dev/null || true' EXIT
+          sleep 2
+          python -m acquisition_v4.status --json | grep 'upwork'
+          python -m acquisition_v4.status --json | grep 'linkedin'
+          python -m acquisition_v4.status --json | grep 'sales_navigator'
+          python -m acquisition_v4.fixture_submit upwork fixtures/upwork-capture.json | grep '"accepted": 1'
+          python -m acquisition_v4.fixture_submit linkedin fixtures/linkedin-capture.json | grep '"accepted": 1'
+          python -m acquisition_v4.fixture_submit sales_navigator fixtures/sales-navigator-capture.json | grep '"accepted": 1'
+          test -s "$state_root/review/index.html"
+
+  production:
+    name: Compile Prospect Desk and workspace routing
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Install standalone pnpm
+        run: npm install --global --force @pnpm/exe@9.15.9
+
+      - name: Install workspace dependencies
+        run: pnpm install --no-frozen-lockfile
+
+      - name: Build production workspace
+        shell: bash
+        run: |
+          set +e
+          pnpm build:vercel > acquisition-unified-production-build.log 2>&1
+          status=$?
+          tail -n 260 acquisition-unified-production-build.log
+          exit $status
+
+      - name: Validate dedicated workspace routing
+        run: pnpm exec tsx scripts/workspace-navigation-smoke.ts
