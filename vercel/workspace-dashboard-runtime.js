@@ -3,6 +3,7 @@
 const WORKSPACE_ROUTES = new Set([
   '/prospects',
   '/leads/linkedin',
+  '/leads/sales-navigator',
   '/leads/upwork',
   '/leads/rfq',
   '/leads/rfp',
