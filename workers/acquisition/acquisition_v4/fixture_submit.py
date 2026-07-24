@@ -5,11 +5,11 @@ import json
 from pathlib import Path
 from urllib.request import Request, urlopen
 
-PORTS = {"upwork": 8765, "linkedin": 8775}
+PORTS = {"upwork": 8765, "linkedin": 8775, "sales_navigator": 8785}
 
 
 def build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(description="Submit a local sanitized fixture to a V4 collector.")
+    parser = argparse.ArgumentParser(description="Submit a local sanitized fixture to an Acquisition collector.")
     parser.add_argument("source", choices=sorted(PORTS))
     parser.add_argument("fixture", type=Path)
     return parser
