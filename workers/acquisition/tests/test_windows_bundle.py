@@ -16,25 +16,28 @@ class WindowsBundleTests(unittest.TestCase):
         for marker in [
             "app-current", "app-previous", "$extensionRoot", '@("upwork", "linkedin")',
             "Open Upwork Searches.lnk", "Open LinkedIn Lead Searches.lnk", "Open Acquisition Review.lnk",
-            "Configure Prospect Desk Sync.lnk", "Codistan Acquisition V4.lnk", "127.0.0.1:8765",
-            "127.0.0.1:8775", "watchdog.pid", '$enabledSources = @("linkedin", "upwork")',
-            "$migratedConfig", "Sync sources: LinkedIn and Upwork",
+            "Configure Prospect Desk Sync.lnk", "Codistan Acquisition V5.lnk", "127.0.0.1:8765",
+            "127.0.0.1:8775", "127.0.0.1:8785", "watchdog.pid",
+            '$enabledSources = @("linkedin", "upwork", "sales_navigator")',
+            "$migratedConfig", "Sync sources: LinkedIn warm, Upwork and Sales Navigator cold campaigns",
         ]:
             self.assertIn(marker, installer)
         for marker in [
-            '$enabledSources = @("linkedin", "upwork")',
-            "Sources: LinkedIn and Upwork",
+            '$enabledSources = @("linkedin", "upwork", "sales_navigator")',
+            "Sources: LinkedIn warm leads, Upwork jobs and Sales Navigator cold prospects",
             "http://127.0.0.1:8765/health",
             "http://127.0.0.1:8775/health",
-            "Both running collectors will detect this configuration",
+            "http://127.0.0.1:8785/health",
+            "All running collectors will detect this configuration",
         ]:
             self.assertIn(marker, configure)
         for marker in [
             "watchdog.pid", "watchdog.lock", "watchdog.log", "runtime.log",
             "Test-CollectorHealth", "while ($true)", "Restarting in 5 seconds",
-            "acquisition_v4.supervisor",
+            "acquisition_v4.supervisor", "Sales Navigator collector", "8765, 8775, 8785",
         ]:
             self.assertIn(marker, starter)
+        self.assertIn('"sales_navigator": 8785', supervisor)
         self.assertIn("runtime.pid", supervisor)
         self.assertIn("watchdog_pid_present", diagnostics)
         self.assertIn("runtime log tails only", diagnostics.lower())
