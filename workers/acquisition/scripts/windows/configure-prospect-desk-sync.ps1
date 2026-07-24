@@ -11,6 +11,7 @@ $ErrorActionPreference = "Stop"
 $configDirectory = Join-Path $StateRoot "config"
 $configPath = Join-Path $configDirectory "prospect-desk-sync.json"
 New-Item -ItemType Directory -Force -Path $configDirectory | Out-Null
+$enabledSources = @("linkedin", "upwork")
 
 function Read-PlainTextSecret([string]$Prompt) {
     $secure = Read-Host $Prompt -AsSecureString
@@ -29,11 +30,11 @@ if ($Disable) {
         enabled = $false
         endpoint = if ($existing.endpoint) { [string]$existing.endpoint } else { "" }
         token = if ($existing.token) { [string]$existing.token } else { "" }
-        sources = @("linkedin")
+        sources = $enabledSources
         interval_seconds = $IntervalSeconds
     }
     $disabledConfig | ConvertTo-Json -Depth 5 | Set-Content -Path $configPath -Encoding UTF8
-    Write-Host "Prospect Desk sync disabled. Local capture continues normally."
+    Write-Host "Prospect Desk sync disabled. Local Upwork and LinkedIn capture continue normally."
     Write-Host "Config: $configPath"
     exit 0
 }
@@ -70,7 +71,7 @@ $config = [ordered]@{
     enabled = $true
     endpoint = $Endpoint
     token = $Token
-    sources = @("linkedin")
+    sources = $enabledSources
     interval_seconds = $IntervalSeconds
 }
 $config | ConvertTo-Json -Depth 5 | Set-Content -Path $configPath -Encoding UTF8
@@ -78,17 +79,22 @@ $config | ConvertTo-Json -Depth 5 | Set-Content -Path $configPath -Encoding UTF8
 Write-Host ""
 Write-Host "Prospect Desk sync configured."
 Write-Host "Endpoint host: $($uri.Host)"
-Write-Host "Sources: LinkedIn"
+Write-Host "Sources: LinkedIn and Upwork"
 Write-Host "Retry interval: $IntervalSeconds seconds"
 Write-Host "Token: stored locally and not printed"
 Write-Host "Config: $configPath"
-Write-Host "The running collector will detect this configuration within one minute."
+Write-Host "Both running collectors will detect this configuration within one minute."
 
-try {
-    $health = Invoke-RestMethod -Uri "http://127.0.0.1:8775/health" -TimeoutSec 3
-    if ($health.ready) {
-        Write-Host "LinkedIn collector is healthy. Existing unsynced records will be queued automatically."
+foreach ($collector in @(
+    @{ Name = "Upwork"; Url = "http://127.0.0.1:8765/health" },
+    @{ Name = "LinkedIn"; Url = "http://127.0.0.1:8775/health" }
+)) {
+    try {
+        $health = Invoke-RestMethod -Uri $collector.Url -TimeoutSec 3
+        if ($health.ready) {
+            Write-Host "$($collector.Name) collector is healthy. Existing unsynced records will be queued automatically."
+        }
+    } catch {
+        Write-Warning "$($collector.Name) collector is not currently reachable. Start Acquisition V4; sync will resume automatically."
     }
-} catch {
-    Write-Warning "The LinkedIn collector is not currently reachable. Start Acquisition V4; sync will resume automatically."
 }
