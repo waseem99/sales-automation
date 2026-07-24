@@ -65,6 +65,11 @@ jobs:
           PYTHONPATH: .
         run: python -m unittest discover -s tests -p 'test_sales_navigator_runtime.py' -v
 
+      - name: Test Sales Navigator pilot acceptance reporting
+        env:
+          PYTHONPATH: .
+        run: python -m unittest discover -s tests -p 'test_sales_navigator_acceptance.py' -v
+
       - name: Test durable sync and Windows bundle
         env:
           PYTHONPATH: .
