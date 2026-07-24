@@ -62,4 +62,10 @@ jobs:
           exit $status
 
       - name: Type-check Vercel runtime
-        run: pnpm typecheck:vercel
+        shell: bash
+        run: |
+          set +e
+          pnpm typecheck:vercel > acquisition-identity-typecheck.log 2>&1
+          status=$?
+          tail -n 180 acquisition-identity-typecheck.log
+          exit $status
