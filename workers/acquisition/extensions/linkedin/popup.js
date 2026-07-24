@@ -5,6 +5,7 @@
   const MAX_SCROLL_STEPS = 4;
   const MAX_RECORDS = 30;
   const SCROLL_WAIT_MS = 2500;
+  const CONTENT_SCRIPT_FILES = ["signal.js", "dom-adapter.js", "search-resolver.js", "content.js"];
   const captureButton = document.getElementById("capture");
   const scanMoreButton = document.getElementById("scanMore");
   const statusNode = document.getElementById("status");
@@ -16,6 +17,50 @@
   function setBusy(busy) {
     captureButton.disabled = busy;
     scanMoreButton.disabled = busy;
+  }
+
+  function sleep(milliseconds) {
+    return new Promise(resolve => setTimeout(resolve, milliseconds));
+  }
+
+  function isLinkedInTab(tab) {
+    try {
+      const url = new URL(String(tab?.url || ""));
+      return ["linkedin.com", "www.linkedin.com"].includes(url.hostname);
+    } catch (_error) {
+      return false;
+    }
+  }
+
+  function missingReceiver(error) {
+    const message = error instanceof Error ? error.message : String(error || "");
+    return /receiving end does not exist|could not establish connection|message port closed/i.test(message);
+  }
+
+  async function injectCurrentScripts(tab) {
+    if (!tab?.id || !isLinkedInTab(tab)) {
+      throw new Error("Open a normal LinkedIn search, feed, or post page before running capture.");
+    }
+    await chrome.scripting.executeScript({
+      target: {tabId: tab.id},
+      files: CONTENT_SCRIPT_FILES
+    });
+    await sleep(350);
+  }
+
+  async function sendToTab(tab, message) {
+    try {
+      return await chrome.tabs.sendMessage(tab.id, message);
+    } catch (error) {
+      if (!missingReceiver(error)) throw error;
+      setStatus("The LinkedIn tab was opened before the latest extension update. Repairing the tab and retrying…");
+      await injectCurrentScripts(tab);
+      try {
+        return await chrome.tabs.sendMessage(tab.id, message);
+      } catch (retryError) {
+        throw new Error(`The LinkedIn tab could not be repaired automatically. Refresh this tab once and retry. ${retryError instanceof Error ? retryError.message : String(retryError)}`);
+      }
+    }
   }
 
   function diagnosticSummary(diagnostics = {}) {
@@ -44,11 +89,12 @@
   async function activeTab() {
     const tabs = await chrome.tabs.query({active: true, currentWindow: true});
     if (!tabs.length || !tabs[0].id) throw new Error("No active browser tab was found.");
+    if (!isLinkedInTab(tabs[0])) throw new Error("Open a LinkedIn content search, feed, or individual post before running capture.");
     return tabs[0];
   }
 
-  async function readVisible(tabId, limit = MAX_RECORDS) {
-    const result = await chrome.tabs.sendMessage(tabId, {type: "CODISTAN_CAPTURE_VISIBLE_LINKEDIN_POSTS", limit});
+  async function readVisible(tab, limit = MAX_RECORDS) {
+    const result = await sendToTab(tab, {type: "CODISTAN_CAPTURE_VISIBLE_LINKEDIN_POSTS", limit});
     if (!result?.ok) throw new Error(result?.error || "Visible-post capture failed.");
     return result;
   }
@@ -96,7 +142,7 @@
     setStatus("Reviewing visible LinkedIn posts for direct service requirements…");
     try {
       const tab = await activeTab();
-      const result = await readVisible(tab.id, MAX_RECORDS);
+      const result = await readVisible(tab, MAX_RECORDS);
       if (!Array.isArray(result.records) || result.records.length === 0) {
         setStatus(`No direct supported service requirements were captured. ${diagnosticSummary(result.diagnostics)}`);
         return;
@@ -118,12 +164,12 @@
     let originalTop = 0;
     try {
       tab = await activeTab();
-      const status = await chrome.tabs.sendMessage(tab.id, {type: "CODISTAN_LINKEDIN_SCROLL_STATUS"});
-      if (!status?.ok) throw new Error(status?.error || "The LinkedIn scroll controller is unavailable. Reload the page after updating the extension.");
+      const status = await sendToTab(tab, {type: "CODISTAN_LINKEDIN_SCROLL_STATUS"});
+      if (!status?.ok) throw new Error(status?.error || "The LinkedIn scroll controller is unavailable.");
       originalTop = Number(status.top || 0);
 
       const recordMap = new Map();
-      let latestResult = await readVisible(tab.id, MAX_RECORDS);
+      let latestResult = await readVisible(tab, MAX_RECORDS);
       addRecords(recordMap, latestResult.records);
       let scrollSteps = 0;
       let noGrowthRounds = 0;
@@ -131,7 +177,7 @@
 
       for (let step = 0; step < MAX_SCROLL_STEPS && recordMap.size < MAX_RECORDS; step += 1) {
         setStatus(`Loading more LinkedIn results — step ${step + 1} of ${MAX_SCROLL_STEPS}; ${recordMap.size} unique opportunities resolved so far…`);
-        const scrollResult = await chrome.tabs.sendMessage(tab.id, {
+        const scrollResult = await sendToTab(tab, {
           type: "CODISTAN_SCROLL_LINKEDIN_RESULTS",
           wait_ms: SCROLL_WAIT_MS
         });
@@ -141,7 +187,7 @@
           break;
         }
         scrollSteps += 1;
-        latestResult = await readVisible(tab.id, MAX_RECORDS);
+        latestResult = await readVisible(tab, MAX_RECORDS);
         const added = addRecords(recordMap, latestResult.records);
         const documentGrew = Number(scrollResult.after_height || 0) > Number(scrollResult.before_height || 0) + 20;
         if (added === 0 && !documentGrew) noGrowthRounds += 1;
@@ -169,7 +215,7 @@
       setStatus(error instanceof Error ? error.message : String(error));
     } finally {
       if (tab?.id) {
-        await chrome.tabs.sendMessage(tab.id, {type: "CODISTAN_RESTORE_LINKEDIN_SCROLL", top: originalTop}).catch(() => {});
+        await sendToTab(tab, {type: "CODISTAN_RESTORE_LINKEDIN_SCROLL", top: originalTop}).catch(() => {});
       }
       setBusy(false);
     }
