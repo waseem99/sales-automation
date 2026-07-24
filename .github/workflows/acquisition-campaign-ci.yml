@@ -1,0 +1,134 @@
+name: Acquisition Offer Campaign CI
+
+on:
+  pull_request:
+    branches:
+      - agent/evidence-enrichment-229
+    paths:
+      - '.github/workflows/acquisition-campaign-ci.yml'
+      - 'packages/campaign-engine/**'
+      - 'api/acquisition-ingest.ts'
+      - 'vercel/acquisition-campaign-runtime.ts'
+      - 'workers/acquisition/extensions/linkedin/**'
+      - 'workers/acquisition/tests/campaign_engine_bridge_contract.mjs'
+      - 'workers/acquisition/tests/linkedin_extension_contract.mjs'
+      - 'workers/acquisition/tests/sales_navigator_extension_contract.mjs'
+      - 'tsconfig.acquisition-campaign.json'
+      - 'package.json'
+      - 'pnpm-lock.yaml'
+      - 'packages/**'
+      - 'apps/web/**'
+      - 'vercel/**'
+      - 'scripts/**'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: acquisition-campaign-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  campaign:
+    name: Test offer portfolio, browser campaigns and production integration
+    runs-on: ubuntu-latest
+    timeout-minutes: 26
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Install standalone pnpm
+        run: npm install --global --force @pnpm/exe@9.15.9
+
+      - name: Install workspace dependencies
+        run: pnpm install --no-frozen-lockfile
+
+      - name: Test offer and campaign behavior
+        run: pnpm --filter @sales-automation/campaign-engine test
+
+      - name: Validate campaign production bridge
+        working-directory: workers/acquisition
+        run: node tests/campaign_engine_bridge_contract.mjs
+
+      - name: Preserve warm LinkedIn and Sales Navigator extension contracts
+        working-directory: workers/acquisition
+        run: |
+          node tests/linkedin_extension_contract.mjs
+          node tests/sales_navigator_extension_contract.mjs
+
+      - name: Build full production workspace
+        shell: bash
+        run: |
+          set +e
+          pnpm build:vercel > acquisition-campaign-production-build.log 2>&1
+          status=$?
+          tail -n 340 acquisition-campaign-production-build.log
+          exit $status
+
+  typecheck:
+    name: Type-check acquisition campaign integration
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Install standalone pnpm
+        run: npm install --global --force @pnpm/exe@9.15.9
+
+      - name: Install workspace dependencies
+        run: pnpm install --no-frozen-lockfile
+
+      - name: Build all workspace packages
+        id: campaign_workspace_build
+        continue-on-error: true
+        shell: bash
+        run: pnpm build > acquisition-campaign-build.log 2>&1
+
+      - name: Type-check campaign ingestion runtime
+        id: campaign_typecheck
+        if: steps.campaign_workspace_build.outcome == 'success'
+        continue-on-error: true
+        shell: bash
+        run: pnpm exec tsc -p tsconfig.acquisition-campaign.json --noEmit > acquisition-campaign-typecheck.log 2>&1
+
+      - name: Preserve diagnostic files
+        if: always()
+        shell: bash
+        run: |
+          test -f acquisition-campaign-build.log || touch acquisition-campaign-build.log
+          test -f acquisition-campaign-typecheck.log || touch acquisition-campaign-typecheck.log
+
+      - name: Upload campaign diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: acquisition-campaign-typecheck
+          path: |
+            acquisition-campaign-build.log
+            acquisition-campaign-typecheck.log
+          if-no-files-found: error
+          retention-days: 3
+
+      - name: Enforce campaign workspace build
+        if: steps.campaign_workspace_build.outcome != 'success'
+        run: |
+          cat acquisition-campaign-build.log
+          exit 1
+
+      - name: Enforce campaign type-check
+        if: steps.campaign_workspace_build.outcome == 'success' && steps.campaign_typecheck.outcome != 'success'
+        run: |
+          cat acquisition-campaign-typecheck.log
+          exit 1
