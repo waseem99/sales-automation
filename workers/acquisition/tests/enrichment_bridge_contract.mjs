@@ -6,12 +6,14 @@ const repoRoot = path.resolve("../..");
 const rootPackage = JSON.parse(fs.readFileSync(path.join(repoRoot, "package.json"), "utf8"));
 const packageJson = JSON.parse(fs.readFileSync(path.join(repoRoot, "packages/enrichment/package.json"), "utf8"));
 const source = fs.readFileSync(path.join(repoRoot, "packages/enrichment/src/index.ts"), "utf8");
+const publicSource = fs.readFileSync(path.join(repoRoot, "packages/enrichment/src/public.ts"), "utf8");
 const tests = fs.readFileSync(path.join(repoRoot, "packages/enrichment/src/index.test.ts"), "utf8");
 const runtime = fs.readFileSync(path.join(repoRoot, "vercel/acquisition-enrichment-runtime.ts"), "utf8");
 const endpoint = fs.readFileSync(path.join(repoRoot, "api/acquisition-ingest.ts"), "utf8");
 
 assert.equal(rootPackage.dependencies["@sales-automation/enrichment"], "workspace:*");
 assert.equal(packageJson.name, "@sales-automation/enrichment");
+assert.equal(packageJson.main, "dist/public.js");
 assert.equal(packageJson.scripts.test, "tsx src/index.test.ts");
 
 for (const marker of [
@@ -37,6 +39,13 @@ for (const marker of [
 ]) assert(source.includes(marker), `enrichment package missing marker: ${marker}`);
 
 for (const marker of [
+  "suppression.suppressed",
+  "status: 'suppressed' as const",
+  "tasks: []",
+  "contactability: 'suppressed'"
+]) assert(publicSource.includes(marker), `suppression-safe public API missing marker: ${marker}`);
+
+for (const marker of [
   "verificationStatus, 'candidate'",
   "verificationStatus, 'verified'",
   "providerMode.mode, 'source_visible_only'",
@@ -60,7 +69,9 @@ for (const marker of [
   "humanReviewRequired: true"
 ]) assert(runtime.includes(marker), `enrichment runtime missing marker: ${marker}`);
 
-assert(endpoint.indexOf("applyIdentityGraphAfterIntake") < endpoint.indexOf("applyEnrichmentAfterIntake"));
+const identityInvocation = endpoint.indexOf("const identityResponse = await applyIdentityGraphAfterIntake");
+const enrichmentInvocation = endpoint.indexOf("return applyEnrichmentAfterIntake");
+assert(identityInvocation >= 0 && enrichmentInvocation > identityInvocation, "identity must execute before enrichment");
 assert(endpoint.includes("response: identityResponse"));
 assert(endpoint.includes("databaseUrl"));
 
