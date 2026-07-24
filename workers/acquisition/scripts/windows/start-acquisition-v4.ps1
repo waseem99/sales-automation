@@ -26,6 +26,7 @@ $watchdogPidFile = Join-Path $StateRoot "watchdog.pid"
 $watchdogLockPath = Join-Path $StateRoot "watchdog.lock"
 $watchdogLog = Join-Path $logRoot "watchdog.log"
 $runtimeLog = Join-Path $logRoot "runtime.log"
+$collectorPorts = @(8765, 8775, 8785)
 
 function Write-WatchdogLog([string]$Message) {
     $line = "{0} {1}" -f (Get-Date).ToString("o"), $Message
@@ -37,9 +38,11 @@ function Test-CollectorHealth {
     try {
         $upwork = Invoke-RestMethod -Uri "http://127.0.0.1:8765/health" -TimeoutSec 2
         $linkedin = Invoke-RestMethod -Uri "http://127.0.0.1:8775/health" -TimeoutSec 2
-        return ($upwork.ready -and $linkedin.ready -and
+        $salesNavigator = Invoke-RestMethod -Uri "http://127.0.0.1:8785/health" -TimeoutSec 2
+        return ($upwork.ready -and $linkedin.ready -and $salesNavigator.ready -and
             $upwork.schema_version -eq "codistan-acquisition-health.v1" -and
-            $linkedin.schema_version -eq "codistan-acquisition-health.v1")
+            $linkedin.schema_version -eq "codistan-acquisition-health.v1" -and
+            $salesNavigator.schema_version -eq "codistan-acquisition-health.v1")
     } catch {
         return $false
     }
@@ -55,15 +58,16 @@ try {
             [System.IO.FileShare]::None
         )
     } catch [System.IO.IOException] {
-        Write-Host "Another Acquisition V4 watchdog is already running."
+        Write-Host "Another Acquisition watchdog is already running."
         exit 0
     }
 
     Set-Content -Path $watchdogPidFile -Value $PID -Encoding ASCII
-    Write-WatchdogLog "Acquisition V4 watchdog started with PID $PID."
+    Write-WatchdogLog "Acquisition watchdog started with PID $PID."
     Write-Host "State: $StateRoot"
-    Write-Host "Upwork collector:  http://127.0.0.1:8765/health"
-    Write-Host "LinkedIn collector: http://127.0.0.1:8775/health"
+    Write-Host "Upwork collector:         http://127.0.0.1:8765/health"
+    Write-Host "LinkedIn collector:       http://127.0.0.1:8775/health"
+    Write-Host "Sales Navigator collector:http://127.0.0.1:8785/health"
 
     while ($true) {
         if (Test-CollectorHealth) {
@@ -72,8 +76,8 @@ try {
         }
 
         $foreignListeners = @()
-        $v4Listeners = @()
-        $listeners = Get-NetTCPConnection -State Listen -LocalPort 8765,8775 -ErrorAction SilentlyContinue
+        $managedListeners = @()
+        $listeners = Get-NetTCPConnection -State Listen -LocalPort $collectorPorts -ErrorAction SilentlyContinue
         foreach ($listener in $listeners) {
             $process = Get-CimInstance Win32_Process -Filter "ProcessId=$($listener.OwningProcess)" -ErrorAction SilentlyContinue
             $entry = [pscustomobject]@{
@@ -81,18 +85,18 @@ try {
                 ProcessId = $listener.OwningProcess
                 CommandLine = [string]$process.CommandLine
             }
-            if ($entry.CommandLine -match "acquisition_v4\.supervisor") { $v4Listeners += $entry }
+            if ($entry.CommandLine -match "acquisition_v4\.supervisor") { $managedListeners += $entry }
             else { $foreignListeners += $entry }
         }
 
         if ($foreignListeners.Count -gt 0) {
             $summary = ($foreignListeners | ForEach-Object { "port $($_.Port), PID $($_.ProcessId)" }) -join "; "
-            Write-WatchdogLog "Cannot start V4 because another process owns an acquisition port: $summary. Retrying in 30 seconds."
+            Write-WatchdogLog "Cannot start Acquisition because another process owns a collector port: $summary. Retrying in 30 seconds."
             Start-Sleep -Seconds 30
             continue
         }
 
-        foreach ($listenerProcessId in ($v4Listeners | Select-Object -ExpandProperty ProcessId -Unique)) {
+        foreach ($listenerProcessId in ($managedListeners | Select-Object -ExpandProperty ProcessId -Unique)) {
             Stop-Process -Id $listenerProcessId -Force -ErrorAction SilentlyContinue
         }
         if (Test-Path $runtimePidFile) {
@@ -103,13 +107,13 @@ try {
         }
         Start-Sleep -Seconds 2
 
-        Write-WatchdogLog "Starting Acquisition V4 supervisor."
+        Write-WatchdogLog "Starting Acquisition supervisor."
         Add-Content -Path $runtimeLog -Value ("`r`n===== {0} supervisor start =====" -f (Get-Date).ToString("o")) -Encoding UTF8
         & $pythonExe @pythonArgs -u -m acquisition_v4.supervisor `
             --state-root $StateRoot `
             --pid-file $runtimePidFile >> $runtimeLog 2>&1
         $exitCode = $LASTEXITCODE
-        Write-WatchdogLog "Acquisition V4 supervisor exited with code $exitCode. Restarting in 5 seconds."
+        Write-WatchdogLog "Acquisition supervisor exited with code $exitCode. Restarting in 5 seconds."
         Start-Sleep -Seconds 5
     }
 } finally {
