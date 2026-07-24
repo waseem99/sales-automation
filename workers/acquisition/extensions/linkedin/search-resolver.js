@@ -44,25 +44,71 @@
     return "";
   }
 
-  function isVisible(element) {
-    if (!(element instanceof Element)) return false;
-    const rect = element.getBoundingClientRect();
+  function styleAllowsRendering(element) {
+    if (!(element instanceof Element) || !element.isConnected) return false;
     const style = window.getComputedStyle(element);
-    return rect.width > 0 && rect.height > 0 && style.display !== "none" && style.visibility !== "hidden";
+    return style.display !== "none" && style.visibility !== "hidden" && style.opacity !== "0";
+  }
+
+  function largestRect(rects) {
+    let best = null;
+    for (const rect of rects || []) {
+      if (!rect || rect.width <= 0 || rect.height <= 0) continue;
+      if (!best || rect.width * rect.height > best.width * best.height) best = rect;
+    }
+    return best;
+  }
+
+  function renderedRect(element) {
+    if (!styleAllowsRendering(element)) return null;
+    const own = largestRect(element.getClientRects());
+    if (own) return own;
+    const descendants = element.querySelectorAll("span, time, strong, small, svg, img");
+    for (let index = 0; index < Math.min(descendants.length, 30); index += 1) {
+      const child = descendants[index];
+      if (!styleAllowsRendering(child)) continue;
+      const rect = largestRect(child.getClientRects());
+      if (rect) return rect;
+    }
+    return null;
+  }
+
+  function isVisible(element) {
+    return Boolean(renderedRect(element));
+  }
+
+  function elementValues(element, ancestorDepth = 3) {
+    const values = [];
+    let node = element;
+    for (let depth = 0; node instanceof Element && depth <= ancestorDepth; depth += 1, node = node.parentElement) {
+      if (node instanceof HTMLAnchorElement) values.push(node.href || node.getAttribute("href") || "");
+      for (const attribute of node.attributes || []) values.push(String(attribute.value || ""));
+    }
+    return values.filter(Boolean);
+  }
+
+  function canonicalFromElement(element) {
+    for (const value of elementValues(element, 5)) {
+      const canonical = canonicalPostUrl(value);
+      if (canonical) return canonical;
+    }
+    return "";
   }
 
   function canonicalAnchors() {
     const anchors = [];
-    for (const anchor of document.querySelectorAll("a[href]")) {
-      const canonical = canonicalPostUrl(anchor.href || anchor.getAttribute("href") || "");
-      if (!canonical || !isVisible(anchor)) continue;
-      const rect = anchor.getBoundingClientRect();
+    const selector = 'a[href], [role="link"], time, [data-test-id*="timestamp"]';
+    for (const node of document.querySelectorAll(selector)) {
+      const canonical = canonicalFromElement(node);
+      if (!canonical) continue;
+      const rect = renderedRect(node);
+      if (!rect) continue;
       anchors.push({
-        anchor,
+        node,
         canonical,
         rect,
-        text: normalize(anchor.innerText || anchor.textContent || ""),
-        label: normalize(anchor.getAttribute("aria-label") || anchor.getAttribute("title") || "")
+        text: normalize(node.innerText || node.textContent || ""),
+        label: normalize(node.getAttribute("aria-label") || node.getAttribute("title") || "")
       });
     }
     return anchors;
@@ -71,35 +117,40 @@
   function anchorMatchesCard(cardRect, anchorRect) {
     const centerX = anchorRect.left + anchorRect.width / 2;
     const centerY = anchorRect.top + anchorRect.height / 2;
-    return centerY >= cardRect.top - 48
-      && centerY <= cardRect.bottom + 48
-      && centerX >= cardRect.left - 90
-      && centerX <= cardRect.right + 90;
+    return centerY >= cardRect.top - 64
+      && centerY <= cardRect.bottom + 64
+      && centerX >= cardRect.left - 120
+      && centerX <= cardRect.right + 120;
   }
 
   function directCardLink(card) {
-    const cardRect = card.getBoundingClientRect();
-    for (const anchor of card.querySelectorAll("a[href]")) {
-      const canonical = canonicalPostUrl(anchor.href || anchor.getAttribute("href") || "");
+    const existing = canonicalPostUrl(card.getAttribute("data-codistan-canonical-url") || "");
+    if (existing) return existing;
+
+    for (const node of card.querySelectorAll('a[href], [role="link"], time, [data-test-id*="timestamp"]')) {
+      const canonical = canonicalFromElement(node);
       if (canonical) return canonical;
     }
+
+    const cardRect = renderedRect(card) || card.getBoundingClientRect();
     let parent = card.parentElement;
-    for (let depth = 0; parent instanceof Element && depth < 8; depth += 1, parent = parent.parentElement) {
-      if (parent.matches("main, [role='main']")) break;
-      for (const anchor of parent.querySelectorAll("a[href]")) {
-        const text = normalize(anchor.innerText || anchor.textContent || "");
-        const label = normalize(anchor.getAttribute("aria-label") || anchor.getAttribute("title") || "");
+    for (let depth = 0; parent instanceof Element && depth < 14; depth += 1, parent = parent.parentElement) {
+      for (const node of parent.querySelectorAll('a[href], [role="link"], time, [data-test-id*="timestamp"]')) {
+        const text = normalize(node.innerText || node.textContent || "");
+        const label = normalize(node.getAttribute("aria-label") || node.getAttribute("title") || "");
         if (!AGE_TEXT.test(text) && !/\b(?:ago|post)\b/i.test(label)) continue;
-        if (!anchorMatchesCard(cardRect, anchor.getBoundingClientRect())) continue;
-        const canonical = canonicalPostUrl(anchor.href || anchor.getAttribute("href") || "");
+        const rect = renderedRect(node);
+        if (!rect || !anchorMatchesCard(cardRect, rect)) continue;
+        const canonical = canonicalFromElement(node);
         if (canonical) return canonical;
       }
+      if (parent.matches("main, [role='main']")) break;
     }
     return "";
   }
 
   function spatialCardLink(card, anchors) {
-    const cardRect = card.getBoundingClientRect();
+    const cardRect = renderedRect(card) || card.getBoundingClientRect();
     let best = null;
     for (const item of anchors) {
       if (!anchorMatchesCard(cardRect, item.rect)) continue;
@@ -127,11 +178,7 @@
         card.removeAttribute("data-codistan-canonical-url");
       }
     }
-    return {visible_cards: visibleCards, resolved_cards: resolved};
-  }
-
-  function scrollingElement() {
-    return document.scrollingElement || document.documentElement;
+    return {visible_cards: visibleCards, resolved_cards: resolved, canonical_anchors: anchors.length};
   }
 
   function clampNumber(value, minimum, maximum, fallback) {
@@ -144,45 +191,155 @@
     return new Promise(resolve => setTimeout(resolve, milliseconds));
   }
 
+  function documentScroller(element) {
+    return element === document.scrollingElement || element === document.documentElement || element === document.body;
+  }
+
+  function scrollerTop(element) {
+    return documentScroller(element) ? Number(window.scrollY || document.documentElement.scrollTop || document.body.scrollTop || 0) : Number(element.scrollTop || 0);
+  }
+
+  function scrollerHeight(element) {
+    if (documentScroller(element)) {
+      return Math.max(
+        Number(document.documentElement.scrollHeight || 0),
+        Number(document.body?.scrollHeight || 0),
+        Number(element?.scrollHeight || 0)
+      );
+    }
+    return Number(element.scrollHeight || 0);
+  }
+
+  function scrollerViewport(element) {
+    return documentScroller(element) ? Math.max(300, Number(window.innerHeight || document.documentElement.clientHeight || 800)) : Math.max(300, Number(element.clientHeight || 0));
+  }
+
+  function scrollerWidth(element) {
+    return documentScroller(element) ? Math.max(300, Number(window.innerWidth || document.documentElement.clientWidth || 1200)) : Math.max(100, Number(element.clientWidth || 0));
+  }
+
+  function setScrollerTop(element, top, behavior = "auto") {
+    if (documentScroller(element)) window.scrollTo({top, behavior});
+    else element.scrollTo({top, behavior});
+  }
+
+  function scrollCandidates() {
+    const candidates = new Set();
+    if (document.scrollingElement) candidates.add(document.scrollingElement);
+    candidates.add(document.documentElement);
+    if (document.body) candidates.add(document.body);
+
+    const cards = [...document.querySelectorAll(CARD_SELECTOR)];
+    for (const card of cards) {
+      let node = card.parentElement;
+      for (let depth = 0; node instanceof Element && depth < 18; depth += 1, node = node.parentElement) {
+        candidates.add(node);
+        if (node.matches("main, [role='main']")) candidates.add(node);
+      }
+    }
+
+    const ranked = [];
+    for (const element of candidates) {
+      if (!(element instanceof Element)) continue;
+      const height = scrollerHeight(element);
+      const viewport = scrollerViewport(element);
+      const range = Math.max(0, height - viewport);
+      if (range <= 40) continue;
+      const cardCount = cards.filter(card => element.contains(card)).length;
+      const style = window.getComputedStyle(element);
+      const overflowY = String(style.overflowY || "");
+      const overflowBonus = /auto|scroll|overlay/i.test(overflowY) ? 500000 : 0;
+      const documentBonus = documentScroller(element) ? 250000 : 0;
+      const score = cardCount * 1000000 + overflowBonus + documentBonus + Math.min(range, 200000) + Math.min(scrollerWidth(element) * viewport, 500000);
+      ranked.push({element, range, card_count: cardCount, score, kind: documentScroller(element) ? "document" : `${element.tagName.toLowerCase()}${element.id ? `#${element.id}` : ""}`});
+    }
+    ranked.sort((a, b) => b.score - a.score);
+    return ranked;
+  }
+
+  function currentScrollStatus() {
+    const candidates = scrollCandidates();
+    const chosen = candidates[0] || {element: document.scrollingElement || document.documentElement, range: 0, card_count: 0, kind: "document"};
+    return {
+      element: chosen.element,
+      top: scrollerTop(chosen.element),
+      height: scrollerHeight(chosen.element),
+      viewport: scrollerViewport(chosen.element),
+      range: chosen.range,
+      scroller_kind: chosen.kind,
+      scroller_candidates: candidates.length,
+      scroller_card_count: chosen.card_count
+    };
+  }
+
   async function scrollOneStep(message = {}) {
     const url = new URL(window.location.href);
     if (!url.pathname.startsWith("/search/results/content")) {
       throw new Error("Bounded scrolling is available only on LinkedIn content-search pages.");
     }
-    const scroller = scrollingElement();
-    const beforeTop = Number(scroller.scrollTop || window.scrollY || 0);
-    const beforeHeight = Number(scroller.scrollHeight || document.documentElement.scrollHeight || 0);
-    const viewport = Math.max(600, Number(window.innerHeight || 800));
-    const stepPixels = clampNumber(message.step_pixels, 500, 1400, Math.round(viewport * 0.85));
-    const maximumTop = Math.max(0, beforeHeight - viewport);
-    const targetTop = Math.min(maximumTop, beforeTop + stepPixels);
-    if (targetTop <= beforeTop + 8) {
-      const cards = resolveVisibleCards();
-      return {ok: true, moved: false, at_end: true, before_top: beforeTop, after_top: beforeTop, before_height: beforeHeight, after_height: beforeHeight, ...cards};
-    }
-    window.scrollTo({top: targetTop, behavior: "smooth"});
+
     const waitMs = clampNumber(message.wait_ms, MIN_WAIT_MS, MAX_WAIT_MS, DEFAULT_WAIT_MS);
-    await sleep(waitMs);
+    const ranked = scrollCandidates();
+    if (!ranked.length) {
+      const cards = resolveVisibleCards();
+      return {ok: true, moved: false, at_end: true, before_top: 0, after_top: 0, before_height: 0, after_height: 0, scroller_kind: "none", scroller_candidates: 0, ...cards};
+    }
+
+    for (const candidate of ranked.slice(0, 6)) {
+      const scroller = candidate.element;
+      const beforeTop = scrollerTop(scroller);
+      const beforeHeight = scrollerHeight(scroller);
+      const viewport = scrollerViewport(scroller);
+      const stepPixels = clampNumber(message.step_pixels, 500, 1400, Math.round(viewport * 0.85));
+      const maximumTop = Math.max(0, beforeHeight - viewport);
+      const targetTop = Math.min(maximumTop, beforeTop + stepPixels);
+      if (targetTop <= beforeTop + 8) continue;
+
+      setScrollerTop(scroller, targetTop, "smooth");
+      await sleep(waitMs);
+      const afterTop = scrollerTop(scroller);
+      const afterHeight = scrollerHeight(scroller);
+      if (afterTop <= beforeTop + 8) continue;
+
+      const cards = resolveVisibleCards();
+      return {
+        ok: true,
+        moved: true,
+        at_end: afterTop >= Math.max(0, afterHeight - viewport - 12),
+        before_top: beforeTop,
+        after_top: afterTop,
+        before_height: beforeHeight,
+        after_height: afterHeight,
+        scroller_kind: candidate.kind,
+        scroller_candidates: ranked.length,
+        scroller_card_count: candidate.card_count,
+        ...cards
+      };
+    }
+
+    const status = currentScrollStatus();
     const cards = resolveVisibleCards();
-    const afterTop = Number(scroller.scrollTop || window.scrollY || 0);
-    const afterHeight = Number(scroller.scrollHeight || document.documentElement.scrollHeight || 0);
     return {
       ok: true,
-      moved: afterTop > beforeTop + 8,
-      at_end: afterTop >= Math.max(0, afterHeight - viewport - 12),
-      before_top: beforeTop,
-      after_top: afterTop,
-      before_height: beforeHeight,
-      after_height: afterHeight,
+      moved: false,
+      at_end: status.top >= Math.max(0, status.height - status.viewport - 12),
+      before_top: status.top,
+      after_top: status.top,
+      before_height: status.height,
+      after_height: status.height,
+      scroller_kind: status.scroller_kind,
+      scroller_candidates: status.scroller_candidates,
+      scroller_card_count: status.scroller_card_count,
       ...cards
     };
   }
 
   function restoreScroll(message = {}) {
     const top = clampNumber(message.top, 0, 100000000, 0);
-    window.scrollTo({top, behavior: "auto"});
+    const status = currentScrollStatus();
+    setScrollerTop(status.element, top, "auto");
     const cards = resolveVisibleCards();
-    return {ok: true, restored_top: top, ...cards};
+    return {ok: true, restored_top: top, scroller_kind: status.scroller_kind, ...cards};
   }
 
   let pendingResolve = null;
@@ -191,21 +348,35 @@
     pendingResolve = setTimeout(() => {
       pendingResolve = null;
       resolveVisibleCards();
-    }, 350);
+    }, 250);
   }
 
   const observer = new MutationObserver(scheduleResolve);
-  observer.observe(document.documentElement, {childList: true, subtree: true, attributes: true, attributeFilter: ["href", "data-urn", "data-id"]});
+  observer.observe(document.documentElement, {childList: true, subtree: true, attributes: true, attributeFilter: ["href", "data-urn", "data-id", "aria-label", "title"]});
   scheduleResolve();
+
+  globalThis.CodistanLinkedInSearchResolver = {
+    resolveVisibleCards,
+    currentScrollStatus
+  };
 
   chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
     if (!message) return false;
+    if (message.type === "CODISTAN_RESOLVE_LINKEDIN_LINKS") {
+      sendResponse({ok: true, ...resolveVisibleCards()});
+      return false;
+    }
     if (message.type === "CODISTAN_LINKEDIN_SCROLL_STATUS") {
-      const scroller = scrollingElement();
+      const status = currentScrollStatus();
       sendResponse({
         ok: true,
-        top: Number(scroller.scrollTop || window.scrollY || 0),
-        height: Number(scroller.scrollHeight || document.documentElement.scrollHeight || 0),
+        top: status.top,
+        height: status.height,
+        viewport: status.viewport,
+        range: status.range,
+        scroller_kind: status.scroller_kind,
+        scroller_candidates: status.scroller_candidates,
+        scroller_card_count: status.scroller_card_count,
         ...resolveVisibleCards()
       });
       return false;
