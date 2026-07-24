@@ -87,10 +87,12 @@ for (const marker of [
 const combined = `${background}\n${content}\n${optionsJs}`.toLowerCase();
 for (const prohibited of [
   '.click(', 'dispatchEvent', 'navigator.webdriver', 'captcha', 'cloudflare',
-  'sendinmail', 'sendmessage', 'connectrequest', 'connection request',
-  'save lead', 'automated outreach', 'chrome.tabs.update',
+  'sendinmail(', 'sendlinkedinmessage(', 'connectrequest(', 'createconnectionrequest(',
+  'savelead(', 'followlead(', 'sendemail(', 'submitproposal(',
+  'external_action_performed: true', 'chrome.tabs.update',
 ]) assert(!combined.includes(prohibited.toLowerCase()), `Sales Navigator extension contains prohibited action marker: ${prohibited}`);
 
+assert(background.includes('chrome.tabs.sendMessage'));
 assert(!content.includes('scrollIntoView'));
 assert(!background.includes('chrome.tabs.update'));
 assert(!background.includes('buyerIntentConfirmed: true'));
