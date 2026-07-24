@@ -1,76 +1,126 @@
 (() => {
   "use strict";
 
-  const CAMPAIGN_ID = "fintech_backend_operations";
-  const nodes = {
-    campaignEnabled: document.getElementById("campaignEnabled"),
-    campaignName: document.getElementById("campaignName"),
-    offerName: document.getElementById("offerName"),
-    offerSummary: document.getElementById("offerSummary"),
-    serviceRoute: document.getElementById("serviceRoute"),
-    serviceLanes: document.getElementById("serviceLanes"),
-    industries: document.getElementById("industries"),
-    personas: document.getElementById("personas"),
-    geographies: document.getElementById("geographies"),
-    searchUrl: document.getElementById("searchUrl"),
-    searchList: document.getElementById("searchList"),
-    automationEnabled: document.getElementById("automationEnabled"),
-    status: document.getElementById("status"),
-    saveCampaign: document.getElementById("saveCampaign"),
-    registerSearch: document.getElementById("registerSearch"),
-    runNow: document.getElementById("runNow")
-  };
-  let campaign = null;
+  const elements = Object.fromEntries([
+    "campaignSelect", "newCampaignId", "newCampaign", "duplicateCampaign", "campaignEnabled",
+    "campaignName", "offerId", "offerName", "campaignRoute", "offerType", "offerSummary",
+    "firstTouchAngle", "intentWarning", "serviceRoute", "serviceLanes", "industries",
+    "companyTypes", "personas", "seniority", "geographies", "positiveTerms", "saveCampaign",
+    "searchUrl", "registerSearch", "searchList", "automationEnabled", "runNow", "status"
+  ].map(id => [id, document.getElementById(id)]));
+
+  let campaigns = [];
+  let selectedCampaignId = "";
+  let automationStatus = null;
 
   function list(value) {
-    return Array.isArray(value) ? value : [];
+    if (Array.isArray(value)) return [...new Set(value.map(item => String(item || "").trim()).filter(Boolean))];
+    return [...new Set(String(value || "").split(/[\n,]/).map(item => item.trim()).filter(Boolean))];
   }
 
   function lines(value) {
     return list(value).join("\n");
   }
 
-  function split(value) {
-    return [...new Set(String(value || "").split(/[\n,]/).map(item => item.trim()).filter(Boolean))];
+  function normalizedId(value) {
+    return String(value || "").trim().toLowerCase().replace(/[^a-z0-9_-]+/g, "_").replace(/^_+|_+$/g, "");
+  }
+
+  function selectedCampaign() {
+    return campaigns.find(campaign => campaign.id === selectedCampaignId) || campaigns[0] || null;
+  }
+
+  function setStatus(message) {
+    elements.status.textContent = String(message || "");
   }
 
   function setBusy(busy) {
-    nodes.saveCampaign.disabled = busy;
-    nodes.registerSearch.disabled = busy;
-    nodes.runNow.disabled = busy;
-    nodes.automationEnabled.disabled = busy;
+    for (const id of ["newCampaign", "duplicateCampaign", "saveCampaign", "registerSearch", "runNow"]) elements[id].disabled = busy;
+    elements.automationEnabled.disabled = busy;
+    elements.campaignSelect.disabled = busy;
   }
 
-  function setStatus(value) {
-    nodes.status.textContent = typeof value === "string" ? value : JSON.stringify(value, null, 2);
+  function renderCampaignSelect() {
+    const previous = selectedCampaignId;
+    elements.campaignSelect.replaceChildren();
+    for (const campaign of campaigns) {
+      const option = document.createElement("option");
+      option.value = campaign.id;
+      option.textContent = `${campaign.name} · ${String(campaign.route || "cold campaign").replaceAll("_", " ")}${campaign.enabled === false ? " · paused" : ""}`;
+      elements.campaignSelect.append(option);
+    }
+    selectedCampaignId = campaigns.some(campaign => campaign.id === previous)
+      ? previous
+      : campaigns.find(campaign => campaign.enabled !== false)?.id || campaigns[0]?.id || "";
+    elements.campaignSelect.value = selectedCampaignId;
   }
 
-  function renderCampaign(value) {
-    campaign = value;
-    nodes.campaignEnabled.checked = value.enabled !== false;
-    nodes.campaignName.value = value.name || "";
-    nodes.offerName.value = value.offer_name || "";
-    nodes.offerSummary.value = value.offer_summary || "";
-    nodes.serviceRoute.value = value.service_route || "software_product";
-    nodes.serviceLanes.value = list(value.service_lanes).join(", ");
-    nodes.industries.value = lines(value.target_industry_terms);
-    nodes.personas.value = lines(value.target_personas);
-    nodes.geographies.value = lines(value.target_geographies);
-    renderSearches(value.search_urls || []);
+  function renderForm() {
+    const campaign = selectedCampaign();
+    if (!campaign) return;
+    elements.campaignEnabled.checked = campaign.enabled !== false;
+    elements.campaignName.value = campaign.name || "";
+    elements.offerId.value = campaign.offer_id || "";
+    elements.offerName.value = campaign.offer_name || "";
+    elements.campaignRoute.value = campaign.route || "direct_buyer";
+    elements.offerType.value = campaign.offer_type || "hybrid";
+    elements.offerSummary.value = campaign.offer_summary || "";
+    elements.firstTouchAngle.value = campaign.first_touch_angle || "";
+    elements.intentWarning.value = campaign.no_buyer_intent_warning || "This is a cold ICP match. No explicit buying intent has been established.";
+    elements.serviceRoute.value = campaign.service_route || "software_product";
+    elements.serviceLanes.value = list(campaign.service_lanes).join(", ");
+    elements.industries.value = lines(campaign.target_industry_terms);
+    elements.companyTypes.value = lines(campaign.target_company_types);
+    elements.personas.value = lines(campaign.target_personas);
+    elements.seniority.value = lines(campaign.target_seniority);
+    elements.geographies.value = lines(campaign.target_geographies);
+    elements.positiveTerms.value = lines(campaign.positive_terms);
+    renderSearches(campaign);
+    renderStatus();
   }
 
-  function renderSearches(urls) {
-    nodes.searchList.textContent = "";
+  function campaignFromForm(id = selectedCampaignId) {
+    const existing = campaigns.find(campaign => campaign.id === id) || {};
+    return {
+      ...existing,
+      id: normalizedId(id),
+      enabled: elements.campaignEnabled.checked,
+      state: elements.campaignEnabled.checked ? "active" : "on_hold",
+      name: elements.campaignName.value.trim(),
+      offer_id: normalizedId(elements.offerId.value || elements.offerName.value),
+      offer_name: elements.offerName.value.trim(),
+      route: elements.campaignRoute.value,
+      offer_type: elements.offerType.value,
+      offer_summary: elements.offerSummary.value.trim(),
+      first_touch_angle: elements.firstTouchAngle.value.trim(),
+      no_buyer_intent_warning: elements.intentWarning.value.trim() || "This is a cold ICP match. No explicit buying intent has been established.",
+      service_route: elements.serviceRoute.value,
+      service_lanes: list(elements.serviceLanes.value),
+      target_industry_terms: list(elements.industries.value),
+      target_company_types: list(elements.companyTypes.value),
+      target_personas: list(elements.personas.value),
+      target_seniority: list(elements.seniority.value),
+      target_geographies: list(elements.geographies.value),
+      positive_terms: list(elements.positiveTerms.value),
+      search_urls: list(existing.search_urls),
+      created_at: existing.created_at || new Date().toISOString(),
+      updated_at: new Date().toISOString()
+    };
+  }
+
+  function renderSearches(campaign) {
+    elements.searchList.replaceChildren();
+    const urls = list(campaign.search_urls);
     if (!urls.length) {
-      const empty = document.createElement("div");
+      const empty = document.createElement("p");
       empty.className = "empty";
-      empty.textContent = "No approved Sales Navigator lead searches are registered yet.";
-      nodes.searchList.appendChild(empty);
+      empty.textContent = "No Sales Navigator searches are registered for this campaign.";
+      elements.searchList.append(empty);
       return;
     }
     for (const url of urls) {
-      const item = document.createElement("div");
-      item.className = "search-item";
+      const row = document.createElement("div");
+      row.className = "search-item";
       const link = document.createElement("a");
       link.href = url;
       link.target = "_blank";
@@ -79,88 +129,72 @@
       const remove = document.createElement("button");
       remove.type = "button";
       remove.textContent = "Remove";
-      remove.addEventListener("click", () => removeSearch(url));
-      item.append(link, remove);
-      nodes.searchList.appendChild(item);
+      remove.addEventListener("click", () => removeSearch(campaign.id, url));
+      row.append(link, remove);
+      elements.searchList.append(row);
     }
   }
 
-  function formCampaign() {
-    return {
-      ...campaign,
-      id: campaign?.id || CAMPAIGN_ID,
-      enabled: nodes.campaignEnabled.checked,
-      name: nodes.campaignName.value,
-      offer_type: campaign?.offer_type || "hybrid",
-      offer_name: nodes.offerName.value,
-      offer_summary: nodes.offerSummary.value,
-      service_route: nodes.serviceRoute.value,
-      service_lanes: split(nodes.serviceLanes.value),
-      target_industry_terms: split(nodes.industries.value),
-      target_personas: split(nodes.personas.value),
-      target_geographies: split(nodes.geographies.value),
-      search_urls: campaign?.search_urls || []
-    };
-  }
-
-  function diagnosticLine(search, index) {
-    const diagnostics = search?.diagnostics || {};
-    const label = `Search ${index + 1}`;
-    if (search?.ok === false) return `${label}: ERROR — ${search.error || "unknown Sales Navigator error"}`;
-    const visible = Number(diagnostics.visible_lead_links || 0);
-    const readable = Number(diagnostics.readable_cards || 0);
-    const captured = Number(diagnostics.captured_prospects || search?.record_count || 0);
-    const missingName = Number(diagnostics.missing_name || 0);
-    const missingRole = Number(diagnostics.missing_headline || 0);
-    const missingCompany = Number(diagnostics.missing_company || 0);
-    return `${label}: ${captured} captured from ${visible} visible lead links and ${readable} readable cards; scroll steps ${Number(search?.scroll_steps || 0)}; stop ${search?.stop_reason || "unknown"}; missing name ${missingName}, missing role ${missingRole}, missing company ${missingCompany}.`;
-  }
-
-  function summary(response) {
-    const status = response.status;
-    const state = response.enabled ? `Scheduled every ${response.interval_minutes} minutes.` : "Scheduled capture disabled.";
-    if (!status) return `${state}\nNo Sales Navigator campaign cycle has completed yet.`;
-    const campaigns = Array.isArray(status.campaigns) ? status.campaigns : [];
-    const searches = campaigns.flatMap(item => Array.isArray(item.searches) ? item.searches : []);
-    if (status.running) return `${state}\nRunning now: ${campaigns.length} campaigns, ${searches.length} searches completed, ${status.accepted || 0} new prospects so far.`;
-    const details = searches.slice(0, 8).map(diagnosticLine);
-    if (searches.length > 8) details.push(`${searches.length - 8} additional search results are stored in the extension status.`);
-    return [
-      state,
-      `Last completed: ${status.completed_at || "unknown"}`,
-      `Campaigns: ${campaigns.length}; searches: ${searches.length}`,
-      `New: ${status.accepted || 0}; duplicate: ${status.duplicates || 0}; enriched: ${status.enriched || 0}; rejected: ${status.rejected || 0}`,
-      status.last_error ? `Issue: ${status.last_error}` : "",
-      ...details
-    ].filter(Boolean).join("\n");
+  function renderStatus() {
+    const campaign = selectedCampaign();
+    const status = automationStatus;
+    const output = [];
+    if (campaign) {
+      output.push(campaign.name);
+      output.push(`Route: ${String(campaign.route || "unknown").replaceAll("_", " ")}`);
+      output.push(`Offer: ${campaign.offer_name || "Not defined"}`);
+      output.push(`Registered searches: ${list(campaign.search_urls).length}`);
+      output.push(campaign.enabled === false ? "Campaign is paused; searches and history are retained." : "Campaign is active.");
+    }
+    output.push(elements.automationEnabled.checked ? "Routine Sales Navigator scheduling is enabled." : "Routine scheduling is disabled; manual campaign runs remain available.");
+    if (status?.running) output.push(`A ${status.trigger || "campaign"} run is active.`);
+    if (status?.completed_at) {
+      output.push(`Last completed: ${new Date(status.completed_at).toLocaleString()}`);
+      output.push(`${status.accepted || 0} new, ${status.duplicates || 0} duplicate, ${status.enriched || 0} enriched, ${status.rejected || 0} rejected.`);
+      const campaignStatus = Array.isArray(status.campaigns) ? status.campaigns.find(item => item.id === selectedCampaignId) : null;
+      for (const search of campaignStatus?.searches || []) {
+        if (search.ok) {
+          const diagnostics = search.diagnostics || {};
+          output.push(`Search: ${search.record_count || 0} prospects, ${search.scroll_steps || 0} scroll steps, stop ${search.stop_reason || "complete"}.`);
+          output.push(`Visible lead links: ${diagnostics.visible_lead_links ?? "n/a"}; readable cards: ${diagnostics.readable_cards ?? "n/a"}; missing name: ${diagnostics.missing_name ?? 0}; missing role: ${diagnostics.missing_headline ?? 0}; missing company: ${diagnostics.missing_company ?? 0}.`);
+        } else output.push(`Search issue: ${search.error || "failed"}`);
+      }
+    }
+    if (status?.last_error) output.push(`Last run issue: ${status.last_error}`);
+    setStatus(output.join("\n"));
   }
 
   async function load() {
     const response = await chrome.runtime.sendMessage({type: "CODISTAN_GET_SALES_NAV_CAMPAIGNS"});
-    if (!response?.ok) throw new Error(response?.error || "Campaign settings are unavailable.");
-    const selected = response.campaigns.find(item => item.id === CAMPAIGN_ID) || response.campaigns[0];
-    if (!selected) throw new Error("No Sales Navigator campaign is configured.");
-    const firstUse = !response.status && list(selected.search_urls).length === 0;
-    if (firstUse && response.enabled === true) {
-      const disabled = await chrome.runtime.sendMessage({type: "CODISTAN_SET_SALES_NAV_AUTOMATION", enabled: false});
-      if (!disabled?.ok) throw new Error(disabled?.error || "Scheduled capture could not be disabled for the manual pilot.");
-      response.enabled = false;
-    }
-    renderCampaign(selected);
-    nodes.automationEnabled.checked = response.enabled === true;
-    const firstUseNotice = firstUse
-      ? "Manual pilot required: scheduled Sales Navigator capture is off until the first search is registered, run and commercially reviewed.\n"
-      : "";
-    setStatus(`${firstUseNotice}${summary(response)}`);
+    if (!response?.ok) throw new Error(response?.error || "Campaigns could not be loaded.");
+    campaigns = Array.isArray(response.campaigns) ? response.campaigns : [];
+    automationStatus = response.status || null;
+    elements.automationEnabled.checked = response.enabled === true;
+    renderCampaignSelect();
+    renderForm();
   }
 
-  async function removeSearch(url) {
+  async function saveCampaign(campaign) {
+    if (!campaign.id || !campaign.name || !campaign.offer_name) throw new Error("Campaign ID, campaign name and offer name are required.");
+    if (!campaign.route) throw new Error("Campaign route is required.");
+    const response = await chrome.runtime.sendMessage({type: "CODISTAN_SAVE_SALES_NAV_CAMPAIGN", campaign});
+    if (!response?.ok) throw new Error(response?.error || "Campaign could not be saved.");
+    const index = campaigns.findIndex(item => item.id === response.campaign.id);
+    if (index >= 0) campaigns[index] = response.campaign;
+    else campaigns.push(response.campaign);
+    selectedCampaignId = response.campaign.id;
+    renderCampaignSelect();
+    renderForm();
+  }
+
+  async function removeSearch(campaignId, url) {
     setBusy(true);
     try {
-      const response = await chrome.runtime.sendMessage({type: "CODISTAN_REMOVE_SALES_NAV_SEARCH", campaign_id: campaign.id, search_url: url});
-      if (!response?.ok) throw new Error(response?.error || "The search could not be removed.");
-      renderCampaign(response.campaign);
-      setStatus("Approved search removed. Existing captured prospects and campaign history were preserved.");
+      const response = await chrome.runtime.sendMessage({type: "CODISTAN_REMOVE_SALES_NAV_SEARCH", campaign_id: campaignId, search_url: url});
+      if (!response?.ok) throw new Error(response?.error || "Search could not be removed.");
+      const index = campaigns.findIndex(item => item.id === campaignId);
+      if (index >= 0) campaigns[index] = response.campaign;
+      renderForm();
     } catch (error) {
       setStatus(error instanceof Error ? error.message : String(error));
     } finally {
@@ -168,13 +202,17 @@
     }
   }
 
-  nodes.saveCampaign.addEventListener("click", async () => {
+  elements.campaignSelect.addEventListener("change", () => {
+    selectedCampaignId = elements.campaignSelect.value;
+    renderForm();
+  });
+
+  elements.saveCampaign.addEventListener("click", async () => {
     setBusy(true);
+    setStatus("Saving campaign definition…");
     try {
-      const response = await chrome.runtime.sendMessage({type: "CODISTAN_SAVE_SALES_NAV_CAMPAIGN", campaign: formCampaign()});
-      if (!response?.ok) throw new Error(response?.error || "Campaign could not be saved.");
-      renderCampaign(response.campaign);
-      setStatus("Campaign definition saved. Future captures will use the updated offer and ICP.");
+      await saveCampaign(campaignFromForm());
+      setStatus("Campaign definition saved. Existing searches and history were preserved.");
     } catch (error) {
       setStatus(error instanceof Error ? error.message : String(error));
     } finally {
@@ -182,15 +220,66 @@
     }
   });
 
-  nodes.registerSearch.addEventListener("click", async () => {
+  elements.newCampaign.addEventListener("click", () => {
+    const id = normalizedId(elements.newCampaignId.value);
+    if (!id) return setStatus("Enter a unique campaign ID before creating a campaign.");
+    if (campaigns.some(campaign => campaign.id === id)) return setStatus("That campaign ID already exists.");
+    selectedCampaignId = id;
+    campaigns.push({
+      id,
+      name: id.replaceAll("_", " "),
+      enabled: false,
+      state: "on_hold",
+      route: "research_only",
+      offer_id: id,
+      offer_type: "service",
+      offer_name: id.replaceAll("_", " "),
+      offer_summary: "",
+      service_route: "delivery_partner",
+      service_lanes: [],
+      target_industry_terms: [],
+      target_company_types: [],
+      target_personas: [],
+      target_seniority: [],
+      target_geographies: [],
+      positive_terms: [],
+      first_touch_angle: "",
+      no_buyer_intent_warning: "This is a cold research hypothesis. No explicit buying intent has been established.",
+      search_urls: [],
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString()
+    });
+    elements.newCampaignId.value = "";
+    renderCampaignSelect();
+    renderForm();
+    setStatus("New campaign created in on-hold state. Define and save it before registering searches.");
+  });
+
+  elements.duplicateCampaign.addEventListener("click", () => {
+    const source = selectedCampaign();
+    const id = normalizedId(elements.newCampaignId.value);
+    if (!source || !id || campaigns.some(campaign => campaign.id === id)) return setStatus("Enter a new unique campaign ID before duplicating the selected campaign.");
+    campaigns.push({...JSON.parse(JSON.stringify(source)), id, name: `${source.name} copy`, enabled: false, state: "on_hold", search_urls: [], created_at: new Date().toISOString(), updated_at: new Date().toISOString()});
+    selectedCampaignId = id;
+    elements.newCampaignId.value = "";
+    renderCampaignSelect();
+    renderForm();
+    setStatus("Campaign duplicated in on-hold state without copying registered searches.");
+  });
+
+  elements.registerSearch.addEventListener("click", async () => {
+    const campaign = selectedCampaign();
+    if (!campaign) return;
     setBusy(true);
-    setStatus("Registering the Sales Navigator search…");
+    setStatus("Registering the Sales Navigator search under the selected campaign…");
     try {
-      const response = await chrome.runtime.sendMessage({type: "CODISTAN_REGISTER_SALES_NAV_SEARCH", campaign_id: campaign.id, search_url: nodes.searchUrl.value.trim()});
-      if (!response?.ok) throw new Error(response?.error || "Search registration failed.");
-      nodes.searchUrl.value = "";
-      renderCampaign(response.campaign);
-      setStatus(`Registered approved search:\n${response.url}\nRun it manually before enabling scheduled capture.`);
+      const response = await chrome.runtime.sendMessage({type: "CODISTAN_REGISTER_SALES_NAV_SEARCH", campaign_id: campaign.id, search_url: elements.searchUrl.value.trim()});
+      if (!response?.ok) throw new Error(response?.error || "Search could not be registered.");
+      const index = campaigns.findIndex(item => item.id === campaign.id);
+      if (index >= 0) campaigns[index] = response.campaign;
+      elements.searchUrl.value = "";
+      renderForm();
+      setStatus("Search registered. Run this campaign manually and review diagnostics before enabling routine scheduling.");
     } catch (error) {
       setStatus(error instanceof Error ? error.message : String(error));
     } finally {
@@ -198,31 +287,35 @@
     }
   });
 
-  nodes.automationEnabled.addEventListener("change", async () => {
+  elements.runNow.addEventListener("click", async () => {
+    const campaign = selectedCampaign();
+    if (!campaign) return;
     setBusy(true);
-    try {
-      const response = await chrome.runtime.sendMessage({type: "CODISTAN_SET_SALES_NAV_AUTOMATION", enabled: nodes.automationEnabled.checked});
-      if (!response?.ok) throw new Error(response?.error || "Automation setting could not be changed.");
-      await load();
-    } catch (error) {
-      nodes.automationEnabled.checked = !nodes.automationEnabled.checked;
-      setStatus(error instanceof Error ? error.message : String(error));
-    } finally {
-      setBusy(false);
-    }
-  });
-
-  nodes.runNow.addEventListener("click", async () => {
-    setBusy(true);
-    setStatus("Running the registered FinTech Sales Navigator searches now. Temporary tabs stay inactive and close automatically…");
+    setStatus(`Running ${campaign.name} in temporary inactive tabs…`);
     try {
       const response = await chrome.runtime.sendMessage({type: "CODISTAN_RUN_SALES_NAV_CAMPAIGNS_NOW", campaign_id: campaign.id});
       if (!response?.ok) throw new Error(response?.error || "Campaign run failed.");
-      await load();
+      automationStatus = response;
+      renderStatus();
     } catch (error) {
       setStatus(error instanceof Error ? error.message : String(error));
     } finally {
       setBusy(false);
+    }
+  });
+
+  elements.automationEnabled.addEventListener("change", async () => {
+    elements.automationEnabled.disabled = true;
+    try {
+      const response = await chrome.runtime.sendMessage({type: "CODISTAN_SET_SALES_NAV_AUTOMATION", enabled: elements.automationEnabled.checked});
+      if (!response?.ok) throw new Error(response?.error || "Automation setting could not be saved.");
+      elements.automationEnabled.checked = response.enabled === true;
+      renderStatus();
+    } catch (error) {
+      elements.automationEnabled.checked = !elements.automationEnabled.checked;
+      setStatus(error instanceof Error ? error.message : String(error));
+    } finally {
+      elements.automationEnabled.disabled = false;
     }
   });
 
