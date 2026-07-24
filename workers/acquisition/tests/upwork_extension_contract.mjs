@@ -6,14 +6,22 @@ import vm from "node:vm";
 const root = path.resolve("extensions/upwork");
 const manifest = JSON.parse(fs.readFileSync(path.join(root, "manifest.json"), "utf8"));
 const background = fs.readFileSync(path.join(root, "background.js"), "utf8");
+const scroll = fs.readFileSync(path.join(root, "scroll.js"), "utf8");
 const content = fs.readFileSync(path.join(root, "content.js"), "utf8");
+const popupHtml = fs.readFileSync(path.join(root, "popup.html"), "utf8");
 const popup = fs.readFileSync(path.join(root, "popup.js"), "utf8");
 const evidenceSource = fs.readFileSync(path.join(root, "evidence.js"), "utf8");
 
+for (const [name, source] of Object.entries({background, scroll, content, popup, evidenceSource})) {
+  assert.doesNotThrow(() => new vm.Script(source), `${name} must parse as JavaScript`);
+}
+
 assert.equal(manifest.manifest_version, 3);
-assert.equal(manifest.version, "1.0.3");
-assert(background.includes('upwork-extension-1.0.3'));
-assert.deepEqual(manifest.content_scripts[0].js, ["evidence.js", "content.js"]);
+assert.equal(manifest.version, "1.1.0");
+assert(background.includes('upwork-extension-1.1.0'));
+assert.deepEqual(manifest.content_scripts[0].js, ["evidence.js", "scroll.js", "content.js"]);
+assert(manifest.permissions.includes("alarms"));
+assert(manifest.permissions.includes("scripting"));
 assert(manifest.host_permissions.includes("http://127.0.0.1:8765/*"));
 
 for (const name of [
@@ -45,14 +53,61 @@ for (const marker of [
   'parser_version: PARSER_VERSION'
 ]) assert(background.includes(marker), `missing payload marker: ${marker}`);
 
-const prohibited = [
-  "chrome.tabs.create", "chrome.tabs.update", "scrollIntoView", "window.scrollTo",
-  ".click(", "dispatchEvent", "navigator.webdriver", "Math.random", "captcha", "cloudflare"
+for (const marker of [
+  "SCHEDULE_INTERVAL_MINUTES = 15",
+  "MAX_SCROLL_STEPS = 4",
+  "MAX_RECORDS = 30",
+  "manual_first_protection: true",
+  "codistan_upwork_scheduler_enabled: false",
+  "CODISTAN_RUN_UPWORK_APPROVED_SEARCHES_NOW",
+  "CODISTAN_GET_UPWORK_AUTOMATION_STATUS",
+  "CODISTAN_SET_UPWORK_AUTOMATION",
+  'chrome.tabs.create({url: search.url, active: false})',
+  "chrome.tabs.remove(tabId)",
+  "scheduledTabIds",
+  "scanUpworkTab",
+  "runScheduledCycle"
+]) assert(background.includes(marker), `missing scheduler marker: ${marker}`);
+
+for (const marker of [
+  "CODISTAN_UPWORK_SCROLL_STATUS",
+  "CODISTAN_SCROLL_UPWORK_RESULTS",
+  "CODISTAN_RESTORE_UPWORK_SCROLL",
+  "no_movable_scroll_container",
+  "end_of_results",
+  "document.scrollingElement",
+  "scrollTop"
+]) assert(scroll.includes(marker), `missing scroll-controller marker: ${marker}`);
+
+assert(popupHtml.includes("Run all approved searches now"));
+assert(popupHtml.includes("Run all three searches every 15 minutes"));
+assert(popupHtml.includes("Scheduling starts disabled"));
+assert(popup.includes("CODISTAN_RUN_UPWORK_APPROVED_SEARCHES_NOW"));
+assert(popup.includes("CODISTAN_SET_UPWORK_AUTOMATION"));
+assert(popup.includes("CODISTAN_GET_UPWORK_AUTOMATION_STATUS"));
+
+const prohibitedExternalActions = [
+  ".click(",
+  "dispatchEvent",
+  "navigator.webdriver",
+  "Math.random",
+  "connect button",
+  "submit proposal",
+  "send message",
+  "chrome.tabs.update",
+  "chrome.windows.create"
 ];
-for (const marker of prohibited) {
+for (const marker of prohibitedExternalActions) {
   assert(!background.toLowerCase().includes(marker.toLowerCase()), `background contains prohibited marker: ${marker}`);
+  assert(!scroll.toLowerCase().includes(marker.toLowerCase()), `scroll controller contains prohibited marker: ${marker}`);
   assert(!content.toLowerCase().includes(marker.toLowerCase()), `content contains prohibited marker: ${marker}`);
 }
+
+assert(!scroll.includes("scrollIntoView"));
+assert(!scroll.includes("window.scrollTo"));
+assert(!background.includes("chrome.tabs.create({url: search.url, active: true})"));
+assert(background.includes("loginOrChallengePage"));
+assert(background.includes("Upwork redirected the approved saved search to an unexpected page"));
 
 const context = {URL, globalThis: {}};
 vm.createContext(context);
