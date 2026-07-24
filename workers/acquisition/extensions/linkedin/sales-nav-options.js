@@ -103,14 +103,36 @@
     };
   }
 
+  function diagnosticLine(search, index) {
+    const diagnostics = search?.diagnostics || {};
+    const label = `Search ${index + 1}`;
+    if (search?.ok === false) return `${label}: ERROR — ${search.error || "unknown Sales Navigator error"}`;
+    const visible = Number(diagnostics.visible_lead_links || 0);
+    const readable = Number(diagnostics.readable_cards || 0);
+    const captured = Number(diagnostics.captured_prospects || search?.record_count || 0);
+    const missingName = Number(diagnostics.missing_name || 0);
+    const missingRole = Number(diagnostics.missing_headline || 0);
+    const missingCompany = Number(diagnostics.missing_company || 0);
+    return `${label}: ${captured} captured from ${visible} visible lead links and ${readable} readable cards; scroll steps ${Number(search?.scroll_steps || 0)}; stop ${search?.stop_reason || "unknown"}; missing name ${missingName}, role ${missingRole}, company ${missingCompany}.`;
+  }
+
   function summary(response) {
     const status = response.status;
     const state = response.enabled ? `Scheduled every ${response.interval_minutes} minutes.` : "Scheduled capture disabled.";
     if (!status) return `${state}\nNo Sales Navigator campaign cycle has completed yet.`;
-    const campaignCount = Array.isArray(status.campaigns) ? status.campaigns.length : 0;
-    const searchCount = (status.campaigns || []).reduce((count, item) => count + (Array.isArray(item.searches) ? item.searches.length : 0), 0);
-    if (status.running) return `${state}\nRunning now: ${campaignCount} campaigns, ${searchCount} searches completed, ${status.accepted || 0} new prospects so far.`;
-    return `${state}\nLast completed: ${status.completed_at || "unknown"}\nCampaigns: ${campaignCount}; searches: ${searchCount}\nNew: ${status.accepted || 0}; duplicate: ${status.duplicates || 0}; enriched: ${status.enriched || 0}; rejected: ${status.rejected || 0}${status.last_error ? `\nIssue: ${status.last_error}` : ""}`;
+    const campaigns = Array.isArray(status.campaigns) ? status.campaigns : [];
+    const searches = campaigns.flatMap(item => Array.isArray(item.searches) ? item.searches : []);
+    if (status.running) return `${state}\nRunning now: ${campaigns.length} campaigns, ${searches.length} searches completed, ${status.accepted || 0} new prospects so far.`;
+    const details = searches.slice(0, 8).map(diagnosticLine);
+    if (searches.length > 8) details.push(`${searches.length - 8} additional search results are stored in the extension status.`);
+    return [
+      state,
+      `Last completed: ${status.completed_at || "unknown"}`,
+      `Campaigns: ${campaigns.length}; searches: ${searches.length}`,
+      `New: ${status.accepted || 0}; duplicate: ${status.duplicates || 0}; enriched: ${status.enriched || 0}; rejected: ${status.rejected || 0}`,
+      status.last_error ? `Issue: ${status.last_error}` : "",
+      ...details
+    ].filter(Boolean).join("\n");
   }
 
   async function load() {
