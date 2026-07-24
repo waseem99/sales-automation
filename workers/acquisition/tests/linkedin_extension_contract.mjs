@@ -12,8 +12,8 @@ const popup = fs.readFileSync(path.join(root, "popup.js"), "utf8");
 const signalSource = fs.readFileSync(path.join(root, "signal.js"), "utf8");
 
 assert.equal(manifest.manifest_version, 3);
-assert.equal(manifest.version, "1.0.3");
-assert(background.includes('linkedin-extension-1.0.3'));
+assert.equal(manifest.version, "1.0.4");
+assert(background.includes('linkedin-extension-1.0.4'));
 assert.deepEqual(manifest.content_scripts[0].js, ["signal.js", "dom-adapter.js", "content.js"]);
 assert(manifest.host_permissions.includes("http://127.0.0.1:8775/*"));
 
@@ -48,6 +48,7 @@ assert(!adapter.includes('setAttribute("data-view-name", "feed-full-update")'));
 assert(popup.includes("(${marked} adapter cards)"));
 assert(popup.includes("cards exposed activity IDs"));
 assert(popup.includes("lacked a canonical permalink"));
+assert(popup.includes("Open the target post by clicking its timestamp"));
 
 const prohibited = [
   "chrome.tabs.create", "chrome.tabs.update", "scrollIntoView", "window.scrollTo",
@@ -60,7 +61,7 @@ for (const marker of prohibited) {
   assert(!content.toLowerCase().includes(marker.toLowerCase()), `content contains prohibited marker: ${marker}`);
 }
 
-const context = {URL, globalThis: {}};
+const context = {URL, decodeURIComponent, globalThis: {}};
 vm.createContext(context);
 vm.runInContext(signalSource, context);
 const helper = context.globalThis.CodistanLinkedInSignal;
@@ -112,6 +113,14 @@ const seeker = helper.classifyOpportunity(
 assert.equal(seeker.candidate, false);
 assert.equal(seeker.reject_reason, "job_seeker_or_self_promotion");
 
+assert.equal(
+  helper.activityUrnFromValue("urn%253Ali%253Aactivity%253A1234567890123456789"),
+  "urn:li:activity:1234567890123456789"
+);
+assert.equal(
+  helper.activityUrnFromValue("https://www.linkedin.com/posts/example-topic-activity-1234567890123456789-abcd"),
+  "urn:li:activity:1234567890123456789"
+);
 assert.equal(
   helper.canonicalPostUrl("", "urn:li:activity:1234567890123456789"),
   "https://www.linkedin.com/feed/update/urn:li:activity:1234567890123456789"
