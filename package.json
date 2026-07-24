@@ -29,6 +29,7 @@
   "dependencies": {
     "@sales-automation/evaluator": "workspace:*",
     "@sales-automation/fixtures": "workspace:*",
+    "@sales-automation/identity-graph": "workspace:*",
     "@sales-automation/ingestion": "workspace:*",
     "@sales-automation/neon-state": "workspace:*",
     "@sales-automation/outreach-email": "workspace:*",
