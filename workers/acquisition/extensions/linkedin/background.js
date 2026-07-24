@@ -2,7 +2,7 @@
   "use strict";
 
   const COLLECTOR = "http://127.0.0.1:8775";
-  const PARSER_VERSION = "linkedin-extension-1.0.3";
+  const PARSER_VERSION = "linkedin-extension-1.0.4";
   const pendingTimers = new Map();
   const lastAttempts = new Map();
 
