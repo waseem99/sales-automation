@@ -40,7 +40,7 @@ for (const marker of [
   "'/leads/sales-navigator'",
   "'sales_navigator_cold_prospect'",
   "'cold_prospect'",
-  "no explicit buying intent",
+  "not confirmed buyer requests",
 ]) assert(workspace.includes(marker), `missing cold workspace marker: ${marker}`);
 
 assert(navigation.includes("Sales Navigator prospects"));
