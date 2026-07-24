@@ -1,0 +1,15 @@
+body {
+  margin: 0;
+  width: 340px;
+  font-family: "Segoe UI", Arial, sans-serif;
+  background: #f7f8fa;
+  color: #182230;
+}
+main { padding: 18px; }
+h1 { margin: 0 0 8px; font-size: 21px; }
+.hint, .safety { margin: 0 0 14px; color: #596579; font-size: 13px; line-height: 1.45; }
+button { width: 100%; box-sizing: border-box; border-radius: 8px; font-size: 14px; padding: 11px 12px; border: 0; cursor: pointer; font-weight: 650; margin-top: 8px; }
+button:disabled { opacity: 0.55; cursor: progress; }
+.primary { background: #0a66c2; color: white; }
+#status { margin-top: 14px; min-height: 38px; padding: 10px; border-radius: 8px; background: white; border: 1px solid #dfe3e8; font-size: 13px; line-height: 1.4; }
+.safety { margin: 12px 0 0; font-size: 11px; }

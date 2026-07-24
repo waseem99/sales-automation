@@ -1,0 +1,153 @@
+name: Acquisition V4 Runtime CI
+
+# Release gate includes Upwork V4 1.0.3 stable job-ID card expansion.
+on:
+  pull_request:
+    branches:
+      - main
+    paths:
+      - '.github/workflows/acquisition-v4-runtime-ci.yml'
+      - 'workers/acquisition/**'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: acquisition-v4-runtime-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  validate:
+    name: Test collectors, extensions and closeability queue
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    defaults:
+      run:
+        working-directory: workers/acquisition
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Set up Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Compile runtime
+        run: python -m compileall -q acquisition_v4 tests
+
+      - name: Test runtime persistence and enrichment
+        env:
+          PYTHONPATH: .
+        run: python -m unittest discover -s tests -p 'test_runtime.py' -v
+
+      - name: Closeability — strong Upwork job
+        env: &qualification_env
+          PYTHONPATH: .:tests
+        run: python -m unittest test_qualification.QualificationTests.test_strong_upwork_job_is_priority_a -v
+
+      - name: Closeability — credible missing-budget work
+        env: *qualification_env
+        run: python -m unittest test_qualification.QualificationTests.test_missing_budget_credible_upwork_job_remains_reviewable -v
+
+      - name: Closeability — low-value rejection
+        env: *qualification_env
+        run: python -m unittest test_qualification.QualificationTests.test_low_value_upwork_job_is_rejected -v
+
+      - name: Closeability — AI video and 3D creative routing
+        env: *qualification_env
+        run: python -m unittest test_qualification.QualificationTests.test_ai_video_and_3d_rendering_route_to_creative_delivery -v
+
+      - name: Closeability — individual contributor rejection
+        env: *qualification_env
+        run: python -m unittest test_qualification.QualificationTests.test_individual_roles_from_live_queue_are_rejected -v
+
+      - name: Closeability — writer-only work not promoted
+        env: *qualification_env
+        run: python -m unittest test_qualification.QualificationTests.test_writer_only_job_is_not_promoted_without_commercial_evidence -v
+
+      - name: Closeability — agency and location exclusion
+        env: *qualification_env
+        run: python -m unittest test_qualification.QualificationTests.test_no_agency_and_location_restricted_work_is_rejected -v
+
+      - name: Closeability — generic compliance is not cybersecurity
+        env: *qualification_env
+        run: python -m unittest test_qualification.QualificationTests.test_generic_compliance_language_does_not_create_cybersecurity_fit -v
+
+      - name: Closeability — employment vacancy rejection
+        env: *qualification_env
+        run: python -m unittest test_qualification.QualificationTests.test_employment_style_engineering_vacancy_is_rejected -v
+
+      - name: Closeability — direct LinkedIn buyer requirement
+        env: *qualification_env
+        run: python -m unittest test_qualification.QualificationTests.test_direct_linkedin_requirement_is_priority_a -v
+
+      - name: Closeability — LinkedIn missing access route
+        env: *qualification_env
+        run: python -m unittest test_qualification.QualificationTests.test_linkedin_without_access_route_is_priority_b -v
+
+      - name: Closeability — prohibited work rejection
+        env: *qualification_env
+        run: python -m unittest test_qualification.QualificationTests.test_prohibited_work_is_rejected -v
+
+      - name: Test combined review output
+        env:
+          PYTHONPATH: .
+        run: python -m unittest discover -s tests -p 'test_review.py' -v
+
+      - name: Test Windows operating bundle
+        env:
+          PYTHONPATH: .
+        run: python -m unittest discover -s tests -p 'test_windows_bundle.py' -v
+
+      - name: Validate Upwork extension contract
+        run: node tests/upwork_extension_contract.mjs
+
+      - name: Validate LinkedIn extension contract
+        run: node tests/linkedin_extension_contract.mjs
+
+      - name: Run localhost closeability integration gate
+        env:
+          PYTHONPATH: .
+        run: |
+          set -euo pipefail
+          state_root="$(mktemp -d)"
+          python -m acquisition_v4.supervisor --state-root "$state_root" >"$state_root/supervisor.log" 2>&1 &
+          runtime_pid=$!
+          trap 'kill "$runtime_pid" 2>/dev/null || true' EXIT
+          sleep 1
+          python -m acquisition_v4.status --json
+
+          upwork_result="$(python -m acquisition_v4.fixture_submit upwork fixtures/upwork-capture.json)"
+          echo "$upwork_result"
+          echo "$upwork_result" | grep '"priority_a": 1'
+
+          linkedin_result="$(python -m acquisition_v4.fixture_submit linkedin fixtures/linkedin-capture.json)"
+          echo "$linkedin_result"
+          echo "$linkedin_result" | grep '"priority_a": 1'
+
+          test -s "$state_root/review/index.html"
+          test -s "$state_root/review/queue.json"
+          grep 'Build a private RAG workflow' "$state_root/review/index.html"
+          grep 'Digital marketing agency requirement' "$state_root/review/index.html"
+          grep 'Every external action remains manual' "$state_root/review/index.html"
+
+          python -m acquisition_v4.fixture_submit upwork fixtures/upwork-capture.json | grep '"duplicates": 1'
+          kill "$runtime_pid"
+          wait "$runtime_pid" || true
+          trap - EXIT
+
+          python -m acquisition_v4.supervisor --state-root "$state_root" >"$state_root/restart.log" 2>&1 &
+          runtime_pid=$!
+          trap 'kill "$runtime_pid" 2>/dev/null || true' EXIT
+          sleep 1
+          python -m acquisition_v4.fixture_submit linkedin fixtures/linkedin-capture.json | grep '"duplicates": 1'
+          python -m acquisition_v4.status --json | grep '"priority_a": 1'
