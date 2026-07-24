@@ -61,11 +61,27 @@ jobs:
           tail -n 300 acquisition-identity-production-build.log
           exit $status
 
+  typecheck:
+    name: Type-check identity Vercel integration
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Install standalone pnpm
+        run: npm install --global --force @pnpm/exe@9.15.9
+
+      - name: Install workspace dependencies
+        run: pnpm install --no-frozen-lockfile
+
+      - name: Build identity dependencies
+        run: pnpm -r --filter @sales-automation/identity-graph --filter @sales-automation/neon-state --filter @sales-automation/storage --filter @sales-automation/shared --sort build
+
       - name: Type-check Vercel runtime
-        shell: bash
-        run: |
-          set +e
-          pnpm typecheck:vercel > acquisition-identity-typecheck.log 2>&1
-          status=$?
-          tail -n 180 acquisition-identity-typecheck.log
-          exit $status
+        run: pnpm typecheck:vercel
