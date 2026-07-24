@@ -7,14 +7,17 @@ const root = path.resolve("extensions/linkedin");
 const manifest = JSON.parse(fs.readFileSync(path.join(root, "manifest.json"), "utf8"));
 const background = fs.readFileSync(path.join(root, "background.js"), "utf8");
 const adapter = fs.readFileSync(path.join(root, "dom-adapter.js"), "utf8");
+const resolver = fs.readFileSync(path.join(root, "search-resolver.js"), "utf8");
 const content = fs.readFileSync(path.join(root, "content.js"), "utf8");
 const popup = fs.readFileSync(path.join(root, "popup.js"), "utf8");
+const popupHtml = fs.readFileSync(path.join(root, "popup.html"), "utf8");
 const signalSource = fs.readFileSync(path.join(root, "signal.js"), "utf8");
 
 assert.equal(manifest.manifest_version, 3);
-assert.equal(manifest.version, "1.1.0");
-assert(background.includes('linkedin-extension-1.1.0'));
-assert.deepEqual(manifest.content_scripts[0].js, ["signal.js", "dom-adapter.js", "content.js"]);
+assert.equal(manifest.version, "1.2.0");
+assert(background.includes('linkedin-extension-1.2.0'));
+assert(background.includes("records.slice(0, 30)"));
+assert.deepEqual(manifest.content_scripts[0].js, ["signal.js", "dom-adapter.js", "search-resolver.js", "content.js"]);
 assert(manifest.host_permissions.includes("http://127.0.0.1:8775/*"));
 
 for (const marker of [
@@ -26,13 +29,14 @@ for (const marker of [
 
 for (const marker of [
   'data-codistan-opportunity-card="true"',
-  'timestampCandidate',
-  'candidateScopes',
+  'looseActivityUrn',
+  'nodeAttributeValues',
   'candidate_urls',
-  'AGE_TEXT',
-  'linkedin-dom-1.1.0',
-  'missing_canonical_url'
-]) assert(content.includes(marker), `missing LinkedIn batch-capture marker: ${marker}`);
+  'containers_with_activity_id',
+  'containers_with_permalink_hint',
+  'missing_canonical_url',
+  'linkedin-dom-1.1.0'
+]) assert(content.includes(marker), `missing LinkedIn DOM marker: ${marker}`);
 
 for (const marker of [
   "data-codistan-opportunity-card",
@@ -45,19 +49,48 @@ for (const marker of [
 ]) assert(adapter.includes(marker), `missing LinkedIn adapter marker: ${marker}`);
 assert(!adapter.includes('setAttribute("data-view-name", "feed-full-update")'));
 
-assert(popup.includes("${resolved} resolvable post links"));
-assert(popup.includes("Only those unresolved posts need to be opened through their timestamp"));
+for (const marker of [
+  'data-codistan-canonical-url',
+  'spatialCardLink',
+  'canonicalAnchors',
+  'CODISTAN_SCROLL_LINKEDIN_RESULTS',
+  'CODISTAN_RESTORE_LINKEDIN_SCROLL',
+  'window.scrollTo',
+  '/search/results/content',
+  'DEFAULT_WAIT_MS = 2500',
+  'MAX_WAIT_MS = 4000'
+]) assert(resolver.includes(marker), `missing LinkedIn resolver marker: ${marker}`);
+
+for (const marker of [
+  'id="scanMore"',
+  'Scan and load more results'
+]) assert(popupHtml.includes(marker), `missing LinkedIn popup control: ${marker}`);
+
+for (const marker of [
+  'MAX_SCROLL_STEPS = 4',
+  'MAX_RECORDS = 30',
+  'SCROLL_WAIT_MS = 2500',
+  'manual_bounded_scroll_scan',
+  'CODISTAN_LINKEDIN_SCROLL_STATUS',
+  'CODISTAN_SCROLL_LINKEDIN_RESULTS',
+  'CODISTAN_RESTORE_LINKEDIN_SCROLL',
+  'stop reason'
+]) assert(popup.includes(marker), `missing bounded scan marker: ${marker}`);
 
 const prohibited = [
-  "chrome.tabs.create", "chrome.tabs.update", "scrollIntoView", "window.scrollTo",
+  "chrome.tabs.create", "chrome.tabs.update", "scrollIntoView",
   ".click(", "dispatchEvent", "navigator.webdriver", "Math.random", "captcha", "cloudflare",
   "chrome.runtime.sendMessage({type: \"CONNECT\"", "chrome.notifications"
 ];
 for (const marker of prohibited) {
-  assert(!background.toLowerCase().includes(marker.toLowerCase()), `background contains prohibited marker: ${marker}`);
-  assert(!adapter.toLowerCase().includes(marker.toLowerCase()), `adapter contains prohibited marker: ${marker}`);
-  assert(!content.toLowerCase().includes(marker.toLowerCase()), `content contains prohibited marker: ${marker}`);
+  for (const [name, source] of Object.entries({background, adapter, resolver, content, popup})) {
+    assert(!source.toLowerCase().includes(marker.toLowerCase()), `${name} contains prohibited marker: ${marker}`);
+  }
 }
+assert(!background.includes("window.scrollTo"));
+assert(!adapter.includes("window.scrollTo"));
+assert(!content.includes("window.scrollTo"));
+assert(!popup.includes("window.scrollTo"));
 
 const context = {URL, decodeURIComponent, globalThis: {}};
 vm.createContext(context);
