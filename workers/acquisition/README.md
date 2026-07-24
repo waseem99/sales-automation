@@ -1,18 +1,20 @@
 # Acquisition Engine V4 local runtime
 
-This directory contains the clean local runtime for the Upwork and LinkedIn Chrome-extension collectors.
+This directory contains the Windows-first runtime for the Upwork and LinkedIn Chrome-extension collectors, the local review queue, and the optional Prospect Desk synchronization bridge.
 
 ## Current release boundary
 
+- Runtime release: `0.2.0`
 - Upwork collector: `127.0.0.1:8765`
 - LinkedIn collector: `127.0.0.1:8775`
+- LinkedIn extension: `1.3.0`
 - State: `%LOCALAPPDATA%\Codistan\Acquisition`
 - Normal user Chrome only
-- No Playwright, hidden navigation or account-challenge handling
-- No Vercel or production database requirement
-- No proposal, application, message, connection request or other external action
+- No Playwright, hidden browser profile or account-challenge handling
+- Local capture remains operational when Prospect Desk or the internet is unavailable
+- No proposal, application, email, message, connection request or other external action
 
-The shared runtime implements #200. The Upwork extension advances #201, the LinkedIn direct-requirement extension advances #202, deterministic closeability implements the core #204 contract, the combined read-only action queue advances #220, and the install/recovery bundle advances #221.
+The shared runtime implements #200. The Upwork extension advances #201, the scheduled LinkedIn direct-requirement extension advances #202, deterministic closeability implements the core #204 contract, the combined local and Prospect Desk action queues advance #220, and the install/recovery bundle advances #221.
 
 ## One-time Windows setup
 
@@ -22,11 +24,11 @@ The shared runtime implements #200. The Upwork extension advances #201, the Link
 4. The installer:
    - installs Python 3.12 through `winget` when required;
    - copies replaceable application files to `%LOCALAPPDATA%\Codistan\Acquisition\app-current`;
-   - preserves captured records, review output and deduplication state outside that folder;
+   - preserves captured records, review output, sync configuration and deduplication state outside that folder;
    - keeps the prior application version as `app-previous`;
    - copies both unpacked extensions to stable local folders;
    - starts both collectors and verifies ports `8765` and `8775`;
-   - creates daily-operation, health, diagnostics and rollback shortcuts on the desktop;
+   - creates daily-operation, health, sync configuration, diagnostics and rollback shortcuts on the desktop;
    - starts the runtime automatically when the Windows user signs in.
 5. In `chrome://extensions/`, enable Developer mode and load these unpacked folders once:
    - `%LOCALAPPDATA%\Codistan\Acquisition\extensions\upwork`
@@ -34,7 +36,7 @@ The shared runtime implements #200. The Upwork extension advances #201, the Link
 
 After an application update, rerun `START-HERE-ACQUISITION-V4.cmd` and click **Reload** on both unpacked extensions. Their folder locations remain stable.
 
-## Daily Upwork flow
+## Upwork flow
 
 1. Double-click the desktop shortcut **Open Upwork Searches**.
 2. The launcher opens only these approved searches:
@@ -46,24 +48,94 @@ After an application update, rerun `START-HERE-ACQUISITION-V4.cmd` and click **R
 
 The Upwork extension retains canonical job identity plus visible value, buyer, competition, freshness, duration, workload and skill evidence needed for bidding decisions. It never refreshes, scrolls, clicks a job, handles verification, submits a proposal, changes a profile or sends a message.
 
-## Daily LinkedIn flow
+## Scheduled LinkedIn flow
 
-1. Double-click the desktop shortcut **Open LinkedIn Lead Searches**.
-2. The launcher opens five high-intent content searches:
-   - software development agency requirements;
-   - AI automation partner requirements;
-   - digital marketing agency requirements;
-   - video and animation agency requirements;
-   - cybersecurity consultant requirements.
-3. The extension reviews only visible posts after the user-opened search pages load.
-4. It submits only explicit supported service requirements and keeps the original post URL and original author.
-5. The popup shows new records plus Priority A and Priority B counts.
+LinkedIn extension `1.3.0` runs the five approved searches every **15 minutes** while normal Chrome is running and the user remains signed in.
 
-The LinkedIn extension filters permanent vacancies, job seekers, freelancer self-promotion and generic content before local ingestion. It retains service lanes, intent phrases, available contact-route types and repost/original-author evidence. It never messages, connects, follows, reacts or comments.
+Each cycle:
+
+1. opens one approved content search in an inactive temporary tab;
+2. waits for normal LinkedIn rendering;
+3. performs the bounded four-step scan;
+4. captures only resolvable buyer-intent posts with original canonical evidence;
+5. deduplicates or enriches through the local collector;
+6. closes the temporary tab;
+7. waits before opening the next search;
+8. skips a new cycle if the previous cycle is still active.
+
+The five lanes are:
+
+- software development and delivery partners;
+- AI automation partners;
+- digital marketing agencies;
+- video production and animation partners;
+- cybersecurity consultants and project-based engagements.
+
+Open the extension popup to:
+
+- enable or disable the 15-minute cycle;
+- see the previous cycle time and counts;
+- run all approved searches immediately;
+- capture or scan the current page manually when needed.
+
+The scheduled extension may open inactive tabs and scroll search results. It does not message, connect, follow, react, comment, email, submit a proposal, change searches outside the approved list, or bypass LinkedIn controls. Login, checkpoint or auth-wall redirects are recorded as operational errors and never handled automatically.
+
+## Prospect Desk synchronization
+
+Local capture works without Prospect Desk synchronization. To populate the production `/prospects` and `/leads/linkedin` workspaces automatically, deploy the machine-authenticated endpoint and configure the local bridge.
+
+### Production configuration
+
+Add a Vercel environment variable named:
+
+```text
+ACQUISITION_INGEST_TOKEN
+```
+
+Use a random value of at least 32 characters and deploy `api/acquisition-ingest.ts`. The endpoint accepts only authenticated evidence-only POST requests and requires the production `DATABASE_URL`.
+
+### PC configuration
+
+Double-click the desktop shortcut **Configure Prospect Desk Sync** and enter:
+
+- the production Prospect Desk URL, such as `https://your-domain.example`;
+- the same `ACQUISITION_INGEST_TOKEN` value.
+
+The script writes the secret only to:
+
+```text
+%LOCALAPPDATA%\Codistan\Acquisition\config\prospect-desk-sync.json
+```
+
+It is not committed to GitHub or printed in health output. The bridge retries every 60 seconds and sends only records whose fingerprint is new or enriched. Reject records are never synchronized.
+
+Every synchronized LinkedIn record is upserted by stable identity and canonical post URL. Prospect Desk receives:
+
+- original post and author/profile evidence;
+- headline and available company context;
+- public email when explicitly visible in the post;
+- source search and capture metadata;
+- local Priority A, Priority B or Research decision;
+- score, confidence, positive reasons, missing evidence and risk flags;
+- service workspace mapping;
+- recommended Codistan profile and approved portfolio proof;
+- automatic owner assignment where unassigned;
+- recommended next action and a human-reviewable response draft.
+
+Repeated scans enrich the same record. Existing owner, outreach history, reply, follow-up, proposal and outcome data are preserved. All outreach remains manual.
+
+## Service workspace mapping
+
+- software product delivery → **Software and SaaS**;
+- AI automation → **AI and automation**;
+- cybersecurity → **Cybersecurity**;
+- digital marketing and growth → **Web and marketing**;
+- video, animation, 3D and immersive delivery → **3D, AR and VR**;
+- explicit white-label or overflow partnerships → **Partnership leads** and the closest delivery service workspace.
 
 ## Closeability decisions
 
-Every accepted record is scored immediately under configuration `acquisition-v4-closeability-1.0.0`.
+Every accepted record is scored immediately under the current Acquisition V4 closeability configuration.
 
 ### Upwork dimensions
 
@@ -82,7 +154,7 @@ Every accepted record is scored immediately under configuration `acquisition-v4-
 
 The stored decision includes Priority A, Priority B, Research or Reject; score; confidence; service route; positive reasons; missing evidence; risks; and the recommended manual next action. Missing information is shown explicitly and is never invented.
 
-## Combined action queue
+## Combined local action queue
 
 After every capture, the runtime rewrites:
 
@@ -95,8 +167,9 @@ Double-click the desktop shortcut **Open Acquisition Review**. Priority A appear
 ## Health, diagnostics and rollback
 
 - **Check Acquisition V4** shows whether both collectors are healthy and reports current A/B counts.
+- Each collector health response includes a sanitized `prospect_desk_sync` section with configuration, endpoint host, pending count, last success and last error. It never exposes the token.
 - **Diagnose Acquisition V4** creates a ZIP containing health, versions and file metadata only. It excludes captured opportunity bodies, cookies and credentials.
-- **Rollback Acquisition V4** swaps `app-current` with `app-previous`, refreshes both stable extension folders and restarts the runtime. Captured records and deduplication state remain intact.
+- **Rollback Acquisition V4** swaps `app-current` with `app-previous`, refreshes both stable extension folders and restarts the runtime. Captured records, deduplication and sync configuration remain intact.
 
 ## Developer validation
 
@@ -106,7 +179,10 @@ From this directory:
 python -m unittest discover -s tests -v
 node tests/upwork_extension_contract.mjs
 node tests/linkedin_extension_contract.mjs
+node tests/prospect_desk_bridge_contract.mjs
 ```
+
+The repository also contains focused GitHub Actions workflows for the local runtime and the production Vercel build.
 
 ## Run both collectors
 
