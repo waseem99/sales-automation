@@ -1,15 +1,31 @@
 body {
   margin: 0;
-  width: 340px;
+  width: 360px;
   font-family: "Segoe UI", Arial, sans-serif;
   background: #f7f8fa;
   color: #182230;
 }
 main { padding: 18px; }
 h1 { margin: 0 0 8px; font-size: 21px; }
-.hint, .safety { margin: 0 0 14px; color: #596579; font-size: 13px; line-height: 1.45; }
+.hint, .safety, .manual-first { margin: 0 0 14px; color: #596579; font-size: 13px; line-height: 1.45; }
 button { width: 100%; box-sizing: border-box; border-radius: 8px; font-size: 14px; padding: 11px 12px; border: 0; cursor: pointer; font-weight: 650; margin-top: 8px; }
 button:disabled { opacity: 0.55; cursor: progress; }
 .primary { background: #166534; color: white; }
-#status { margin-top: 14px; min-height: 38px; padding: 10px; border-radius: 8px; background: white; border: 1px solid #dfe3e8; font-size: 13px; line-height: 1.4; }
+.secondary { background: #e8edf2; color: #203040; }
+.automation-toggle {
+  display: flex;
+  gap: 9px;
+  align-items: flex-start;
+  margin-top: 15px;
+  padding: 10px;
+  border: 1px solid #d7dde4;
+  border-radius: 8px;
+  background: white;
+  font-size: 13px;
+  font-weight: 650;
+  line-height: 1.35;
+}
+.automation-toggle input { margin-top: 2px; }
+.manual-first { margin: 7px 2px 0; font-size: 11px; }
+#status { margin-top: 14px; min-height: 42px; padding: 10px; border-radius: 8px; background: white; border: 1px solid #dfe3e8; font-size: 13px; line-height: 1.4; white-space: pre-line; }
 .safety { margin: 12px 0 0; font-size: 11px; }
