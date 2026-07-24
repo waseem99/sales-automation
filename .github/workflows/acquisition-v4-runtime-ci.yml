@@ -1,6 +1,6 @@
 name: Acquisition V4 Runtime CI
 
-# Release gate includes Upwork V4 1.0.3 stable job-ID card expansion.
+# Release gate includes scheduled LinkedIn capture and the Prospect Desk ingestion bridge.
 on:
   pull_request:
     branches:
@@ -8,6 +8,9 @@ on:
     paths:
       - '.github/workflows/acquisition-v4-runtime-ci.yml'
       - 'workers/acquisition/**'
+      - 'api/acquisition-ingest.ts'
+      - 'vercel/acquisition-intake-runtime.ts'
+      - 'vercel.json'
   workflow_dispatch:
 
 permissions:
@@ -19,9 +22,9 @@ concurrency:
 
 jobs:
   validate:
-    name: Test collectors, extensions and closeability queue
+    name: Test collectors, extensions, scheduled capture and Prospect Desk sync
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 12
 
     defaults:
       run:
@@ -48,6 +51,11 @@ jobs:
         env:
           PYTHONPATH: .
         run: python -m unittest discover -s tests -p 'test_runtime.py' -v
+
+      - name: Test durable Prospect Desk sync
+        env:
+          PYTHONPATH: .
+        run: python -m unittest discover -s tests -p 'test_sync.py' -v
 
       - name: Closeability — strong Upwork job
         env: &qualification_env
@@ -111,8 +119,11 @@ jobs:
       - name: Validate Upwork extension contract
         run: node tests/upwork_extension_contract.mjs
 
-      - name: Validate LinkedIn extension contract
+      - name: Validate scheduled LinkedIn extension contract
         run: node tests/linkedin_extension_contract.mjs
+
+      - name: Validate Prospect Desk acquisition bridge contract
+        run: node tests/prospect_desk_bridge_contract.mjs
 
       - name: Run localhost closeability integration gate
         env:
