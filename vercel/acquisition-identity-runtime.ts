@@ -58,7 +58,7 @@ export async function applyIdentityGraphAfterIntake(input: {
       state.repository.listLeads().map((item) => item.lead),
       generatedAt,
     );
-    saveResolution(state.repository.listLeads(), state.repository, record, resolution, touchedIds);
+    saveResolution(state.repository, record, resolution, touchedIds);
     primaryResolutions.set(leadId, resolution);
   }
 
@@ -80,7 +80,7 @@ export async function applyIdentityGraphAfterIntake(input: {
       state.repository.listLeads().map((item) => item.lead),
       generatedAt,
     );
-    saveResolution(state.repository.listLeads(), state.repository, record, resolution, touchedIds);
+    saveResolution(state.repository, record, resolution, touchedIds);
   }
 
   const touchedRecords = [...touchedIds]
@@ -98,7 +98,6 @@ export async function applyIdentityGraphAfterIntake(input: {
 }
 
 function saveResolution(
-  allRecords: StoredLeadRecord[],
   repository: {
     upsertLead(lead: Lead, actor?: string): StoredLeadRecord;
     addNote(leadId: string, note: string, actor?: string): StoredLeadRecord;
@@ -108,19 +107,18 @@ function saveResolution(
   touchedIds: Set<string>,
 ): void {
   const attached = attachIdentityResolution(record.lead, resolution);
-  repository.upsertLead(attached, ACTOR);
+  const updated = repository.upsertLead(attached, ACTOR);
   touchedIds.add(attached.id);
 
-  const notes = allRecords.find((item) => item.lead.id === attached.id)?.notes ?? record.notes;
   const warning = duplicateContactWarning(resolution);
   if (warning) {
-    addNoteOnce(repository, attached.id, notes, `identity_graph::duplicate_contact::${warning}`);
+    addNoteOnce(repository, attached.id, updated.notes, `identity_graph::duplicate_contact::${warning}`);
   }
   if (resolution.person.status === 'candidate' && resolution.person.candidateLeadIds.length > 0) {
     addNoteOnce(
       repository,
       attached.id,
-      notes,
+      updated.notes,
       `identity_graph::candidate_person::${resolution.person.candidateLeadIds.join(',')}::human_review_required`,
     );
   }
@@ -128,12 +126,12 @@ function saveResolution(
     addNoteOnce(
       repository,
       attached.id,
-      notes,
+      updated.notes,
       `identity_graph::candidate_company::${resolution.company.candidateLeadIds.join(',')}::human_review_required`,
     );
   }
   for (const conflict of resolution.conflicts) {
-    addNoteOnce(repository, attached.id, notes, `identity_graph::conflict::${conflict}`);
+    addNoteOnce(repository, attached.id, updated.notes, `identity_graph::conflict::${conflict}`);
   }
 }
 
@@ -145,7 +143,6 @@ function addNoteOnce(
 ): void {
   if (existingNotes.includes(note)) return;
   repository.addNote(leadId, note, ACTOR);
-  existingNotes.push(note);
 }
 
 function buildSummary(
