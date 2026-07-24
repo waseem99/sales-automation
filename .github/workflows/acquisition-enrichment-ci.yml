@@ -65,7 +65,7 @@ jobs:
   typecheck:
     name: Type-check acquisition enrichment integration
     runs-on: ubuntu-latest
-    timeout-minutes: 18
+    timeout-minutes: 20
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
@@ -81,15 +81,15 @@ jobs:
       - name: Install workspace dependencies
         run: pnpm install --no-frozen-lockfile
 
-      - name: Build enrichment package and dependencies
-        id: enrichment_package_build
+      - name: Build all workspace packages
+        id: enrichment_workspace_build
         continue-on-error: true
         shell: bash
-        run: pnpm --filter @sales-automation/enrichment... build > acquisition-enrichment-package-build.log 2>&1
+        run: pnpm build > acquisition-enrichment-package-build.log 2>&1
 
       - name: Type-check acquisition enrichment runtime
         id: acquisition_enrichment_typecheck
-        if: steps.enrichment_package_build.outcome == 'success'
+        if: steps.enrichment_workspace_build.outcome == 'success'
         continue-on-error: true
         shell: bash
         run: pnpm exec tsc -p tsconfig.acquisition-enrichment.json --noEmit > acquisition-enrichment-typecheck.log 2>&1
@@ -112,14 +112,14 @@ jobs:
           if-no-files-found: error
           retention-days: 3
 
-      - name: Enforce enrichment package build
-        if: steps.enrichment_package_build.outcome != 'success'
+      - name: Enforce enrichment workspace build
+        if: steps.enrichment_workspace_build.outcome != 'success'
         run: |
           cat acquisition-enrichment-package-build.log
           exit 1
 
       - name: Enforce acquisition enrichment type-check
-        if: steps.enrichment_package_build.outcome == 'success' && steps.acquisition_enrichment_typecheck.outcome != 'success'
+        if: steps.enrichment_workspace_build.outcome == 'success' && steps.acquisition_enrichment_typecheck.outcome != 'success'
         run: |
           cat acquisition-enrichment-typecheck.log
           exit 1
