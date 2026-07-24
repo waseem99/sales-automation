@@ -43,7 +43,8 @@ class WindowsBundleTests(unittest.TestCase):
             "extensions\\linkedin\\manifest.json",
             "1.4.0",
             "acquisition_v4.sales_navigator_acceptance",
-            "The technical pilot is not complete yet",
+            "Campaign settings",
+            "Local review",
         ]:
             self.assertIn(marker, sales_nav_pilot)
         self.assertIn('"sales_navigator": 8785', supervisor)
