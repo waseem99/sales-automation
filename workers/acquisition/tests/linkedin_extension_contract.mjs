@@ -12,8 +12,8 @@ const popup = fs.readFileSync(path.join(root, "popup.js"), "utf8");
 const signalSource = fs.readFileSync(path.join(root, "signal.js"), "utf8");
 
 assert.equal(manifest.manifest_version, 3);
-assert.equal(manifest.version, "1.0.4");
-assert(background.includes('linkedin-extension-1.0.4'));
+assert.equal(manifest.version, "1.1.0");
+assert(background.includes('linkedin-extension-1.1.0'));
 assert.deepEqual(manifest.content_scripts[0].js, ["signal.js", "dom-adapter.js", "content.js"]);
 assert(manifest.host_permissions.includes("http://127.0.0.1:8775/*"));
 
@@ -26,13 +26,13 @@ for (const marker of [
 
 for (const marker of [
   'data-codistan-opportunity-card="true"',
-  'looseActivityUrn',
-  'nodeAttributeValues',
-  'containers_with_activity_id',
-  'containers_with_permalink_hint',
-  'missing_canonical_url',
-  'linkedin-dom-1.0.3'
-]) assert(content.includes(marker), `missing LinkedIn DOM marker: ${marker}`);
+  'timestampCandidate',
+  'candidateScopes',
+  'candidate_urls',
+  'AGE_TEXT',
+  'linkedin-dom-1.1.0',
+  'missing_canonical_url'
+]) assert(content.includes(marker), `missing LinkedIn batch-capture marker: ${marker}`);
 
 for (const marker of [
   "data-codistan-opportunity-card",
@@ -45,10 +45,8 @@ for (const marker of [
 ]) assert(adapter.includes(marker), `missing LinkedIn adapter marker: ${marker}`);
 assert(!adapter.includes('setAttribute("data-view-name", "feed-full-update")'));
 
-assert(popup.includes("(${marked} adapter cards)"));
-assert(popup.includes("cards exposed activity IDs"));
-assert(popup.includes("lacked a canonical permalink"));
-assert(popup.includes("Open the target post by clicking its timestamp"));
+assert(popup.includes("${resolved} resolvable post links"));
+assert(popup.includes("Only those unresolved posts need to be opened through their timestamp"));
 
 const prohibited = [
   "chrome.tabs.create", "chrome.tabs.update", "scrollIntoView", "window.scrollTo",
