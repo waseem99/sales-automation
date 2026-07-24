@@ -14,6 +14,7 @@
     const marked = Number(diagnostics.adapter_marked_containers || 0);
     const readable = Number(diagnostics.posts_with_readable_text || 0);
     const classified = Number(diagnostics.classified_candidates || 0);
+    const resolved = Number(diagnostics.candidate_urls || 0);
     const activityIds = Number(diagnostics.containers_with_activity_id || 0);
     const permalinkHints = Number(diagnostics.containers_with_permalink_hint || 0);
     const missingUrl = Number(diagnostics.missing_canonical_url || 0);
@@ -21,11 +22,11 @@
       .filter(([, count]) => Number(count) > 0)
       .map(([reason, count]) => `${reason}: ${count}`)
       .join(", ");
-    const parts = [`Scanned ${containers} visible containers (${marked} adapter cards); ${readable} readable posts; ${classified} buyer-intent matches.`];
+    const parts = [`Scanned ${containers} visible containers (${marked} adapter cards); ${readable} readable posts; ${classified} buyer-intent matches; ${resolved} resolvable post links.`];
     if (activityIds || permalinkHints) parts.push(`${activityIds} cards exposed activity IDs; ${permalinkHints} exposed permalink hints.`);
     if (missingUrl) parts.push(`${missingUrl} matched posts lacked a canonical permalink.`);
     if (missingUrl > 0 && classified > 0 && missingUrl === classified) {
-      parts.push("LinkedIn hid every post link in this search view. Open the target post by clicking its timestamp, then capture from the individual post page.");
+      parts.push("LinkedIn hid every post link in this view. Only those unresolved posts need to be opened through their timestamp.");
     }
     if (rejections) parts.push(`Filtered — ${rejections}.`);
     return parts.join(" ");
