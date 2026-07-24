@@ -38,8 +38,8 @@ if (-not (Test-Path $manifestPath)) {
 $manifest = Get-Content $manifestPath -Raw | ConvertFrom-Json
 Write-Host "Sales Navigator collector: HEALTHY (runtime $($health.runtime_version))"
 Write-Host "LinkedIn extension files: version $($manifest.version)"
-if ([version]$manifest.version -lt [version]"1.4.0") {
-    Write-Host "The installed LinkedIn extension is older than 1.4.0. Rerun the installer and click Reload in chrome://extensions/." -ForegroundColor Red
+if ([version]$manifest.version -lt [version]"1.4.1") {
+    Write-Host "The installed LinkedIn extension is older than 1.4.1. Rerun the installer and click Reload in chrome://extensions/." -ForegroundColor Red
     exit 3
 }
 
