@@ -14,10 +14,11 @@ const popupHtml = fs.readFileSync(path.join(root, "popup.html"), "utf8");
 const signalSource = fs.readFileSync(path.join(root, "signal.js"), "utf8");
 
 assert.equal(manifest.manifest_version, 3);
-assert.equal(manifest.version, "1.2.0");
-assert(background.includes('linkedin-extension-1.2.0'));
+assert.equal(manifest.version, "1.2.1");
+assert(background.includes('linkedin-extension-1.2.1'));
 assert(background.includes("records.slice(0, 30)"));
 assert.deepEqual(manifest.content_scripts[0].js, ["signal.js", "dom-adapter.js", "search-resolver.js", "content.js"]);
+assert(manifest.permissions.includes("scripting"));
 assert(manifest.host_permissions.includes("http://127.0.0.1:8775/*"));
 
 for (const marker of [
@@ -74,8 +75,12 @@ for (const marker of [
   'CODISTAN_LINKEDIN_SCROLL_STATUS',
   'CODISTAN_SCROLL_LINKEDIN_RESULTS',
   'CODISTAN_RESTORE_LINKEDIN_SCROLL',
-  'stop reason'
-]) assert(popup.includes(marker), `missing bounded scan marker: ${marker}`);
+  'stop reason',
+  'chrome.scripting.executeScript',
+  'CONTENT_SCRIPT_FILES',
+  'missingReceiver',
+  'Repairing the tab and retrying'
+]) assert(popup.includes(marker), `missing bounded/self-healing scan marker: ${marker}`);
 
 const prohibited = [
   "chrome.tabs.create", "chrome.tabs.update", "scrollIntoView",
