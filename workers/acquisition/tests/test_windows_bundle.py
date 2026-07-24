@@ -12,12 +12,13 @@ class WindowsBundleTests(unittest.TestCase):
         diagnostics = (root / "scripts/windows/diagnose-acquisition-v4.ps1").read_text(encoding="utf-8")
         rollback = (root / "scripts/windows/rollback-acquisition-v4.ps1").read_text(encoding="utf-8")
         configure = (root / "scripts/windows/configure-prospect-desk-sync.ps1").read_text(encoding="utf-8")
+        sales_nav_pilot = (root / "scripts/windows/check-sales-navigator-pilot.ps1").read_text(encoding="utf-8")
         supervisor = (root / "acquisition_v4/supervisor.py").read_text(encoding="utf-8")
         for marker in [
             "app-current", "app-previous", "$extensionRoot", '@("upwork", "linkedin")',
             "Open Upwork Searches.lnk", "Open LinkedIn Lead Searches.lnk", "Open Acquisition Review.lnk",
-            "Configure Prospect Desk Sync.lnk", "Codistan Acquisition V5.lnk", "127.0.0.1:8765",
-            "127.0.0.1:8775", "127.0.0.1:8785", "watchdog.pid",
+            "Check Sales Navigator Pilot.lnk", "Configure Prospect Desk Sync.lnk", "Codistan Acquisition V5.lnk",
+            "127.0.0.1:8765", "127.0.0.1:8775", "127.0.0.1:8785", "watchdog.pid",
             '$enabledSources = @("linkedin", "upwork", "sales_navigator")',
             "$migratedConfig", "Sync sources: LinkedIn warm, Upwork and Sales Navigator cold campaigns",
         ]:
@@ -37,13 +38,21 @@ class WindowsBundleTests(unittest.TestCase):
             "acquisition_v4.supervisor", "Sales Navigator collector", "8765, 8775, 8785",
         ]:
             self.assertIn(marker, starter)
+        for marker in [
+            "http://127.0.0.1:8785/health",
+            "extensions\\linkedin\\manifest.json",
+            "1.4.0",
+            "acquisition_v4.sales_navigator_acceptance",
+            "The technical pilot is not complete yet",
+        ]:
+            self.assertIn(marker, sales_nav_pilot)
         self.assertIn('"sales_navigator": 8785', supervisor)
         self.assertIn("runtime.pid", supervisor)
         self.assertIn("watchdog_pid_present", diagnostics)
         self.assertIn("runtime log tails only", diagnostics.lower())
         self.assertIn("no opportunity bodies, cookies or credentials", diagnostics.lower())
         self.assertIn("Captured records and deduplication state were preserved", rollback)
-        combined = "\n".join([installer, starter, diagnostics, rollback]).lower()
+        combined = "\n".join([installer, starter, diagnostics, rollback, sales_nav_pilot]).lower()
         for prohibited in ["database_url", "password=", "linkedin message", "upwork proposal"]:
             self.assertNotIn(prohibited, combined)
 
