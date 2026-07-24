@@ -1,5 +1,6 @@
 import { createHash, timingSafeEqual } from 'node:crypto';
 import { handleAcquisitionIntake } from '../vercel/acquisition-intake-runtime.js';
+import { handleSalesNavigatorIntake } from '../vercel/sales-navigator-intake-runtime.js';
 
 export const maxDuration = 300;
 const MAX_REQUEST_BYTES = 1_000_000;
@@ -31,7 +32,11 @@ export default {
         return responseJson({ error: 'Request body must be valid JSON.' }, 400);
       }
 
-      return handleAcquisitionIntake({
+      const source = body && typeof body === 'object' && !Array.isArray(body)
+        ? String((body as Record<string, unknown>).source ?? '')
+        : '';
+      const handler = source === 'sales_navigator' ? handleSalesNavigatorIntake : handleAcquisitionIntake;
+      return handler({
         body,
         databaseUrl: requireEnvironment('DATABASE_URL'),
       });
