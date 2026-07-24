@@ -81,32 +81,45 @@ jobs:
       - name: Install workspace dependencies
         run: pnpm install --no-frozen-lockfile
 
-      - name: Build workspace dependencies
+      - name: Build enrichment package and dependencies
+        id: enrichment_package_build
+        continue-on-error: true
         shell: bash
-        run: |
-          set +e
-          pnpm build > acquisition-enrichment-build.log 2>&1
-          status=$?
-          tail -n 140 acquisition-enrichment-build.log
-          exit $status
+        run: pnpm --filter @sales-automation/enrichment... build > acquisition-enrichment-package-build.log 2>&1
 
       - name: Type-check acquisition enrichment runtime
         id: acquisition_enrichment_typecheck
+        if: steps.enrichment_package_build.outcome == 'success'
         continue-on-error: true
         shell: bash
         run: pnpm exec tsc -p tsconfig.acquisition-enrichment.json --noEmit > acquisition-enrichment-typecheck.log 2>&1
 
-      - name: Upload type-check diagnostics
+      - name: Preserve diagnostic files
+        if: always()
+        shell: bash
+        run: |
+          test -f acquisition-enrichment-package-build.log || touch acquisition-enrichment-package-build.log
+          test -f acquisition-enrichment-typecheck.log || touch acquisition-enrichment-typecheck.log
+
+      - name: Upload enrichment build diagnostics
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: acquisition-enrichment-typecheck
-          path: acquisition-enrichment-typecheck.log
+          path: |
+            acquisition-enrichment-package-build.log
+            acquisition-enrichment-typecheck.log
           if-no-files-found: error
           retention-days: 3
 
+      - name: Enforce enrichment package build
+        if: steps.enrichment_package_build.outcome != 'success'
+        run: |
+          cat acquisition-enrichment-package-build.log
+          exit 1
+
       - name: Enforce acquisition enrichment type-check
-        if: steps.acquisition_enrichment_typecheck.outcome != 'success'
+        if: steps.enrichment_package_build.outcome == 'success' && steps.acquisition_enrichment_typecheck.outcome != 'success'
         run: |
           cat acquisition-enrichment-typecheck.log
           exit 1
