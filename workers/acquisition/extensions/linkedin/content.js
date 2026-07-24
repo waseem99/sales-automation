@@ -57,6 +57,7 @@
     'time',
     '[data-test-id*="timestamp"]'
   ];
+  const AGE_TEXT = /^(?:\d+\s*(?:m|h|d|w|mo|yr)s?|just now)(?:\s*•.*)?$/i;
 
   function isVisible(element) {
     if (!(element instanceof Element)) return false;
@@ -89,7 +90,7 @@
   function decodedVariants(value) {
     const values = new Set([String(value || "")]);
     let current = String(value || "");
-    for (let attempt = 0; attempt < 3; attempt += 1) {
+    for (let attempt = 0; attempt < 4; attempt += 1) {
       try {
         const decoded = decodeURIComponent(current);
         if (!decoded || decoded === current) break;
@@ -112,7 +113,15 @@
     return "";
   }
 
-  function nodeAttributeValues(root, limit = 450) {
+  function canonicalFromValue(value) {
+    for (const variant of decodedVariants(value)) {
+      const canonical = signal.canonicalPostUrl(variant, looseActivityUrn(variant));
+      if (canonical) return canonical;
+    }
+    return "";
+  }
+
+  function nodeAttributeValues(root, limit = 500) {
     const values = [];
     const nodes = [];
     if (root instanceof Element) nodes.push(root);
@@ -129,29 +138,6 @@
     return values;
   }
 
-  function activityUrn(root) {
-    if (!(root instanceof Element)) return "";
-    const closest = root.closest?.('[data-urn], [data-id], [data-chameleon-result-urn], [data-view-tracking-scope], [data-activity-urn]');
-    const roots = closest && closest !== root ? [root, closest] : [root];
-    for (const candidateRoot of roots) {
-      for (const value of nodeAttributeValues(candidateRoot)) {
-        const urn = looseActivityUrn(value);
-        if (urn) return urn;
-      }
-      const htmlUrn = looseActivityUrn(String(candidateRoot.outerHTML || "").slice(0, 500000));
-      if (htmlUrn) return htmlUrn;
-    }
-    return "";
-  }
-
-  function canonicalFromValue(value) {
-    for (const variant of decodedVariants(value)) {
-      const canonical = signal.canonicalPostUrl(variant, looseActivityUrn(variant));
-      if (canonical) return canonical;
-    }
-    return "";
-  }
-
   function currentIndividualPostUrl() {
     try {
       const url = new URL(window.location.href);
@@ -164,25 +150,60 @@
     return "";
   }
 
-  function permalinkHint(root) {
-    if (!(root instanceof Element)) return false;
-    for (const value of nodeAttributeValues(root, 300)) {
-      if (canonicalFromValue(value) || looseActivityUrn(value)) return true;
+  function activityUrn(root) {
+    if (!(root instanceof Element)) return "";
+    for (const value of nodeAttributeValues(root)) {
+      const urn = looseActivityUrn(value);
+      if (urn) return urn;
     }
-    return false;
+    const htmlUrn = looseActivityUrn(String(root.outerHTML || "").slice(0, 600000));
+    return htmlUrn || "";
+  }
+
+  function candidateScopes(post) {
+    const scopes = [];
+    let node = post;
+    for (let depth = 0; node instanceof Element && depth < 5; depth += 1, node = node.parentElement) {
+      if (!scopes.includes(node)) scopes.push(node);
+      if (node.matches('main, [role="main"]')) break;
+    }
+    return scopes;
+  }
+
+  function timestampCandidate(root) {
+    for (const scope of candidateScopes(root)) {
+      for (const anchor of scope.querySelectorAll('a[href]')) {
+        const href = String(anchor.href || anchor.getAttribute('href') || "");
+        const canonical = canonicalFromValue(href);
+        if (canonical) return canonical;
+        const text = signal.normalizeText(anchor.innerText || anchor.textContent || "");
+        const label = signal.normalizeText(anchor.getAttribute('aria-label') || anchor.getAttribute('title') || "");
+        if ((AGE_TEXT.test(text) || /\b(?:ago|post)\b/i.test(label)) && href) {
+          const indirect = canonicalFromValue(href);
+          if (indirect) return indirect;
+        }
+      }
+    }
+    return "";
   }
 
   function postUrl(root, fallbackRoot, knownUrn = "") {
-    const roots = root === fallbackRoot ? [root] : [root, fallbackRoot];
-    for (const candidateRoot of roots) {
-      for (const value of nodeAttributeValues(candidateRoot)) {
+    const individual = currentIndividualPostUrl();
+    if (individual) return individual;
+    for (const scope of candidateScopes(root)) {
+      for (const value of nodeAttributeValues(scope)) {
         const canonical = canonicalFromValue(value);
         if (canonical) return canonical;
       }
+      const timestamp = timestampCandidate(scope);
+      if (timestamp) return timestamp;
+    }
+    if (fallbackRoot !== root) {
+      const fallbackTimestamp = timestampCandidate(fallbackRoot);
+      if (fallbackTimestamp) return fallbackTimestamp;
     }
     const urn = knownUrn || activityUrn(root) || activityUrn(fallbackRoot);
-    if (urn) return signal.canonicalPostUrl('', urn);
-    return currentIndividualPostUrl();
+    return urn ? signal.canonicalPostUrl('', urn) : "";
   }
 
   function actor(root) {
@@ -226,16 +247,29 @@
     return candidates[0] || "";
   }
 
+  function visiblePostNodes() {
+    const nodes = [];
+    const seen = new Set();
+    for (const selector of POST_SELECTORS) {
+      for (const node of document.querySelectorAll(selector)) {
+        if (seen.has(node) || !isVisible(node)) continue;
+        seen.add(node);
+        nodes.push(node);
+      }
+    }
+    return nodes;
+  }
+
   function extractVisiblePosts(limit = 20) {
     const posts = [];
+    const candidateUrls = [];
     const seenUrls = new Set();
-    const nodes = [];
-    const nodeSet = new Set();
     const diagnostics = {
       visible_post_containers: 0,
       adapter_marked_containers: 0,
       posts_with_readable_text: 0,
       classified_candidates: 0,
+      candidate_urls: 0,
       containers_with_activity_id: 0,
       containers_with_permalink_hint: 0,
       missing_canonical_url: 0,
@@ -243,14 +277,7 @@
       rejection_reasons: {}
     };
 
-    for (const selector of POST_SELECTORS) {
-      for (const node of document.querySelectorAll(selector)) {
-        if (!nodeSet.has(node) && isVisible(node)) {
-          nodeSet.add(node);
-          nodes.push(node);
-        }
-      }
-    }
+    const nodes = visiblePostNodes();
     diagnostics.visible_post_containers = nodes.length;
     diagnostics.adapter_marked_containers = document.querySelectorAll('[data-codistan-opportunity-card="true"]').length;
 
@@ -268,14 +295,13 @@
       diagnostics.classified_candidates += 1;
       const knownUrn = activityUrn(originalRoot) || activityUrn(post);
       if (knownUrn) diagnostics.containers_with_activity_id += 1;
-      if (permalinkHint(originalRoot) || (originalRoot !== post && permalinkHint(post))) {
-        diagnostics.containers_with_permalink_hint += 1;
-      }
       const sourceUrl = postUrl(originalRoot, post, knownUrn);
       if (!sourceUrl) {
         diagnostics.missing_canonical_url += 1;
         continue;
       }
+      diagnostics.containers_with_permalink_hint += 1;
+      if (!candidateUrls.includes(sourceUrl)) candidateUrls.push(sourceUrl);
       if (seenUrls.has(sourceUrl)) {
         diagnostics.duplicate_urls += 1;
         continue;
@@ -305,12 +331,14 @@
           reposter_name: reposter?.name || "",
           reposter_profile_url: reposter?.profile_url || "",
           classifier_version: "linkedin-direct-requirement-1.0.1",
-          extraction_version: "linkedin-dom-1.0.3"
+          extraction_version: "linkedin-dom-1.1.0"
         }
       });
+      if (currentIndividualPostUrl() && posts.length >= 1) break;
       if (posts.length >= limit) break;
     }
-    return {records: posts, diagnostics};
+    diagnostics.candidate_urls = candidateUrls.length;
+    return {records: posts, candidate_urls: candidateUrls.slice(0, limit), diagnostics};
   }
 
   chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
@@ -322,6 +350,7 @@
         page_url: window.location.href,
         page_title: document.title,
         records: extracted.records,
+        candidate_urls: extracted.candidate_urls,
         diagnostics: {
           ...extracted.diagnostics,
           candidate_posts: extracted.records.length
