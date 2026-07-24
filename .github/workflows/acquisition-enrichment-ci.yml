@@ -1,0 +1,112 @@
+name: Acquisition Evidence Enrichment CI
+
+on:
+  pull_request:
+    branches:
+      - agent/unified-identity-228
+    paths:
+      - '.github/workflows/acquisition-enrichment-ci.yml'
+      - 'packages/enrichment/**'
+      - 'api/acquisition-ingest.ts'
+      - 'vercel/acquisition-enrichment-runtime.ts'
+      - 'workers/acquisition/tests/enrichment_bridge_contract.mjs'
+      - 'tsconfig.acquisition-enrichment.json'
+      - 'package.json'
+      - 'pnpm-lock.yaml'
+      - 'packages/**'
+      - 'apps/web/**'
+      - 'vercel/**'
+      - 'scripts/**'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: acquisition-enrichment-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  enrichment:
+    name: Test enrichment behavior and production integration
+    runs-on: ubuntu-latest
+    timeout-minutes: 24
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Install standalone pnpm
+        run: npm install --global --force @pnpm/exe@9.15.9
+
+      - name: Install workspace dependencies
+        run: pnpm install --no-frozen-lockfile
+
+      - name: Test evidence enrichment behavior
+        run: pnpm --filter @sales-automation/enrichment test
+
+      - name: Validate evidence-only production bridge
+        working-directory: workers/acquisition
+        run: node tests/enrichment_bridge_contract.mjs
+
+      - name: Build full production workspace
+        shell: bash
+        run: |
+          set +e
+          pnpm build:vercel > acquisition-enrichment-production-build.log 2>&1
+          status=$?
+          tail -n 320 acquisition-enrichment-production-build.log
+          exit $status
+
+  typecheck:
+    name: Type-check acquisition enrichment integration
+    runs-on: ubuntu-latest
+    timeout-minutes: 18
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Install standalone pnpm
+        run: npm install --global --force @pnpm/exe@9.15.9
+
+      - name: Install workspace dependencies
+        run: pnpm install --no-frozen-lockfile
+
+      - name: Build workspace dependencies
+        shell: bash
+        run: |
+          set +e
+          pnpm build > acquisition-enrichment-build.log 2>&1
+          status=$?
+          tail -n 140 acquisition-enrichment-build.log
+          exit $status
+
+      - name: Type-check acquisition enrichment runtime
+        id: acquisition_enrichment_typecheck
+        continue-on-error: true
+        shell: bash
+        run: pnpm exec tsc -p tsconfig.acquisition-enrichment.json --noEmit > acquisition-enrichment-typecheck.log 2>&1
+
+      - name: Upload type-check diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: acquisition-enrichment-typecheck
+          path: acquisition-enrichment-typecheck.log
+          if-no-files-found: error
+          retention-days: 3
+
+      - name: Enforce acquisition enrichment type-check
+        if: steps.acquisition_enrichment_typecheck.outcome != 'success'
+        run: |
+          cat acquisition-enrichment-typecheck.log
+          exit 1
