@@ -82,6 +82,11 @@ for (const marker of [
   'CODISTAN_REMOVE_SALES_NAV_SEARCH',
   'CODISTAN_RUN_SALES_NAV_CAMPAIGNS_NOW',
   'CODISTAN_SET_SALES_NAV_AUTOMATION',
+  'visible lead links',
+  'readable cards',
+  'missing name',
+  'missing role',
+  'missing company',
 ]) assert(optionsJs.includes(marker), `missing campaign settings behavior: ${marker}`);
 
 const combined = `${background}\n${content}\n${optionsJs}`.toLowerCase();
