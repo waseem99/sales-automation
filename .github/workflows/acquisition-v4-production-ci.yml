@@ -1,0 +1,50 @@
+name: Acquisition V4 Production Build
+
+on:
+  pull_request:
+    branches:
+      - main
+    paths:
+      - '.github/workflows/acquisition-v4-production-ci.yml'
+      - 'api/acquisition-ingest.ts'
+      - 'vercel/acquisition-intake-runtime.ts'
+      - 'vercel.json'
+      - 'packages/**'
+      - 'apps/web/**'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: acquisition-v4-production-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: Compile Prospect Desk ingestion endpoint
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Install standalone pnpm
+        run: npm install --global --force @pnpm/exe@9.15.9
+
+      - name: Install workspace dependencies
+        run: pnpm install --no-frozen-lockfile
+
+      - name: Build Vercel production workspace
+        shell: bash
+        run: |
+          set +e
+          pnpm build:vercel > acquisition-v4-production-build.log 2>&1
+          status=$?
+          tail -n 240 acquisition-v4-production-build.log
+          exit $status
