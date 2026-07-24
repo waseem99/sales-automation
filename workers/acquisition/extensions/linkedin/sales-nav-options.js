@@ -113,7 +113,7 @@
     const missingName = Number(diagnostics.missing_name || 0);
     const missingRole = Number(diagnostics.missing_headline || 0);
     const missingCompany = Number(diagnostics.missing_company || 0);
-    return `${label}: ${captured} captured from ${visible} visible lead links and ${readable} readable cards; scroll steps ${Number(search?.scroll_steps || 0)}; stop ${search?.stop_reason || "unknown"}; missing name ${missingName}, role ${missingRole}, company ${missingCompany}.`;
+    return `${label}: ${captured} captured from ${visible} visible lead links and ${readable} readable cards; scroll steps ${Number(search?.scroll_steps || 0)}; stop ${search?.stop_reason || "unknown"}; missing name ${missingName}, missing role ${missingRole}, missing company ${missingCompany}.`;
   }
 
   function summary(response) {
