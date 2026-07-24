@@ -47,8 +47,32 @@
   }
 
   function activityUrnFromValue(value) {
-    const match = /(urn:li:activity:\d{8,})/i.exec(String(value || ""));
-    return match ? match[1].toLowerCase() : "";
+    const variants = new Set();
+    let current = String(value || "")
+      .replace(/\\u003a/gi, ":")
+      .replace(/\\u0025/gi, "%")
+      .replace(/&colon;|&#0*58;/gi, ":");
+    variants.add(current);
+    for (let attempt = 0; attempt < 5; attempt += 1) {
+      try {
+        const decoded = decodeURIComponent(current);
+        if (!decoded || decoded === current) break;
+        variants.add(decoded);
+        current = decoded;
+      } catch (_error) {
+        break;
+      }
+    }
+
+    for (const variant of variants) {
+      const direct = /urn:li:activity:(\d{8,})/i.exec(variant);
+      if (direct) return `urn:li:activity:${direct[1]}`;
+      const postPath = /(?:^|[-_/])activity[-_:](\d{12,})(?:\b|[-_/?#])/i.exec(variant);
+      if (postPath) return `urn:li:activity:${postPath[1]}`;
+      const compact = /\bactivity(?:Urn|Id)?["'=:\s-]+(?:urn:li:activity:)?(\d{12,})/i.exec(variant);
+      if (compact) return `urn:li:activity:${compact[1]}`;
+    }
+    return "";
   }
 
   function canonicalPostUrl(href, fallbackUrn = "") {
