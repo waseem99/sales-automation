@@ -11,7 +11,7 @@ $ErrorActionPreference = "Stop"
 $configDirectory = Join-Path $StateRoot "config"
 $configPath = Join-Path $configDirectory "prospect-desk-sync.json"
 New-Item -ItemType Directory -Force -Path $configDirectory | Out-Null
-$enabledSources = @("linkedin", "upwork")
+$enabledSources = @("linkedin", "upwork", "sales_navigator")
 
 function Read-PlainTextSecret([string]$Prompt) {
     $secure = Read-Host $Prompt -AsSecureString
@@ -34,7 +34,7 @@ if ($Disable) {
         interval_seconds = $IntervalSeconds
     }
     $disabledConfig | ConvertTo-Json -Depth 5 | Set-Content -Path $configPath -Encoding UTF8
-    Write-Host "Prospect Desk sync disabled. Local Upwork and LinkedIn capture continue normally."
+    Write-Host "Prospect Desk sync disabled. Local Upwork, LinkedIn and Sales Navigator capture continue normally."
     Write-Host "Config: $configPath"
     exit 0
 }
@@ -79,15 +79,16 @@ $config | ConvertTo-Json -Depth 5 | Set-Content -Path $configPath -Encoding UTF8
 Write-Host ""
 Write-Host "Prospect Desk sync configured."
 Write-Host "Endpoint host: $($uri.Host)"
-Write-Host "Sources: LinkedIn and Upwork"
+Write-Host "Sources: LinkedIn warm leads, Upwork jobs and Sales Navigator cold prospects"
 Write-Host "Retry interval: $IntervalSeconds seconds"
 Write-Host "Token: stored locally and not printed"
 Write-Host "Config: $configPath"
-Write-Host "Both running collectors will detect this configuration within one minute."
+Write-Host "All running collectors will detect this configuration within one minute."
 
 foreach ($collector in @(
     @{ Name = "Upwork"; Url = "http://127.0.0.1:8765/health" },
-    @{ Name = "LinkedIn"; Url = "http://127.0.0.1:8775/health" }
+    @{ Name = "LinkedIn"; Url = "http://127.0.0.1:8775/health" },
+    @{ Name = "Sales Navigator"; Url = "http://127.0.0.1:8785/health" }
 )) {
     try {
         $health = Invoke-RestMethod -Uri $collector.Url -TimeoutSec 3
@@ -95,6 +96,6 @@ foreach ($collector in @(
             Write-Host "$($collector.Name) collector is healthy. Existing unsynced records will be queued automatically."
         }
     } catch {
-        Write-Warning "$($collector.Name) collector is not currently reachable. Start Acquisition V4; sync will resume automatically."
+        Write-Warning "$($collector.Name) collector is not currently reachable. Start Acquisition; sync will resume automatically."
     }
 }
