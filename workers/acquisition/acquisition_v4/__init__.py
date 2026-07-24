@@ -1,3 +1,3 @@
-"""Codistan Acquisition Engine V4 local runtime."""
+"""Codistan Acquisition Engine V5 local runtime."""
 
-__version__ = "0.2.0"
+__version__ = "0.3.0"
