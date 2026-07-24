@@ -14,11 +14,12 @@ const popupHtml = fs.readFileSync(path.join(root, "popup.html"), "utf8");
 const signalSource = fs.readFileSync(path.join(root, "signal.js"), "utf8");
 
 assert.equal(manifest.manifest_version, 3);
-assert.equal(manifest.version, "1.2.2");
-assert(background.includes('linkedin-extension-1.2.2'));
-assert(background.includes("records.slice(0, 30)"));
+assert.equal(manifest.version, "1.3.0");
+assert(background.includes('linkedin-extension-1.3.0'));
+assert(background.includes("records.slice(0, MAX_RECORDS)"));
 assert.deepEqual(manifest.content_scripts[0].js, ["signal.js", "dom-adapter.js", "search-resolver.js", "content.js"]);
 assert(manifest.permissions.includes("scripting"));
+assert(manifest.permissions.includes("alarms"));
 assert(manifest.host_permissions.includes("http://127.0.0.1:8775/*"));
 
 for (const marker of [
@@ -27,6 +28,33 @@ for (const marker of [
   'source_subtype: "content_search_post"',
   'parser_version: PARSER_VERSION'
 ]) assert(background.includes(marker), `missing payload marker: ${marker}`);
+
+for (const marker of [
+  'SCHEDULE_INTERVAL_MINUTES = 15',
+  'SCHEDULE_ALARM = "codistan_linkedin_approved_search_cycle"',
+  'chrome.alarms.create',
+  'chrome.alarms.onAlarm',
+  'delayInMinutes: 1',
+  'periodInMinutes: SCHEDULE_INTERVAL_MINUTES',
+  'scheduled_15_minute_search_cycle',
+  'manual_run_all_searches',
+  'chrome.tabs.create({url: search.url, active: false})',
+  'chrome.tabs.remove(tabId)',
+  'if (scheduledRun) return scheduledRun',
+  'CODISTAN_RUN_LINKEDIN_SCHEDULED_SCAN_NOW',
+  'CODISTAN_GET_LINKEDIN_AUTOMATION_STATUS',
+  'CODISTAN_SET_LINKEDIN_AUTOMATION',
+  'linkedin.com\\/(?:login|checkpoint|authwall)'
+]) assert(background.includes(marker), `missing scheduled LinkedIn marker: ${marker}`);
+
+for (const searchId of [
+  'id: "software_delivery"',
+  'id: "ai_automation"',
+  'id: "digital_marketing"',
+  'id: "creative_delivery"',
+  'id: "cybersecurity"'
+]) assert(background.includes(searchId), `missing approved LinkedIn search: ${searchId}`);
+assert.equal((background.match(/\bid: "(?:software_delivery|ai_automation|digital_marketing|creative_delivery|cybersecurity)"/g) || []).length, 5);
 
 for (const marker of [
   'data-codistan-opportunity-card="true"',
@@ -69,6 +97,11 @@ for (const marker of [
 ]) assert(resolver.includes(marker), `missing LinkedIn resolver marker: ${marker}`);
 
 for (const marker of [
+  'id="automationEnabled"',
+  'Run all five approved searches every 15 minutes',
+  'id="runScheduled"',
+  'Run all approved searches now',
+  'id="automationStatus"',
   'id="scanMore"',
   'Scan and load more results'
 ]) assert(popupHtml.includes(marker), `missing LinkedIn popup control: ${marker}`);
@@ -87,13 +120,17 @@ for (const marker of [
   'chrome.scripting.executeScript',
   'CONTENT_SCRIPT_FILES',
   'missingReceiver',
-  'Repairing the tab and retrying'
-]) assert(popup.includes(marker), `missing bounded/self-healing scan marker: ${marker}`);
+  'Repairing the tab and retrying',
+  'CODISTAN_GET_LINKEDIN_AUTOMATION_STATUS',
+  'CODISTAN_SET_LINKEDIN_AUTOMATION',
+  'CODISTAN_RUN_LINKEDIN_SCHEDULED_SCAN_NOW'
+]) assert(popup.includes(marker), `missing bounded/scheduled scan marker: ${marker}`);
 
 const prohibited = [
-  "chrome.tabs.create", "chrome.tabs.update", "scrollIntoView",
+  "chrome.tabs.update", "scrollIntoView",
   ".click(", "dispatchEvent", "navigator.webdriver", "Math.random", "captcha", "cloudflare",
-  "chrome.runtime.sendMessage({type: \"CONNECT\"", "chrome.notifications"
+  "chrome.runtime.sendMessage({type: \"CONNECT\"", "chrome.notifications",
+  "send message", "connection request", "auto dm", "automated dm"
 ];
 for (const marker of prohibited) {
   for (const [name, source] of Object.entries({background, adapter, resolver, content, popup})) {
