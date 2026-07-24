@@ -2,7 +2,7 @@
   "use strict";
 
   const COLLECTOR = "http://127.0.0.1:8775";
-  const PARSER_VERSION = "linkedin-extension-1.1.0";
+  const PARSER_VERSION = "linkedin-extension-1.2.0";
   const pendingTimers = new Map();
   const lastAttempts = new Map();
 
@@ -71,7 +71,7 @@
         page_url: pageUrl,
         page_identity: identity,
         external_action_performed: false,
-        records: records.slice(0, 20).map(record => ({
+        records: records.slice(0, 30).map(record => ({
           ...record,
           raw_evidence: {
             ...(record.raw_evidence || {}),
