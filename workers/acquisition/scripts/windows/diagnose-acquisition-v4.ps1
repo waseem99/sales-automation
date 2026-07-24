@@ -2,11 +2,11 @@ param([string]$StateRoot = (Join-Path $env:LOCALAPPDATA "Codistan\Acquisition"))
 $ErrorActionPreference = "Stop"
 $timestamp = Get-Date -Format "yyyyMMdd-HHmmss"
 $diagnosticsRoot = Join-Path $StateRoot "diagnostics"
-$working = Join-Path $diagnosticsRoot "acquisition-v4-$timestamp"
+$working = Join-Path $diagnosticsRoot "acquisition-v5-$timestamp"
 New-Item -ItemType Directory -Force -Path $working | Out-Null
 
 $status = @{}
-foreach ($source in @(@("upwork", 8765), @("linkedin", 8775))) {
+foreach ($source in @(@("upwork", 8765), @("linkedin", 8775), @("sales_navigator", 8785))) {
     try { $status[$source[0]] = Invoke-RestMethod -Uri "http://127.0.0.1:$($source[1])/health" -TimeoutSec 3 }
     catch { $status[$source[0]] = @{ ready = $false; error = $_.Exception.GetType().Name } }
 }
@@ -43,7 +43,7 @@ if (Test-Path $runtimeLog) {
     Get-Content $runtimeLog -Tail 200 | Set-Content (Join-Path $working "runtime-tail.log") -Encoding UTF8
 }
 
-$zip = Join-Path $diagnosticsRoot "acquisition-v4-diagnostics-$timestamp.zip"
+$zip = Join-Path $diagnosticsRoot "acquisition-v5-diagnostics-$timestamp.zip"
 Compress-Archive -Path (Join-Path $working "*") -DestinationPath $zip -Force
 Remove-Item $working -Recurse -Force
 Write-Host "Safe diagnostic bundle created: $zip"
