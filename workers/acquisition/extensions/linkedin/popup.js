@@ -24,6 +24,9 @@
     const parts = [`Scanned ${containers} visible containers (${marked} adapter cards); ${readable} readable posts; ${classified} buyer-intent matches.`];
     if (activityIds || permalinkHints) parts.push(`${activityIds} cards exposed activity IDs; ${permalinkHints} exposed permalink hints.`);
     if (missingUrl) parts.push(`${missingUrl} matched posts lacked a canonical permalink.`);
+    if (missingUrl > 0 && classified > 0 && missingUrl === classified) {
+      parts.push("LinkedIn hid every post link in this search view. Open the target post by clicking its timestamp, then capture from the individual post page.");
+    }
     if (rejections) parts.push(`Filtered — ${rejections}.`);
     return parts.join(" ");
   }
