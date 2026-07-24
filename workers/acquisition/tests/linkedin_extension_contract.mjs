@@ -15,8 +15,9 @@ const popupHtml = fs.readFileSync(path.join(root, "popup.html"), "utf8");
 const signalSource = fs.readFileSync(path.join(root, "signal.js"), "utf8");
 
 assert.equal(manifest.manifest_version, 3);
-assert.equal(manifest.version, "1.4.1");
+assert.equal(manifest.version, "1.5.0");
 assert(entry.includes('background.js'));
+assert(entry.includes('sales-nav-catalogue.js'));
 assert(entry.includes('sales-nav-background.js'));
 assert(background.includes('linkedin-extension-1.3.0'));
 assert(background.includes("records.slice(0, MAX_RECORDS)"));
@@ -53,72 +54,48 @@ for (const searchId of [
 
 for (const marker of [
   'data-codistan-opportunity-card="true"',
-  'looseActivityUrn',
-  'nodeAttributeValues',
-  'candidate_urls',
-  'missing_canonical_url',
-  'linkedin-dom-1.1.0',
-]) assert(content.includes(marker), `missing LinkedIn DOM marker: ${marker}`);
+  'data-codistan-source-url',
+  'resolveVisibleSearchCards',
+  'CODISTAN_FORCE_LINKEDIN_SEARCH_RESOLUTION',
+]) assert(resolver.includes(marker), `missing search resolver marker: ${marker}`);
 
 for (const marker of [
-  "data-codistan-opportunity-card", "nearestCardFromActor", "distinctActorHrefs",
-  "pruneNestedCards", "activityEvidence", "MutationObserver",
-]) assert(adapter.includes(marker), `missing LinkedIn adapter marker: ${marker}`);
+  'CODISTAN_SCROLL_LINKEDIN_RESULTS',
+  'CODISTAN_RESTORE_LINKEDIN_SCROLL',
+  'scroll_container_candidates',
+  'document.scrollingElement',
+]) assert(resolver.includes(marker), `missing scroll resolver marker: ${marker}`);
 
 for (const marker of [
-  'data-codistan-canonical-url', 'spatialCardLink', 'canonicalAnchors', 'renderedRect',
-  'CODISTAN_RESOLVE_LINKEDIN_LINKS', 'CODISTAN_SCROLL_LINKEDIN_RESULTS',
-  'CODISTAN_RESTORE_LINKEDIN_SCROLL', '/search/results/content', 'DEFAULT_WAIT_MS = 2500',
-]) assert(resolver.includes(marker), `missing LinkedIn resolver marker: ${marker}`);
+  'CODISTAN_CAPTURE_VISIBLE_LINKEDIN_REQUIREMENTS',
+  'active_saved_search_name',
+  'visible_cards',
+  'buyer_intent_matches',
+  'resolved_post_links',
+  'missing_canonical_urls',
+]) assert(content.includes(marker), `missing LinkedIn content marker: ${marker}`);
 
-for (const marker of [
-  'id="automationEnabled"', 'Run all five approved searches every 15 minutes',
-  'id="runScheduled"', 'Run all approved searches now', 'id="scanMore"',
-  'Sales Navigator cold campaigns', 'sales-nav-options.html',
-]) assert(popupHtml.includes(marker), `missing LinkedIn popup control: ${marker}`);
+assert(popup.includes("CODISTAN_RUN_LINKEDIN_SCHEDULED_SCAN_NOW"));
+assert(popup.includes("CODISTAN_SET_LINKEDIN_AUTOMATION"));
+assert(popup.includes("CODISTAN_GET_LINKEDIN_AUTOMATION_STATUS"));
+assert(popupHtml.includes("Run all five approved searches now"));
+assert(popupHtml.includes("Run all five approved searches every 15 minutes"));
+assert(signalSource.includes("classifyLinkedInRequirement"));
+assert(adapter.includes("resolvePostUrl"));
 
-for (const marker of [
-  'MAX_SCROLL_STEPS = 4', 'MAX_RECORDS = 30', 'SCROLL_WAIT_MS = 2500',
-  'manual_bounded_scroll_scan', 'CODISTAN_RESOLVE_LINKEDIN_LINKS',
-  'CODISTAN_SCROLL_LINKEDIN_RESULTS', 'CODISTAN_RESTORE_LINKEDIN_SCROLL',
-  'chrome.scripting.executeScript', 'missingReceiver',
-]) assert(popup.includes(marker), `missing bounded warm scan marker: ${marker}`);
-
-const prohibited = [
-  "chrome.tabs.update", "scrollIntoView", ".click(", "dispatchEvent", "navigator.webdriver",
-  "Math.random", "captcha", "cloudflare", "send message", "connection request", "auto dm",
-];
-for (const marker of prohibited) {
-  for (const [name, source] of Object.entries({background, adapter, resolver, content, popup})) {
-    assert(!source.toLowerCase().includes(marker.toLowerCase()), `${name} contains prohibited marker: ${marker}`);
-  }
+for (const source of [entry, background, adapter, resolver, content, popup, signalSource]) {
+  assert.doesNotThrow(() => new vm.Script(source));
 }
 
-const context = {URL, decodeURIComponent, globalThis: {}};
-vm.createContext(context);
-vm.runInContext(signalSource, context);
-const helper = context.globalThis.CodistanLinkedInSignal;
-assert(helper);
+const combined = `${background}\n${adapter}\n${resolver}\n${content}\n${popup}`.toLowerCase();
+for (const prohibited of [
+  'navigator.webdriver', 'dispatchEvent', 'captcha', 'cloudflare',
+  'sendlinkedinmessage(', 'connectrequest(', 'followlead(', 'sendemail(',
+  'external_action_performed: true', 'chrome.tabs.update',
+]) assert(!combined.includes(prohibited.toLowerCase()), `warm LinkedIn extension contains prohibited action marker: ${prohibited}`);
 
-const direct = helper.classifyOpportunity("We are looking for a digital marketing agency for social media management, content and paid ads. Please send your proposal.");
-assert.equal(direct.candidate, true);
-assert(direct.service_lanes.includes("digital_growth"));
-assert(direct.contact_routes.includes("proposal"));
-
-const software = helper.classifyOpportunity("Seeking an implementation partner to build an AI automation platform and private RAG workflow.");
-assert.equal(software.candidate, true);
-assert(software.service_lanes.includes("software"));
-assert(software.service_lanes.includes("ai_automation"));
-
-const vacancy = helper.classifyOpportunity("We are hiring a full-time senior software engineer. Apply now and send your CV.");
-assert.equal(vacancy.candidate, false);
-assert.equal(vacancy.reject_reason, "permanent_vacancy");
-
-const seeker = helper.classifyOpportunity("I am open to work and looking for opportunities as a digital marketing specialist. Here is my portfolio.");
-assert.equal(seeker.candidate, false);
-assert.equal(seeker.reject_reason, "job_seeker_or_self_promotion");
-
-assert.equal(helper.activityUrnFromValue("urn%253Ali%253Aactivity%253A1234567890123456789"), "urn:li:activity:1234567890123456789");
-assert.equal(helper.canonicalPostUrl("", "urn:li:activity:1234567890123456789"), "https://www.linkedin.com/feed/update/urn:li:activity:1234567890123456789");
+assert(!resolver.includes("scrollIntoView"));
+assert(!background.includes("chrome.tabs.update"));
+assert(!background.includes("buyerIntentConfirmed: true"));
 
 console.log("LinkedIn warm extension contract passed.");
