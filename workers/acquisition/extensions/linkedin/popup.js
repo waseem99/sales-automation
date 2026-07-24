@@ -8,15 +8,24 @@
   const CONTENT_SCRIPT_FILES = ["signal.js", "dom-adapter.js", "search-resolver.js", "content.js"];
   const captureButton = document.getElementById("capture");
   const scanMoreButton = document.getElementById("scanMore");
+  const automationEnabled = document.getElementById("automationEnabled");
+  const runScheduledButton = document.getElementById("runScheduled");
+  const automationStatusNode = document.getElementById("automationStatus");
   const statusNode = document.getElementById("status");
 
   function setStatus(message) {
     statusNode.textContent = message;
   }
 
+  function setAutomationStatus(message) {
+    automationStatusNode.textContent = message;
+  }
+
   function setBusy(busy) {
     captureButton.disabled = busy;
     scanMoreButton.disabled = busy;
+    runScheduledButton.disabled = busy;
+    automationEnabled.disabled = busy;
   }
 
   function sleep(milliseconds) {
@@ -94,7 +103,7 @@
   }
 
   async function readVisible(tab, limit = MAX_RECORDS) {
-    await sendToTab(tab, {type: "CODISTAN_RESOLVE_LINKEDIN_LINKS"});
+    await sendToTab(tab, {type: "CODISTAN_RESOLVE_LINKEDIN_LINKS"}).catch(() => {});
     await sleep(120);
     const result = await sendToTab(tab, {type: "CODISTAN_CAPTURE_VISIBLE_LINKEDIN_POSTS", limit});
     if (!result?.ok) throw new Error(result?.error || "Visible-post capture failed.");
@@ -109,7 +118,7 @@
       ...existing,
       ...incoming,
       title: String(incoming.title || "").length >= String(existing.title || "").length ? incoming.title : existing.title,
-      body: incomingBody.length >= existingBody.length ? incomingBody : existingBody,
+      body: incomingBody.length >= existingBody.length ? incomingBody : existing.body,
       author: {...(existing.author || {}), ...(incoming.author || {})},
       commercial_evidence: {...(existing.commercial_evidence || {}), ...(incoming.commercial_evidence || {})},
       raw_evidence: {...(existing.raw_evidence || {}), ...(incoming.raw_evidence || {})}
@@ -136,6 +145,26 @@
       trigger
     });
     if (!response?.ok) throw new Error(response?.error || "Capture failed.");
+    return response;
+  }
+
+  function formatRunStatus(enabled, intervalMinutes, status) {
+    const state = enabled ? `Enabled every ${intervalMinutes} minutes.` : "Disabled.";
+    if (!status) return `${state} No scheduled cycle has completed yet.`;
+    const completedSearches = Array.isArray(status.searches) ? status.searches.length : 0;
+    if (status.running) {
+      return `${state} Running now — ${completedSearches} of 5 searches completed; ${Number(status.accepted || 0)} new so far.`;
+    }
+    const completed = status.completed_at ? new Date(status.completed_at).toLocaleString() : "unknown time";
+    const result = `${Number(status.accepted || 0)} new, ${Number(status.duplicates || 0)} duplicate, ${Number(status.enriched || 0)} enriched across ${completedSearches} searches.`;
+    return status.last_error ? `${state} Last cycle ${completed}: ${result} Issue: ${status.last_error}` : `${state} Last cycle ${completed}: ${result}`;
+  }
+
+  async function refreshAutomationStatus() {
+    const response = await chrome.runtime.sendMessage({type: "CODISTAN_GET_LINKEDIN_AUTOMATION_STATUS"});
+    if (!response?.ok) throw new Error(response?.error || "Scheduled automation status is unavailable.");
+    automationEnabled.checked = response.enabled === true;
+    setAutomationStatus(formatRunStatus(response.enabled === true, Number(response.interval_minutes || 15), response.status));
     return response;
   }
 
@@ -228,9 +257,41 @@
     }
   });
 
+  automationEnabled.addEventListener("change", async () => {
+    setBusy(true);
+    try {
+      const response = await chrome.runtime.sendMessage({
+        type: "CODISTAN_SET_LINKEDIN_AUTOMATION",
+        enabled: automationEnabled.checked
+      });
+      if (!response?.ok) throw new Error(response?.error || "Could not change scheduled automation.");
+      await refreshAutomationStatus();
+    } catch (error) {
+      automationEnabled.checked = !automationEnabled.checked;
+      setAutomationStatus(error instanceof Error ? error.message : String(error));
+    } finally {
+      setBusy(false);
+    }
+  });
+
+  runScheduledButton.addEventListener("click", async () => {
+    setBusy(true);
+    setAutomationStatus("Running all five approved LinkedIn searches now. Temporary search tabs will remain inactive and close automatically…");
+    try {
+      const response = await chrome.runtime.sendMessage({type: "CODISTAN_RUN_LINKEDIN_SCHEDULED_SCAN_NOW"});
+      if (!response?.ok) throw new Error(response?.error || "The scheduled LinkedIn cycle failed.");
+      await refreshAutomationStatus();
+    } catch (error) {
+      setAutomationStatus(error instanceof Error ? error.message : String(error));
+    } finally {
+      setBusy(false);
+    }
+  });
+
   Promise.all([
     fetch(`${COLLECTOR}/health`).then(response => response.json()),
-    chrome.storage.local.get("codistan_linkedin_last_capture")
+    chrome.storage.local.get("codistan_linkedin_last_capture"),
+    refreshAutomationStatus()
   ]).then(([service, stored]) => {
     const last = stored.codistan_linkedin_last_capture;
     const priorities = service.priority_counts || {};
@@ -238,5 +299,8 @@
     if (last?.error) parts.push(`Last capture issue: ${last.error}`);
     else if (last?.at) parts.push(`Last capture at ${new Date(last.at).toLocaleString()}.`);
     setStatus(parts.join(" "));
-  }).catch(() => setStatus("The local LinkedIn collector is not running on port 8775."));
+  }).catch(error => {
+    setStatus("The local LinkedIn collector is not running on port 8775.");
+    setAutomationStatus(error instanceof Error ? error.message : String(error));
+  });
 })();
