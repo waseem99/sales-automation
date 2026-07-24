@@ -68,7 +68,17 @@
     return anchors;
   }
 
+  function anchorMatchesCard(cardRect, anchorRect) {
+    const centerX = anchorRect.left + anchorRect.width / 2;
+    const centerY = anchorRect.top + anchorRect.height / 2;
+    return centerY >= cardRect.top - 48
+      && centerY <= cardRect.bottom + 48
+      && centerX >= cardRect.left - 90
+      && centerX <= cardRect.right + 90;
+  }
+
   function directCardLink(card) {
+    const cardRect = card.getBoundingClientRect();
     for (const anchor of card.querySelectorAll("a[href]")) {
       const canonical = canonicalPostUrl(anchor.href || anchor.getAttribute("href") || "");
       if (canonical) return canonical;
@@ -80,6 +90,7 @@
         const text = normalize(anchor.innerText || anchor.textContent || "");
         const label = normalize(anchor.getAttribute("aria-label") || anchor.getAttribute("title") || "");
         if (!AGE_TEXT.test(text) && !/\b(?:ago|post)\b/i.test(label)) continue;
+        if (!anchorMatchesCard(cardRect, anchor.getBoundingClientRect())) continue;
         const canonical = canonicalPostUrl(anchor.href || anchor.getAttribute("href") || "");
         if (canonical) return canonical;
       }
@@ -91,11 +102,9 @@
     const cardRect = card.getBoundingClientRect();
     let best = null;
     for (const item of anchors) {
+      if (!anchorMatchesCard(cardRect, item.rect)) continue;
       const centerX = item.rect.left + item.rect.width / 2;
       const centerY = item.rect.top + item.rect.height / 2;
-      const withinVertical = centerY >= cardRect.top - 48 && centerY <= cardRect.bottom + 48;
-      const withinHorizontal = centerX >= cardRect.left - 90 && centerX <= cardRect.right + 90;
-      if (!withinVertical || !withinHorizontal) continue;
       const ageBonus = AGE_TEXT.test(item.text) || /\b(?:ago|post)\b/i.test(item.label) ? -300 : 0;
       const distance = Math.abs(centerY - (cardRect.top + 42)) + Math.abs(centerX - cardRect.left) * 0.15 + ageBonus;
       if (!best || distance < best.distance) best = {distance, canonical: item.canonical};
