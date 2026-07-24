@@ -99,7 +99,7 @@ Do not use buyer-intent or category-intent filters unless the licensed Sales Nav
 
 ## Registration and first run
 
-1. Install the V5 branch and reload LinkedIn extension version 1.4.0.
+1. Install the V5 branch and reload LinkedIn extension version 1.4.1.
 2. Confirm `http://127.0.0.1:8785/health` reports ready.
 3. Keep **Scheduled capture enabled** switched off.
 4. Build and refine one Sales Navigator lead search using the criteria above.
