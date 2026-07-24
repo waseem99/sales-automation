@@ -14,7 +14,7 @@ This directory contains the Windows-first acquisition runtime for:
 - Upwork collector: `127.0.0.1:8765`
 - LinkedIn warm collector: `127.0.0.1:8775`
 - Sales Navigator cold collector: `127.0.0.1:8785`
-- Combined LinkedIn extension: `1.4.0`
+- Combined LinkedIn extension: `1.4.1`
 - State: `%LOCALAPPDATA%\Codistan\Acquisition`
 - Normal logged-in Chrome only
 - No Playwright, hidden browser profile, credential storage or account-challenge handling
@@ -30,7 +30,7 @@ Local capture remains operational if Prospect Desk or the internet is temporaril
 4. Reload the unpacked extensions in `chrome://extensions/`:
    - `%LOCALAPPDATA%\Codistan\Acquisition\extensions\upwork`
    - `%LOCALAPPDATA%\Codistan\Acquisition\extensions\linkedin`
-5. Confirm the LinkedIn extension shows version `1.4.0`.
+5. Confirm the LinkedIn extension shows version `1.4.1`.
 
 The installer:
 
@@ -39,7 +39,8 @@ The installer:
 - starts and validates ports 8765, 8775 and 8785;
 - migrates older sync configurations to all three sources;
 - keeps the previous installed application for rollback;
-- creates desktop and Windows-startup shortcuts.
+- creates desktop and Windows-startup shortcuts;
+- adds **Check Sales Navigator Pilot** for the live acceptance gate.
 
 ## Upwork
 
@@ -97,13 +98,16 @@ Default personas include founders, CEOs, COOs, CTOs, CIOs, product and engineeri
    - target geographies.
 6. Under **Approved searches**, leave the URL field blank to use the most recently opened Sales Navigator tab, or paste the current Sales Navigator lead-search URL.
 7. Click **Register search**.
-8. Click **Run this campaign now** for the first test.
+8. Keep scheduled capture disabled.
+9. Click **Run this campaign now** for the manual pilot.
+10. Review the per-search diagnostics shown in the campaign screen.
+11. Run **Check Sales Navigator Pilot** from the desktop.
 
 Only explicitly registered lead-search or people-list URLs are eligible for recurring scans.
 
 ### Scheduled behavior
 
-Registered Sales Navigator searches run every 12 hours while Chrome is open and the Sales Navigator session is available.
+The campaign screen disables scheduled Sales Navigator capture on first use until the manual pilot is registered and reviewed. After explicit operator approval, registered searches may run every 12 hours while Chrome is open and the Sales Navigator session is available.
 
 Each run:
 
@@ -121,6 +125,29 @@ Each run:
 Visible evidence may include person name, role, company, location, relationship degree, mutual connections, recent LinkedIn activity, Posted on LinkedIn, TeamLink and role-change signals where LinkedIn displays them.
 
 The extension does not click Save, Connect, Message, InMail, Follow or any other LinkedIn control. Login, checkpoint, auth-wall or unavailable-seat redirects are reported and never bypassed.
+
+### Pilot acceptance
+
+The strategic and operating plan is in `SALES-NAVIGATOR-LIVE-PILOT.md`.
+
+The desktop shortcut **Check Sales Navigator Pilot** writes:
+
+```text
+%LOCALAPPDATA%\Codistan\Acquisition\review\sales-navigator-acceptance.json
+```
+
+The technical gate requires:
+
+- at least 25 unique prospects;
+- at least 15 Priority A/B prospects;
+- at least 95% canonical profile evidence;
+- at least 80% role evidence;
+- at least 80% company evidence;
+- at least 95% campaign metadata coverage;
+- cold/no-explicit-intent warning retained;
+- zero external-action records.
+
+Passing the technical gate only means the sample is ready for human commercial review. At least 15 A/B records must then be reviewed under the 10-point rubric in the pilot guide. Scheduled routine operation is approved only if at least 60% of that sample is commercially review-worthy.
 
 ### Cold qualification
 
