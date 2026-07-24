@@ -1,1 +1,1 @@
-importScripts("background.js", "sales-nav-background.js");
+importScripts("background.js", "sales-nav-catalogue.js", "sales-nav-background.js");
