@@ -40,9 +40,11 @@ for (const marker of [
 
 for (const marker of [
   "suppression.suppressed",
-  "status: 'suppressed' as const",
+  "status: 'suppressed'",
   "tasks: []",
-  "contactability: 'suppressed'"
+  "contactability: 'suppressed'",
+  "requiresHumanReview: true",
+  "providerMode: { mode: 'source_visible_only'"
 ]) assert(publicSource.includes(marker), `suppression-safe public API missing marker: ${marker}`);
 
 for (const marker of [
@@ -86,6 +88,7 @@ const prohibited = [
 ];
 for (const marker of prohibited) {
   assert(!source.toLowerCase().includes(marker.toLowerCase()), `enrichment source contains prohibited marker: ${marker}`);
+  assert(!publicSource.toLowerCase().includes(marker.toLowerCase()), `enrichment public source contains prohibited marker: ${marker}`);
   assert(!runtime.toLowerCase().includes(marker.toLowerCase()), `enrichment runtime contains prohibited marker: ${marker}`);
 }
 
