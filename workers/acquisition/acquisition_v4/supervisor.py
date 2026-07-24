@@ -6,18 +6,20 @@ from pathlib import Path
 import signal
 import threading
 
-from .runtime import CollectorServer, create_server
+from .runtime_v5 import CollectorServer, create_server
 
-DEFAULT_PORTS = {"upwork": 8765, "linkedin": 8775}
+DEFAULT_PORTS = {"upwork": 8765, "linkedin": 8775, "sales_navigator": 8785}
 
 
 def build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(description="Run both Codistan Acquisition V4 collectors.")
+    parser = argparse.ArgumentParser(description="Run Codistan Acquisition collectors.")
     parser.add_argument("--state-root", type=Path, required=True)
     parser.add_argument("--upwork-port", type=int, default=DEFAULT_PORTS["upwork"])
     parser.add_argument("--linkedin-port", type=int, default=DEFAULT_PORTS["linkedin"])
+    parser.add_argument("--sales-navigator-port", type=int, default=DEFAULT_PORTS["sales_navigator"])
     parser.add_argument("--upwork-parser-version", default="upwork-extension-unset")
     parser.add_argument("--linkedin-parser-version", default="linkedin-extension-unset")
+    parser.add_argument("--sales-navigator-parser-version", default="sales-navigator-extension-unset")
     parser.add_argument("--pid-file", type=Path)
     return parser
 
@@ -31,6 +33,7 @@ def main(argv: list[str] | None = None) -> int:
     servers: list[CollectorServer] = [
         create_server("upwork", args.state_root, args.upwork_port, args.upwork_parser_version),
         create_server("linkedin", args.state_root, args.linkedin_port, args.linkedin_parser_version),
+        create_server("sales_navigator", args.state_root, args.sales_navigator_port, args.sales_navigator_parser_version),
     ]
     threads = [
         threading.Thread(target=server.serve_forever, kwargs={"poll_interval": 0.25}, daemon=True)
@@ -46,8 +49,9 @@ def main(argv: list[str] | None = None) -> int:
     for thread in threads:
         thread.start()
 
-    print(f"Upwork collector:  http://127.0.0.1:{args.upwork_port}/health")
-    print(f"LinkedIn collector: http://127.0.0.1:{args.linkedin_port}/health")
+    print(f"Upwork collector:         http://127.0.0.1:{args.upwork_port}/health")
+    print(f"LinkedIn collector:       http://127.0.0.1:{args.linkedin_port}/health")
+    print(f"Sales Navigator collector:http://127.0.0.1:{args.sales_navigator_port}/health")
     print(f"State root: {args.state_root}")
     try:
         while not stopping.wait(0.5):
