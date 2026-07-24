@@ -14,8 +14,8 @@ const popupHtml = fs.readFileSync(path.join(root, "popup.html"), "utf8");
 const signalSource = fs.readFileSync(path.join(root, "signal.js"), "utf8");
 
 assert.equal(manifest.manifest_version, 3);
-assert.equal(manifest.version, "1.2.1");
-assert(background.includes('linkedin-extension-1.2.1'));
+assert.equal(manifest.version, "1.2.2");
+assert(background.includes('linkedin-extension-1.2.2'));
 assert(background.includes("records.slice(0, 30)"));
 assert.deepEqual(manifest.content_scripts[0].js, ["signal.js", "dom-adapter.js", "search-resolver.js", "content.js"]);
 assert(manifest.permissions.includes("scripting"));
@@ -54,6 +54,12 @@ for (const marker of [
   'data-codistan-canonical-url',
   'spatialCardLink',
   'canonicalAnchors',
+  'renderedRect',
+  'canonicalFromElement',
+  'scrollCandidates',
+  'currentScrollStatus',
+  'scroller_kind',
+  'CODISTAN_RESOLVE_LINKEDIN_LINKS',
   'CODISTAN_SCROLL_LINKEDIN_RESULTS',
   'CODISTAN_RESTORE_LINKEDIN_SCROLL',
   'window.scrollTo',
@@ -72,10 +78,12 @@ for (const marker of [
   'MAX_RECORDS = 30',
   'SCROLL_WAIT_MS = 2500',
   'manual_bounded_scroll_scan',
+  'CODISTAN_RESOLVE_LINKEDIN_LINKS',
   'CODISTAN_LINKEDIN_SCROLL_STATUS',
   'CODISTAN_SCROLL_LINKEDIN_RESULTS',
   'CODISTAN_RESTORE_LINKEDIN_SCROLL',
-  'stop reason',
+  'scroll container',
+  'no_movable_scroll_container',
   'chrome.scripting.executeScript',
   'CONTENT_SCRIPT_FILES',
   'missingReceiver',
