@@ -36,6 +36,20 @@ if (-not $pythonCommand) {
 }
 
 New-Item -ItemType Directory -Force -Path $StateRoot | Out-Null
+$configDirectory = Join-Path $StateRoot "config"
+$configPath = Join-Path $configDirectory "prospect-desk-sync.json"
+New-Item -ItemType Directory -Force -Path $configDirectory | Out-Null
+if (-not (Test-Path $configPath)) {
+    [ordered]@{
+        version = 1
+        enabled = $false
+        endpoint = ""
+        token = ""
+        sources = @("linkedin")
+        interval_seconds = 60
+    } | ConvertTo-Json -Depth 5 | Set-Content -Path $configPath -Encoding UTF8
+}
+
 $watchdogPidFile = Join-Path $StateRoot "watchdog.pid"
 if (Test-Path $watchdogPidFile) {
     $watchdogProcessId = 0
@@ -87,6 +101,7 @@ $startup = [Environment]::GetFolderPath("Startup")
 $shortcutMap = @{
     "Start Acquisition V4.lnk" = "START-ACQUISITION-V4.cmd"
     "Check Acquisition V4.lnk" = "CHECK-ACQUISITION-V4.cmd"
+    "Configure Prospect Desk Sync.lnk" = "CONFIGURE-PROSPECT-DESK-SYNC.cmd"
     "Open Upwork Searches.lnk" = "OPEN-UPWORK-SEARCHES.cmd"
     "Open LinkedIn Lead Searches.lnk" = "OPEN-LINKEDIN-LEAD-SEARCHES.cmd"
     "Open Acquisition Review.lnk" = "OPEN-ACQUISITION-REVIEW.cmd"
@@ -119,5 +134,7 @@ if (-not $healthy) {
 Write-Host ""
 Write-Host "Acquisition V4 installed and healthy."
 Write-Host "Extensions: $extensionRoot"
+Write-Host "Prospect Desk sync config: $configPath"
 Write-Host "Load or reload both unpacked extensions in chrome://extensions/."
+Write-Host "Use Configure Prospect Desk Sync once the production endpoint and token are ready."
 Write-Host "Use the new desktop shortcuts for daily operation."
