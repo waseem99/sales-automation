@@ -41,7 +41,7 @@ class WindowsBundleTests(unittest.TestCase):
         for marker in [
             "http://127.0.0.1:8785/health",
             "extensions\\linkedin\\manifest.json",
-            "1.4.0",
+            "1.4.1",
             "acquisition_v4.sales_navigator_acceptance",
             "Campaign settings",
             "Local review",
