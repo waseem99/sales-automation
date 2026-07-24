@@ -3,7 +3,7 @@ import type { Lead, PipelineStatus, ServiceCategory } from '@sales-automation/sh
 import type { StoredLeadRecord } from '@sales-automation/storage';
 
 export type WorkspacePageId =
-  | 'all' | 'linkedin' | 'upwork' | 'rfq' | 'rfp' | 'eoi' | 'rfi' | 'tenders'
+  | 'all' | 'linkedin' | 'sales_navigator' | 'upwork' | 'rfq' | 'rfp' | 'eoi' | 'rfi' | 'tenders'
   | 'research' | 'partnerships' | 'services' | 'ai' | 'software' | 'cybersecurity'
   | 'immersive' | 'marketing';
 
@@ -32,7 +32,8 @@ const softwareServices: ServiceCategory[] = ['fullstack_web_app', 'nextjs_python
 
 export const WORKSPACE_PAGES: WorkspacePageDefinition[] = [
   workspace('all', '/prospects', 'All prospects', 'Complete opportunity workspace', 'All Prospects', 'Review every visible opportunity, assign ownership, manage outreach and record outcomes.', 'All prospects', 'The complete lead and opportunity pipeline within your authorized scope.', 'No prospects are available in this scope.', () => true),
-  workspace('linkedin', '/leads/linkedin', 'LinkedIn warm leads', 'Warm social demand signals', 'LinkedIn Warm Leads', 'Buyer-authored LinkedIn and Sales Navigator requests that passed the warm-signal quality gate.', 'LinkedIn and Sales Navigator leads', 'Prioritize fresh requests, verify the original post and prepare human-reviewed outreach.', 'No LinkedIn warm leads currently match this scope.', (lead) => lead.source === 'linkedin' || lead.source === 'sales_navigator' || lead.leadType === 'linkedin_warm_post' || lead.leadType === 'linkedin_sales_nav_alert'),
+  workspace('linkedin', '/leads/linkedin', 'LinkedIn warm leads', 'Warm social demand signals', 'LinkedIn Warm Leads', 'Buyer-authored LinkedIn requests that passed the warm-signal quality gate.', 'LinkedIn warm opportunities', 'Prioritize fresh requests, verify the original post and prepare human-reviewed outreach.', 'No LinkedIn warm leads currently match this scope.', (lead) => lead.source === 'linkedin' || lead.leadType === 'linkedin_warm_post' || (lead.leadType === 'linkedin_sales_nav_alert' && lead.prospectStage !== 'cold_prospect')),
+  workspace('sales_navigator', '/leads/sales-navigator', 'Sales Navigator cold prospects', 'Product and service campaigns', 'Sales Navigator Cold Prospects', 'Campaign-qualified people and accounts found for a defined product or service offer. These are cold prospects, not confirmed buyer requests.', 'Campaign-qualified cold prospects', 'Validate authority, company fit, trigger and outreach angle before any manual contact.', 'No Sales Navigator cold prospects currently match this scope.', (lead) => lead.source === 'sales_navigator' || lead.leadType === 'sales_navigator_cold_prospect' || lead.prospectStage === 'cold_prospect'),
   workspace('upwork', '/leads/upwork', 'Upwork saved searches', 'Qualified marketplace alerts', 'Upwork Saved-Search Leads', 'Saved-search opportunities filtered by budget, freshness, client credibility and delivery fit.', 'Qualified Upwork opportunities', 'Open the original job, confirm live details and prepare proposals manually.', 'No qualified Upwork saved-search leads currently match this scope.', (lead) => lead.source === 'upwork' || lead.leadType === 'upwork_job'),
   workspace('rfq', '/leads/rfq', 'RFQs', 'Procurement opportunities', 'Request for Quotation Leads', 'Formal RFQs identified through procurement sources and classified by opportunity type.', 'RFQ opportunities', 'Review deadlines, eligibility, pricing requirements and submission routes.', 'No RFQ opportunities currently match this scope.', (lead) => lead.tender?.opportunityType === 'rfq'),
   workspace('rfp', '/leads/rfp', 'RFPs', 'Procurement opportunities', 'Request for Proposal Leads', 'Formal RFPs requiring technical, commercial and eligibility review before a bid decision.', 'RFP opportunities', 'Use the tender intelligence brief and keep submission human-controlled.', 'No RFP opportunities currently match this scope.', (lead) => lead.tender?.opportunityType === 'rfp'),
@@ -76,7 +77,8 @@ function workspace(id: WorkspacePageId, route: string, navigationLabel: string, 
 
 function queryScopeFor(id: WorkspacePageId): ProspectWorkspaceScope {
   if (id === 'all') return {};
-  if (id === 'linkedin') return { sources: ['linkedin', 'sales_navigator'], leadTypes: ['linkedin_warm_post', 'linkedin_sales_nav_alert'] };
+  if (id === 'linkedin') return { sources: ['linkedin'], leadTypes: ['linkedin_warm_post', 'linkedin_sales_nav_alert'] };
+  if (id === 'sales_navigator') return { sources: ['sales_navigator'], leadTypes: ['sales_navigator_cold_prospect'], prospectStages: ['cold_prospect'] };
   if (id === 'upwork') return { sources: ['upwork'], leadTypes: ['upwork_job'] };
   if (id === 'rfq' || id === 'rfp' || id === 'eoi' || id === 'rfi') return { tenderOpportunityTypes: [id] };
   if (id === 'tenders') return { sources: ['public_procurement'], hasTender: true };
