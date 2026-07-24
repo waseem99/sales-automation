@@ -222,7 +222,7 @@ class ProspectDeskSync:
                 "Authorization": f"Bearer {config.token}",
                 "Content-Type": "application/json",
                 "Accept": "application/json",
-                "User-Agent": "Codistan-Acquisition-V4/0.1.1",
+                "User-Agent": "Codistan-Acquisition-V4/0.2.0",
             },
         )
         self._set_status(last_attempt_at=_utc_now_iso(), last_submitted=len(batch), last_error="")
