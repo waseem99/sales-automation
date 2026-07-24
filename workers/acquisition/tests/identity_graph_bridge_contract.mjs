@@ -32,7 +32,7 @@ for (const marker of [
 ]) assert(identitySource.includes(marker), `identity graph missing marker: ${marker}`);
 
 for (const marker of [
-  "same LinkedIn profile",
+  "https://www.linkedin.com/in/muskan-vig/",
   "partner@example.com",
   "status, 'candidate'",
   "companyWebsite",
