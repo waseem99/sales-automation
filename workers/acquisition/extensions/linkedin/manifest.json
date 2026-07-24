@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Codistan LinkedIn Opportunity Capture V4",
-  "version": "1.2.1",
+  "version": "1.2.2",
   "description": "Capture and rank direct agency, vendor and delivery-partner requirements from user-opened LinkedIn searches and posts.",
   "permissions": ["activeTab", "tabs", "storage", "scripting"],
   "host_permissions": [
