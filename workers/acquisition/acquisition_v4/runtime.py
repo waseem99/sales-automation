@@ -15,6 +15,7 @@ from .models import NormalizedRecord, SUPPORTED_SOURCES, utc_now_iso
 from .qualification import qualify_record
 from .review import write_review_outputs
 from .storage import AtomicRecordStore
+from .sync import ProspectDeskSync
 
 MAX_REQUEST_BYTES = 1_000_000
 MAX_RECORDS_PER_CAPTURE = 50
@@ -116,8 +117,18 @@ class CollectorState:
         self.total_duplicates = _safe_counter(previous_status.get("duplicates"))
         self.total_enriched = _safe_counter(previous_status.get("enriched"))
         self.total_rejected = _safe_counter(previous_status.get("rejected"))
+        self.prospect_desk_sync = ProspectDeskSync(
+            state_root=self.state_root,
+            source=self.source,
+            records_provider=self._sync_records_snapshot,
+        )
         self._refresh_existing_qualifications()
         self._write_status()
+        self.prospect_desk_sync.start()
+
+    def _sync_records_snapshot(self) -> list[dict[str, Any]]:
+        with self.lock:
+            return json.loads(json.dumps(self.records, ensure_ascii=False))
 
     def _refresh_existing_qualifications(self) -> None:
         changed = False
@@ -136,6 +147,7 @@ class CollectorState:
                 result = self._capture_locked(payload)
                 self.last_error = ""
                 self._write_status()
+                self.prospect_desk_sync.notify()
                 return result
             except Exception as error:
                 self.last_error = _safe_error(error)
@@ -267,6 +279,7 @@ class CollectorState:
             "records_path": str(self.store.records_path),
             "status_path": str(self.store.status_path),
             "priority_counts": self._priority_counts(self.records),
+            "prospect_desk_sync": self.prospect_desk_sync.health(),
             "external_actions_enabled": False,
         }
 
