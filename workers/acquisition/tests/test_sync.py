@@ -51,7 +51,6 @@ class ProspectDeskSyncTests(unittest.TestCase):
         self.thread.start()
         self.temp = tempfile.TemporaryDirectory()
         self.state_root = Path(self.temp.name)
-        self.records = [self._record("first body")]
         config_dir = self.state_root / "config"
         config_dir.mkdir(parents=True)
         (config_dir / "prospect-desk-sync.json").write_text(json.dumps({
@@ -59,7 +58,7 @@ class ProspectDeskSyncTests(unittest.TestCase):
             "enabled": True,
             "endpoint": f"http://127.0.0.1:{self.server.server_port}/api/acquisition-ingest",
             "token": _SyncHandler.token,
-            "sources": ["linkedin"],
+            "sources": ["linkedin", "upwork"],
             "interval_seconds": 30,
         }), encoding="utf-8")
 
@@ -68,7 +67,8 @@ class ProspectDeskSyncTests(unittest.TestCase):
         self.server.server_close()
         self.temp.cleanup()
 
-    def _record(self, body: str) -> dict:
+    @staticmethod
+    def _linkedin_record(body: str = "We are looking for a development partner for an active software platform project.") -> dict:
         return {
             "schema_version": "codistan-opportunity.v4",
             "parser_version": "linkedin-extension-1.3.0",
@@ -100,14 +100,53 @@ class ProspectDeskSyncTests(unittest.TestCase):
             "external_action_performed": False,
         }
 
-    def test_syncs_once_then_resends_only_after_enrichment(self) -> None:
+    @staticmethod
+    def _upwork_record(body: str = "Build a production SaaS application with Node.js, React and API integrations.") -> dict:
+        return {
+            "schema_version": "codistan-opportunity.v4",
+            "parser_version": "upwork-extension-1.0.2",
+            "source": "upwork",
+            "source_subtype": "approved_saved_search_job",
+            "canonical_url": "https://www.upwork.com/jobs/~0123456789abcdef",
+            "source_native_id": "~0123456789abcdef",
+            "dedupe_key": "upwork-dedupe-1",
+            "title": "Full-stack SaaS implementation partner",
+            "body": body,
+            "captured_at": "2026-07-24T12:00:00+00:00",
+            "posted_age": "1 hour",
+            "page_identity": "Waseem — AI + Fullstack AI 16 July 2026",
+            "commercial_evidence": {
+                "fixed_budget_usd": 8000,
+                "payment_verified": True,
+                "client_spend_usd": 25000,
+                "hire_rate_percent": 65,
+                "proposals": "5 to 10",
+            },
+            "raw_evidence": {"skills": ["Node.js", "React", "SaaS"]},
+            "qualification": {
+                "disposition": "priority_a",
+                "total_score": 86,
+                "confidence": "high",
+                "service_route": "software_product",
+                "service_lanes": ["software_product"],
+                "positive_reasons": ["strong fixed-price commercial value", "payment verified"],
+                "missing_evidence": [],
+                "risk_reasons": [],
+                "recommended_next_action": "Review immediately and submit a tailored Upwork proposal manually.",
+            },
+            "external_action_performed": False,
+        }
+
+    def test_linkedin_syncs_once_then_resends_only_after_enrichment(self) -> None:
+        records = [self._linkedin_record()]
         sync = ProspectDeskSync(
             state_root=self.state_root,
             source="linkedin",
-            records_provider=lambda: json.loads(json.dumps(self.records)),
+            records_provider=lambda: json.loads(json.dumps(records)),
         )
         first = sync.run_once_for_test()
         self.assertEqual(1, len(_SyncHandler.payloads))
+        self.assertEqual("linkedin", _SyncHandler.payloads[0]["source"])
         self.assertEqual(1, first["last_created"])
         self.assertEqual("", first["last_error"])
         self.assertNotIn(_SyncHandler.token, json.dumps(first))
@@ -115,35 +154,77 @@ class ProspectDeskSyncTests(unittest.TestCase):
         sync.run_once_for_test()
         self.assertEqual(1, len(_SyncHandler.payloads))
 
-        self.records[0]["body"] = "first body with richer buyer, scope and response evidence"
-        self.records[0]["last_enriched_at"] = "2026-07-24T12:05:00+00:00"
+        records[0]["body"] = "Looking for a development partner with richer buyer, scope and response evidence."
+        records[0]["last_enriched_at"] = "2026-07-24T12:05:00+00:00"
         sync.run_once_for_test()
         self.assertEqual(2, len(_SyncHandler.payloads))
         self.assertIn("richer buyer", _SyncHandler.payloads[-1]["records"][0]["body"])
 
-    def test_reject_records_are_not_synced(self) -> None:
-        self.records[0]["qualification"]["disposition"] = "reject"
+    def test_upwork_syncs_with_independent_fingerprint_and_enrichment(self) -> None:
+        records = [self._upwork_record()]
         sync = ProspectDeskSync(
             state_root=self.state_root,
-            source="linkedin",
-            records_provider=lambda: self.records,
+            source="upwork",
+            records_provider=lambda: json.loads(json.dumps(records)),
         )
-        status = sync.run_once_for_test()
-        self.assertEqual([], _SyncHandler.payloads)
-        self.assertEqual(0, status["pending_records"])
+        first = sync.run_once_for_test()
+        self.assertEqual(1, len(_SyncHandler.payloads))
+        self.assertEqual("upwork", _SyncHandler.payloads[0]["source"])
+        self.assertEqual("https://www.upwork.com/jobs/~0123456789abcdef", _SyncHandler.payloads[0]["records"][0]["canonical_url"])
+        self.assertEqual(1, first["last_created"])
+        self.assertTrue((self.state_root / "sync" / "upwork.json").exists())
 
-    def test_disabled_config_keeps_local_capture_independent(self) -> None:
+        sync.run_once_for_test()
+        self.assertEqual(1, len(_SyncHandler.payloads), "unchanged Upwork records must not be resent")
+
+        records[0]["commercial_evidence"]["fixed_budget_usd"] = 12000
+        records[0]["last_enriched_at"] = "2026-07-24T12:10:00+00:00"
+        sync.run_once_for_test()
+        self.assertEqual(2, len(_SyncHandler.payloads))
+        self.assertEqual(12000, _SyncHandler.payloads[-1]["records"][0]["commercial_evidence"]["fixed_budget_usd"])
+
+    def test_linkedin_and_upwork_keep_separate_sync_state(self) -> None:
+        linkedin_sync = ProspectDeskSync(
+            state_root=self.state_root,
+            source="linkedin",
+            records_provider=lambda: [self._linkedin_record()],
+        )
+        upwork_sync = ProspectDeskSync(
+            state_root=self.state_root,
+            source="upwork",
+            records_provider=lambda: [self._upwork_record()],
+        )
+        linkedin_sync.run_once_for_test()
+        upwork_sync.run_once_for_test()
+        self.assertEqual(["linkedin", "upwork"], [payload["source"] for payload in _SyncHandler.payloads])
+        self.assertTrue((self.state_root / "sync" / "linkedin.json").exists())
+        self.assertTrue((self.state_root / "sync" / "upwork.json").exists())
+
+    def test_reject_records_are_not_synced_for_either_source(self) -> None:
+        for source, record in (("linkedin", self._linkedin_record()), ("upwork", self._upwork_record())):
+            record["qualification"]["disposition"] = "reject"
+            sync = ProspectDeskSync(
+                state_root=self.state_root,
+                source=source,
+                records_provider=lambda record=record: [record],
+            )
+            status = sync.run_once_for_test()
+            self.assertEqual(0, status["pending_records"])
+        self.assertEqual([], _SyncHandler.payloads)
+
+    def test_disabled_config_keeps_both_local_collectors_independent(self) -> None:
         config_path = self.state_root / "config" / "prospect-desk-sync.json"
         value = json.loads(config_path.read_text(encoding="utf-8"))
         value["enabled"] = False
         config_path.write_text(json.dumps(value), encoding="utf-8")
-        sync = ProspectDeskSync(
-            state_root=self.state_root,
-            source="linkedin",
-            records_provider=lambda: self.records,
-        )
-        status = sync.run_once_for_test()
-        self.assertFalse(status["enabled"])
+        for source, record in (("linkedin", self._linkedin_record()), ("upwork", self._upwork_record())):
+            sync = ProspectDeskSync(
+                state_root=self.state_root,
+                source=source,
+                records_provider=lambda record=record: [record],
+            )
+            status = sync.run_once_for_test()
+            self.assertFalse(status["enabled"])
         self.assertEqual([], _SyncHandler.payloads)
 
 
