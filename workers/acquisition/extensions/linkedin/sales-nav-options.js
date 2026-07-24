@@ -140,9 +140,18 @@
     if (!response?.ok) throw new Error(response?.error || "Campaign settings are unavailable.");
     const selected = response.campaigns.find(item => item.id === CAMPAIGN_ID) || response.campaigns[0];
     if (!selected) throw new Error("No Sales Navigator campaign is configured.");
+    const firstUse = !response.status && list(selected.search_urls).length === 0;
+    if (firstUse && response.enabled === true) {
+      const disabled = await chrome.runtime.sendMessage({type: "CODISTAN_SET_SALES_NAV_AUTOMATION", enabled: false});
+      if (!disabled?.ok) throw new Error(disabled?.error || "Scheduled capture could not be disabled for the manual pilot.");
+      response.enabled = false;
+    }
     renderCampaign(selected);
     nodes.automationEnabled.checked = response.enabled === true;
-    setStatus(summary(response));
+    const firstUseNotice = firstUse
+      ? "Manual pilot required: scheduled Sales Navigator capture is off until the first search is registered, run and commercially reviewed.\n"
+      : "";
+    setStatus(`${firstUseNotice}${summary(response)}`);
   }
 
   async function removeSearch(url) {
@@ -181,7 +190,7 @@
       if (!response?.ok) throw new Error(response?.error || "Search registration failed.");
       nodes.searchUrl.value = "";
       renderCampaign(response.campaign);
-      setStatus(`Registered approved search:\n${response.url}`);
+      setStatus(`Registered approved search:\n${response.url}\nRun it manually before enabling scheduled capture.`);
     } catch (error) {
       setStatus(error instanceof Error ? error.message : String(error));
     } finally {
