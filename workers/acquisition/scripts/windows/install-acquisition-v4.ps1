@@ -39,15 +39,31 @@ New-Item -ItemType Directory -Force -Path $StateRoot | Out-Null
 $configDirectory = Join-Path $StateRoot "config"
 $configPath = Join-Path $configDirectory "prospect-desk-sync.json"
 New-Item -ItemType Directory -Force -Path $configDirectory | Out-Null
+$enabledSources = @("linkedin", "upwork")
 if (-not (Test-Path $configPath)) {
     [ordered]@{
         version = 1
         enabled = $false
         endpoint = ""
         token = ""
-        sources = @("linkedin")
+        sources = $enabledSources
         interval_seconds = 60
     } | ConvertTo-Json -Depth 5 | Set-Content -Path $configPath -Encoding UTF8
+} else {
+    try {
+        $existingConfig = Get-Content $configPath -Raw | ConvertFrom-Json
+        $migratedConfig = [ordered]@{
+            version = 1
+            enabled = ($existingConfig.enabled -eq $true)
+            endpoint = if ($existingConfig.endpoint) { [string]$existingConfig.endpoint } else { "" }
+            token = if ($existingConfig.token) { [string]$existingConfig.token } else { "" }
+            sources = $enabledSources
+            interval_seconds = if ($existingConfig.interval_seconds) { [int]$existingConfig.interval_seconds } else { 60 }
+        }
+        $migratedConfig | ConvertTo-Json -Depth 5 | Set-Content -Path $configPath -Encoding UTF8
+    } catch {
+        throw "The existing Prospect Desk sync configuration is invalid. Run Configure Prospect Desk Sync again or remove $configPath before reinstalling."
+    }
 }
 
 $watchdogPidFile = Join-Path $StateRoot "watchdog.pid"
@@ -135,6 +151,7 @@ Write-Host ""
 Write-Host "Acquisition V4 installed and healthy."
 Write-Host "Extensions: $extensionRoot"
 Write-Host "Prospect Desk sync config: $configPath"
+Write-Host "Sync sources: LinkedIn and Upwork"
 Write-Host "Load or reload both unpacked extensions in chrome://extensions/."
 Write-Host "Use Configure Prospect Desk Sync once the production endpoint and token are ready."
 Write-Host "Use the new desktop shortcuts for daily operation."
