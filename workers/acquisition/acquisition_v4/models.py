@@ -6,7 +6,7 @@ import hashlib
 from typing import Any
 from urllib.parse import urlsplit, urlunsplit
 
-SUPPORTED_SOURCES = {"upwork", "linkedin"}
+SUPPORTED_SOURCES = {"upwork", "linkedin", "sales_navigator"}
 MAX_TEXT = 20_000
 MAX_TITLE = 500
 MAX_IDENTITY = 300
@@ -18,6 +18,22 @@ def utc_now_iso() -> str:
 
 def _clean_text(value: Any, limit: int) -> str:
     return " ".join(str(value or "").replace("\x00", " ").split())[:limit]
+
+
+def canonical_linkedin_profile_url(value: Any) -> str:
+    raw = str(value or "").strip()
+    if not raw:
+        return ""
+    parsed = urlsplit(raw)
+    host = (parsed.hostname or "").lower()
+    if parsed.scheme.lower() != "https" or host not in {"linkedin.com", "www.linkedin.com", "sales.linkedin.com"}:
+        raise ValueError("LinkedIn profile URLs must use an approved LinkedIn HTTPS host.")
+    path = parsed.path.rstrip("/")
+    if path.startswith("/sales/lead/") or path.startswith("/in/"):
+        return urlunsplit(("https", "www.linkedin.com", path, "", ""))
+    if path.startswith("/company/") or path.startswith("/sales/company/"):
+        return urlunsplit(("https", "www.linkedin.com", path, "", ""))
+    raise ValueError("A LinkedIn person or company profile URL is required.")
 
 
 def canonical_source_url(source: str, value: Any) -> str:
@@ -50,6 +66,8 @@ def canonical_source_url(source: str, value: Any) -> str:
         )
         if not valid:
             raise ValueError("An original LinkedIn post URL is required.")
+    elif source == "sales_navigator":
+        return canonical_linkedin_profile_url(raw)
     else:
         raise ValueError("Unsupported capture source.")
 
@@ -109,7 +127,7 @@ class NormalizedRecord:
         author_profile = ""
         if author.get("profile_url"):
             try:
-                author_profile = canonical_source_url("linkedin", author.get("profile_url"))
+                author_profile = canonical_linkedin_profile_url(author.get("profile_url"))
             except ValueError:
                 author_profile = _clean_text(author.get("profile_url"), 1_000)
 
@@ -120,6 +138,11 @@ class NormalizedRecord:
         if evidence is not None and not isinstance(evidence, dict):
             raise ValueError("Raw evidence must be an object.")
 
+        default_title = {
+            "upwork": "Untitled Upwork job",
+            "linkedin": "Untitled LinkedIn post",
+            "sales_navigator": "Untitled Sales Navigator prospect",
+        }[source]
         return cls(
             schema_version="codistan-opportunity.v4",
             parser_version=_clean_text(parser_version, 100) or "unknown",
@@ -128,7 +151,7 @@ class NormalizedRecord:
             canonical_url=canonical_url,
             source_native_id=native_id,
             dedupe_key=deterministic_key(source, native_id, canonical_url),
-            title=title or ("Untitled Upwork job" if source == "upwork" else "Untitled LinkedIn post"),
+            title=title or default_title,
             body=body,
             author_name=_clean_text(author.get("name"), MAX_IDENTITY),
             author_profile_url=author_profile,
