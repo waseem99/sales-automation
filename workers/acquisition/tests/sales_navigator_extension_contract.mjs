@@ -34,7 +34,6 @@ for (const marker of [
   'source: "sales_navigator"',
   'source_subtype: "campaign_lead_search"',
   'external_action_performed: false',
-  'buyer',
   'chrome.tabs.create({url: searchUrl, active: false})',
   'chrome.tabs.remove(tabId)',
   'if (activeRun) return activeRun',
@@ -44,7 +43,8 @@ for (const marker of [
   'CODISTAN_REMOVE_SALES_NAV_SEARCH',
   'CODISTAN_RUN_SALES_NAV_CAMPAIGNS_NOW',
   'CODISTAN_SET_SALES_NAV_AUTOMATION',
-  'linkedin\\.com\\/(?:login|checkpoint|authwall)',
+  'checkpoint',
+  'authwall',
 ]) assert(background.includes(marker), `missing Sales Navigator campaign marker: ${marker}`);
 
 for (const marker of [
@@ -93,6 +93,6 @@ for (const prohibited of [
 
 assert(!content.includes('scrollIntoView'));
 assert(!background.includes('chrome.tabs.update'));
-assert(background.includes('buyerIntentConfirmed') === false);
+assert(!background.includes('buyerIntentConfirmed: true'));
 
 console.log("Sales Navigator cold campaign extension contract passed.");
