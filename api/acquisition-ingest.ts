@@ -1,4 +1,5 @@
 import { createHash, timingSafeEqual } from 'node:crypto';
+import { applyIdentityGraphAfterIntake } from '../vercel/acquisition-identity-runtime.js';
 import { handleAcquisitionIntake } from '../vercel/acquisition-intake-runtime.js';
 import { handleSalesNavigatorIntake } from '../vercel/sales-navigator-intake-runtime.js';
 
@@ -36,9 +37,14 @@ export default {
         ? String((body as Record<string, unknown>).source ?? '')
         : '';
       const handler = source === 'sales_navigator' ? handleSalesNavigatorIntake : handleAcquisitionIntake;
-      return handler({
+      const databaseUrl = requireEnvironment('DATABASE_URL');
+      const intakeResponse = await handler({
         body,
-        databaseUrl: requireEnvironment('DATABASE_URL'),
+        databaseUrl,
+      });
+      return applyIdentityGraphAfterIntake({
+        response: intakeResponse,
+        databaseUrl,
       });
     } catch (error) {
       console.error('ACQUISITION_INGEST_ERROR', {
@@ -67,7 +73,7 @@ function safeTokenEqual(left: string, right: string): boolean {
 function requireEnvironment(name: string): string {
   const value = process.env[name]?.trim();
   if (!value) throw new Error(`${name} is required.`);
-  return value;
+  return value.trim();
 }
 
 function responseJson(value: unknown, status = 200, extraHeaders: Record<string, string> = {}): Response {
