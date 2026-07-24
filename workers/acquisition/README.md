@@ -34,7 +34,7 @@ The shared runtime implements #200. The Upwork extension advances #201, the sche
    - `%LOCALAPPDATA%\Codistan\Acquisition\extensions\upwork`
    - `%LOCALAPPDATA%\Codistan\Acquisition\extensions\linkedin`
 
-After an application update, rerun `START-HERE-ACQUISITION-V4.cmd` and click **Reload** on both unpacked extensions. Their folder locations remain stable.
+After an application update, rerun `START-HERE-ACQUISITION-V4.cmd` and click **Reload** on both unpacked extensions. Their folder locations remain stable. The installer migrates any earlier LinkedIn-only Prospect Desk sync configuration so both LinkedIn and Upwork are enabled without changing the stored endpoint, token or enabled/disabled state.
 
 ## Upwork flow
 
@@ -45,6 +45,7 @@ After an application update, rerun `START-HERE-ACQUISITION-V4.cmd` and click **R
    - Nadir — Game & AR/VR 16 July 2026
 3. The extension reads visible job cards after each user-opened page loads.
 4. The popup shows new records plus Priority A and Priority B counts.
+5. Every accepted or enriched non-Reject Upwork record is queued automatically for Prospect Desk synchronization when the bridge is enabled.
 
 The Upwork extension retains canonical job identity plus visible value, buyer, competition, freshness, duration, workload and skill evidence needed for bidding decisions. It never refreshes, scrolls, clicks a job, handles verification, submits a proposal, changes a profile or sends a message.
 
@@ -59,9 +60,10 @@ Each cycle:
 3. performs the bounded four-step scan;
 4. captures only resolvable buyer-intent posts with original canonical evidence;
 5. deduplicates or enriches through the local collector;
-6. closes the temporary tab;
-7. waits before opening the next search;
-8. skips a new cycle if the previous cycle is still active.
+6. queues accepted or enriched non-Reject records for Prospect Desk synchronization;
+7. closes the temporary tab;
+8. waits before opening the next search;
+9. skips a new cycle if the previous cycle is still active.
 
 The five lanes are:
 
@@ -82,7 +84,11 @@ The scheduled extension may open inactive tabs and scroll search results. It doe
 
 ## Prospect Desk synchronization
 
-Local capture works without Prospect Desk synchronization. To populate the production `/prospects` and `/leads/linkedin` workspaces automatically, deploy the machine-authenticated endpoint and configure the local bridge.
+Local capture works without Prospect Desk synchronization. To populate the production workspaces automatically, deploy the machine-authenticated endpoint and configure the local bridge.
+
+- LinkedIn records appear in `/leads/linkedin` and `/prospects`.
+- Upwork records appear in `/leads/upwork` and `/prospects`.
+- Each source has its own fingerprint and retry state under `%LOCALAPPDATA%\Codistan\Acquisition\sync`.
 
 ### Production configuration
 
@@ -107,7 +113,17 @@ The script writes the secret only to:
 %LOCALAPPDATA%\Codistan\Acquisition\config\prospect-desk-sync.json
 ```
 
-It is not committed to GitHub or printed in health output. The bridge retries every 60 seconds and sends only records whose fingerprint is new or enriched. Reject records are never synchronized.
+The configuration explicitly enables:
+
+```json
+{
+  "sources": ["linkedin", "upwork"]
+}
+```
+
+The token is not committed to GitHub or printed in health output. The bridge retries every 60 seconds and sends only records whose fingerprint is new or enriched. Reject records are never synchronized.
+
+### LinkedIn records in Prospect Desk
 
 Every synchronized LinkedIn record is upserted by stable identity and canonical post URL. Prospect Desk receives:
 
@@ -120,9 +136,26 @@ Every synchronized LinkedIn record is upserted by stable identity and canonical 
 - service workspace mapping;
 - recommended Codistan profile and approved portfolio proof;
 - automatic owner assignment where unassigned;
-- recommended next action and a human-reviewable response draft.
+- recommended next action and a human-reviewable LinkedIn response draft.
 
-Repeated scans enrich the same record. Existing owner, outreach history, reply, follow-up, proposal and outcome data are preserved. All outreach remains manual.
+### Upwork records in Prospect Desk
+
+Every synchronized Upwork record is upserted by stable identity and canonical job URL. Prospect Desk receives:
+
+- canonical job URL and native job identity;
+- approved saved-search name and owner context;
+- visible title, description and skills;
+- fixed budget or hourly range where visible;
+- buyer payment verification, spend and hire-rate evidence where visible;
+- proposal competition, freshness, duration and weekly-hours evidence where visible;
+- local Priority A, Priority B or Research decision;
+- score, confidence, positive reasons, missing evidence and risk flags;
+- service workspace mapping;
+- recommended Upwork/Codistan profile and approved portfolio proof;
+- automatic owner assignment where unassigned;
+- recommended next action and a human-reviewable Upwork proposal draft.
+
+Repeated captures enrich the same LinkedIn post or Upwork job. Existing owner, outreach history, reply, follow-up, proposal and outcome data are preserved. All bidding and outreach remain manual.
 
 ## Service workspace mapping
 
@@ -167,9 +200,9 @@ Double-click the desktop shortcut **Open Acquisition Review**. Priority A appear
 ## Health, diagnostics and rollback
 
 - **Check Acquisition V4** shows whether both collectors are healthy and reports current A/B counts.
-- Each collector health response includes a sanitized `prospect_desk_sync` section with configuration, endpoint host, pending count, last success and last error. It never exposes the token.
+- Each collector health response includes a sanitized `prospect_desk_sync` section with source, configuration, endpoint host, pending count, last success and last error. It never exposes the token.
 - **Diagnose Acquisition V4** creates a ZIP containing health, versions and file metadata only. It excludes captured opportunity bodies, cookies and credentials.
-- **Rollback Acquisition V4** swaps `app-current` with `app-previous`, refreshes both stable extension folders and restarts the runtime. Captured records, deduplication and sync configuration remain intact.
+- **Rollback Acquisition V4** swaps `app-current` with `app-previous`, refreshes both stable extension folders and restarts the runtime. Captured records, source-specific deduplication and sync configuration remain intact.
 
 ## Developer validation
 
