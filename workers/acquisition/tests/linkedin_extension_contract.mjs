@@ -15,7 +15,7 @@ const popupHtml = fs.readFileSync(path.join(root, "popup.html"), "utf8");
 const signalSource = fs.readFileSync(path.join(root, "signal.js"), "utf8");
 
 assert.equal(manifest.manifest_version, 3);
-assert.equal(manifest.version, "1.4.0");
+assert.equal(manifest.version, "1.4.1");
 assert(entry.includes('background.js'));
 assert(entry.includes('sales-nav-background.js'));
 assert(background.includes('linkedin-extension-1.3.0'));
