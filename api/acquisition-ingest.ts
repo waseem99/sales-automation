@@ -1,4 +1,5 @@
 import { createHash, timingSafeEqual } from 'node:crypto';
+import { applyEnrichmentAfterIntake } from '../vercel/acquisition-enrichment-runtime.js';
 import { applyIdentityGraphAfterIntake } from '../vercel/acquisition-identity-runtime.js';
 import { handleAcquisitionIntake } from '../vercel/acquisition-intake-runtime.js';
 import { handleSalesNavigatorIntake } from '../vercel/sales-navigator-intake-runtime.js';
@@ -42,8 +43,12 @@ export default {
         body,
         databaseUrl,
       });
-      return applyIdentityGraphAfterIntake({
+      const identityResponse = await applyIdentityGraphAfterIntake({
         response: intakeResponse,
+        databaseUrl,
+      });
+      return applyEnrichmentAfterIntake({
+        response: identityResponse,
         databaseUrl,
       });
     } catch (error) {
