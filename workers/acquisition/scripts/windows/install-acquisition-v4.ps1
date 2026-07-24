@@ -117,6 +117,7 @@ $startup = [Environment]::GetFolderPath("Startup")
 $shortcutMap = @{
     "Start Acquisition V5.lnk" = "START-ACQUISITION-V4.cmd"
     "Check Acquisition V5.lnk" = "CHECK-ACQUISITION-V4.cmd"
+    "Check Sales Navigator Pilot.lnk" = "CHECK-SALES-NAVIGATOR-PILOT.cmd"
     "Configure Prospect Desk Sync.lnk" = "CONFIGURE-PROSPECT-DESK-SYNC.cmd"
     "Open Upwork Searches.lnk" = "OPEN-UPWORK-SEARCHES.cmd"
     "Open LinkedIn Lead Searches.lnk" = "OPEN-LINKEDIN-LEAD-SEARCHES.cmd"
@@ -155,4 +156,5 @@ Write-Host "Prospect Desk sync config: $configPath"
 Write-Host "Sync sources: LinkedIn warm, Upwork and Sales Navigator cold campaigns"
 Write-Host "Load or reload both unpacked extensions in chrome://extensions/."
 Write-Host "Open the LinkedIn extension popup, then open Sales Navigator campaigns to register an approved lead search."
+Write-Host "Use Check Sales Navigator Pilot after each live run to measure the acceptance gate."
 Write-Host "Use Configure Prospect Desk Sync once the production endpoint and token are ready."
