@@ -1,4 +1,5 @@
 import { createHash, timingSafeEqual } from 'node:crypto';
+import { applyCampaignEngineAfterIntake } from '../vercel/acquisition-campaign-runtime.js';
 import { applyEnrichmentAfterIntake } from '../vercel/acquisition-enrichment-runtime.js';
 import { applyIdentityGraphAfterIntake } from '../vercel/acquisition-identity-runtime.js';
 import { handleAcquisitionIntake } from '../vercel/acquisition-intake-runtime.js';
@@ -39,18 +40,10 @@ export default {
         : '';
       const handler = source === 'sales_navigator' ? handleSalesNavigatorIntake : handleAcquisitionIntake;
       const databaseUrl = requireEnvironment('DATABASE_URL');
-      const intakeResponse = await handler({
-        body,
-        databaseUrl,
-      });
-      const identityResponse = await applyIdentityGraphAfterIntake({
-        response: intakeResponse,
-        databaseUrl,
-      });
-      return applyEnrichmentAfterIntake({
-        response: identityResponse,
-        databaseUrl,
-      });
+      const intakeResponse = await handler({ body, databaseUrl });
+      const identityResponse = await applyIdentityGraphAfterIntake({ response: intakeResponse, databaseUrl });
+      const enrichmentResponse = await applyEnrichmentAfterIntake({ response: identityResponse, databaseUrl });
+      return applyCampaignEngineAfterIntake({ response: enrichmentResponse, databaseUrl });
     } catch (error) {
       console.error('ACQUISITION_INGEST_ERROR', {
         message: error instanceof Error ? error.message : String(error),
