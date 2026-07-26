@@ -31,13 +31,14 @@ export async function handleWorkspaceDashboardRuntime(input) {
   const runtimeState = workspaceRuntimeWarm ? 'warm' : 'cold';
   workspaceRuntimeWarm = true;
   const modulesStartedAt = performance.now();
-  const [neonState, prospectDiscovery, storage, prospectHandler, workspacePages, workflowUi, upworkAccountUi, partialNavigation] = await Promise.all([
+  const [neonState, prospectDiscovery, storage, prospectHandler, workspacePages, workflowUi, bdWorkspaceUi, upworkAccountUi, partialNavigation] = await Promise.all([
     import('@sales-automation/neon-state'),
     import('@sales-automation/prospect-discovery'),
     import('@sales-automation/storage'),
     import('@sales-automation/web/prospect-handler'),
     import('./workspace-pages.js'),
     import('./prospect-workflow-ui.js'),
+    import('./bd-workspace-ui.js'),
     import('./upwork-account-workspace-ui.js'),
     import('./prospect-partial-navigation.js'),
   ]);
@@ -123,6 +124,22 @@ export async function handleWorkspaceDashboardRuntime(input) {
     } catch (error) {
       console.error('PROSPECT_WORKFLOW_UI_ERROR', {
         route: pathname,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
+    try {
+      body = bdWorkspaceUi.enhanceBdWorkspaceUi(body, {
+        activeRoute: pathname,
+        records: pageLoad.page.records,
+        selected,
+        generatedAt,
+        actorIdentifier: input.session.identifier,
+        actorDisplayName: input.session.displayName,
+      });
+    } catch (error) {
+      console.error('BD_WORKSPACE_UI_ERROR', {
+        route: pathname,
+        leadId: selected?.lead?.id,
         error: error instanceof Error ? error.message : String(error),
       });
     }
