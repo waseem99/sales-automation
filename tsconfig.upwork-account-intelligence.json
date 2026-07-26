@@ -1,0 +1,12 @@
+{
+  "extends": "./tsconfig.base.json",
+  "compilerOptions": {
+    "noEmit": true,
+    "rootDir": "."
+  },
+  "include": [
+    "packages/upwork-account-intelligence/src/**/*.ts",
+    "vercel/upwork-account-intelligence-runtime.ts",
+    "api/acquisition-ingest.ts"
+  ]
+}
