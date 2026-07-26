@@ -269,9 +269,9 @@ function enrichEvaluation(evaluation: EvaluatedLead): EvaluatedLead {
     lead: {
       ...evaluation.lead,
       recommendedProfile: evaluation.profileRecommendation.primaryProfile,
-      recommendedPortfolioItemIds: evaluation.portfolioRecommendation.selectedItems.map((item) => item.id),
-      recommendedNextAction: evaluation.approachRecommendation.nextAction,
-      draftMessage: evaluation.approachRecommendation.messageDraft,
+      recommendedPortfolioItemIds: evaluation.portfolioMatches.map((match) => match.portfolioItem.id),
+      recommendedNextAction: evaluation.recommendedNextAction,
+      draftMessage: evaluation.drafts[0]?.body,
     },
   };
 }
