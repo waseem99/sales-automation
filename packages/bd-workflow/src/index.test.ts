@@ -8,7 +8,7 @@ import {
   refreshBdWorkflow,
   updateBdTask,
   workflowQueueFacts,
-} from './index.js';
+} from './public.js';
 
 const now = '2026-07-26T14:00:00.000Z';
 
@@ -160,6 +160,20 @@ function lead(id: string, patch: Partial<Lead> = {}): Lead {
   const completed = updateBdTask(attachedLead, task.id, {status: 'completed', note: 'Authority confirmed.'}, 'talha.bashir@codistan.org', '2026-07-26T15:00:00.000Z');
   assert.equal(completed.tasks.find((item) => item.id === task.id)?.status, 'completed');
   assert(completed.events.some((event) => event.type === 'task_status_changed'));
+}
+
+{
+  const initial = lead('progression', {owner: 'Talha Bashir', pipelineStatus: 'needs_human_review'});
+  const reviewSnapshot = refreshBdWorkflow(initial, now, 'test');
+  assert.equal(reviewSnapshot.nextBestAction.code, 'review_qualification');
+  const approvedLead = attachBdWorkflow({...initial, pipelineStatus: 'approved_to_contact'}, reviewSnapshot);
+  const approvedSnapshot = refreshBdWorkflow(approvedLead, '2026-07-26T14:30:00.000Z', 'test');
+  assert.equal(approvedSnapshot.nextBestAction.code, 'prepare_outreach');
+  assert(!approvedSnapshot.tasks.some((task) => task.generated && task.code === 'review_qualification' && (task.status === 'open' || task.status === 'in_progress')));
+  const contactedLead = attachBdWorkflow({...approvedLead, pipelineStatus: 'sent_manually', lastContactedAt: '2026-07-26T15:00:00.000Z'}, approvedSnapshot);
+  const contactedSnapshot = refreshBdWorkflow(contactedLead, '2026-07-26T15:00:00.000Z', 'test');
+  assert.equal(contactedSnapshot.nextBestAction.code, 'schedule_follow_up');
+  assert(!contactedSnapshot.tasks.some((task) => task.generated && task.code === 'prepare_outreach' && (task.status === 'open' || task.status === 'in_progress')));
 }
 
 {
