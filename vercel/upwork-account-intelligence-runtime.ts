@@ -1,11 +1,15 @@
 import { evaluateLead, type EvaluatedLead } from '@sales-automation/evaluator';
-import { attachEnrichmentSnapshot, buildEvidenceBasedEnrichment } from '@sales-automation/enrichment';
+import {
+  attachEnrichmentSnapshot,
+  buildEvidenceBasedEnrichment,
+  readEnrichmentSnapshot,
+} from '@sales-automation/enrichment';
 import { samplePortfolioItems } from '@sales-automation/fixtures';
 import { attachIdentityResolution, resolveLeadIdentity } from '@sales-automation/identity-graph';
 import { loadNeonAppState, persistLeadRecords } from '@sales-automation/neon-state';
 import { applyAutomaticAssignment, buildOwnerWorkload } from '@sales-automation/prospect-discovery';
 import type { Lead, PipelineStatus } from '@sales-automation/shared';
-import type { StoredLeadRecord } from '@sales-automation/storage';
+import type { LeadRepository, StoredLeadRecord } from '@sales-automation/storage';
 import {
   attachUpworkAccountIntelligence,
   deriveUpworkAccountIntelligence,
@@ -72,17 +76,18 @@ export async function applyUpworkAccountIntelligenceAfterIntake(input: {
       if (stableJobAccountState(jobRecord.lead) !== stableJobAccountState(attachedJob)) {
         state.repository.upsertLead(attachedJob, ACTOR);
         addNoteOnce(
-          state.repository.getLead(leadId)!,
+          state.repository,
+          leadId,
           `upwork_account_intelligence::${intelligence.status}::${intelligence.accountLeadId ?? 'job_only'}`,
-          () => state.repository.addNote(leadId, `upwork_account_intelligence::${intelligence.status}::${intelligence.accountLeadId ?? 'job_only'}`, ACTOR),
         );
         touchedIds.push(leadId);
       }
 
       if (!intelligence.accountLead) continue;
       const existingAccount = state.repository.getLead(intelligence.accountLead.id);
+      const mergedAccount = mergePreservingBdHistory(existingAccount?.lead, intelligence.accountLead);
       const preparedAccount = prepareAccountLead(
-        mergePreservingBdHistory(existingAccount?.lead, intelligence.accountLead),
+        mergedAccount,
         state.repository.listLeads().map((record) => record.lead),
         generatedAt,
       );
@@ -107,13 +112,9 @@ export async function applyUpworkAccountIntelligenceAfterIntake(input: {
           }));
           state.repository.saveEvaluation(evaluated, ACTOR);
           addNoteOnce(
-            state.repository.getLead(evaluated.lead.id)!,
-            `routing::automatic::${assigned.assignment.owner}`,
-            () => state.repository.addNote(
-              evaluated.lead.id,
-              `routing::automatic::${assigned.assignment.owner}::${assigned.approach.channel}::${assigned.assignment.reason} | ${assigned.approach.nextAction}`,
-              ACTOR,
-            ),
+            state.repository,
+            evaluated.lead.id,
+            `routing::automatic::${assigned.assignment.owner}::${assigned.approach.channel}::${assigned.assignment.reason} | ${assigned.approach.nextAction}`,
           );
         }
 
@@ -128,7 +129,7 @@ export async function applyUpworkAccountIntelligenceAfterIntake(input: {
           });
         }
 
-        addLinkedAccountNotes(state.repository.getLead(leadId), state.repository.getLead(preparedAccount.id), intelligence);
+        addLinkedAccountNotes(state.repository, leadId, preparedAccount.id, intelligence);
         touchedIds.push(preparedAccount.id, leadId);
       }
 
@@ -179,7 +180,8 @@ export async function applyUpworkAccountIntelligenceAfterIntake(input: {
 function prepareAccountLead(accountLead: Lead, existingLeads: Lead[], generatedAt: string): Lead {
   const resolution = resolveLeadIdentity(accountLead, existingLeads, generatedAt);
   const withIdentity = attachIdentityResolution(accountLead, resolution);
-  const snapshot = buildEvidenceBasedEnrichment(withIdentity, undefined, generatedAt);
+  const previousEnrichment = readEnrichmentSnapshot(accountLead);
+  const snapshot = buildEvidenceBasedEnrichment(withIdentity, previousEnrichment, generatedAt);
   return attachEnrichmentSnapshot(withIdentity, snapshot);
 }
 
@@ -189,6 +191,10 @@ function mergePreservingBdHistory(existing: Lead | undefined, incoming: Lead): L
   return {
     ...existing,
     ...incoming,
+    rawPayload: {
+      ...asRecord(existing.rawPayload),
+      ...asRecord(incoming.rawPayload),
+    },
     owner: existing.owner ?? incoming.owner,
     pipelineStatus: progressed ? existing.pipelineStatus : incoming.pipelineStatus,
     nextFollowUpAt: existing.nextFollowUpAt,
@@ -205,20 +211,20 @@ function mergePreservingBdHistory(existing: Lead | undefined, incoming: Lead): L
 }
 
 function addLinkedAccountNotes(
-  jobRecord: StoredLeadRecord | undefined,
-  accountRecord: StoredLeadRecord | undefined,
+  repository: LeadRepository,
+  jobLeadId: string,
+  accountLeadId: string,
   intelligence: UpworkAccountIntelligenceResult,
 ): void {
-  if (!jobRecord || !accountRecord) return;
-  const jobNote = `linked_upwork_account::${accountRecord.lead.id}::${intelligence.status}`;
-  addNoteOnce(jobRecord, jobNote, () => jobRecord.notes.push(jobNote));
-  const accountNote = `linked_upwork_job::${jobRecord.lead.id}::${jobRecord.lead.sourceUrl ?? ''}`;
-  addNoteOnce(accountRecord, accountNote, () => accountRecord.notes.push(accountNote));
+  addNoteOnce(repository, jobLeadId, `linked_upwork_account::${accountLeadId}::${intelligence.status}`);
+  const jobRecord = repository.getLead(jobLeadId);
+  addNoteOnce(repository, accountLeadId, `linked_upwork_job::${jobLeadId}::${jobRecord?.lead.sourceUrl ?? ''}`);
 }
 
-function addNoteOnce(record: StoredLeadRecord, prefix: string, add: () => void): void {
-  if (record.notes.some((note) => note.startsWith(prefix))) return;
-  add();
+function addNoteOnce(repository: LeadRepository, leadId: string, note: string): void {
+  const record = repository.getLead(leadId);
+  if (!record || record.notes.includes(note)) return;
+  repository.addNote(leadId, note, ACTOR);
 }
 
 function stableJobAccountState(lead: Lead): string {
@@ -232,6 +238,8 @@ function stableJobAccountState(lead: Lead): string {
 
 function stableAccountState(lead: Lead): string {
   const raw = asRecord(lead.rawPayload);
+  const enrichment = asRecord(raw.enrichment);
+  const identity = asRecord(raw.identityGraph);
   return JSON.stringify({
     companyName: lead.companyName ?? null,
     companyWebsite: lead.companyWebsite ?? null,
@@ -242,12 +250,16 @@ function stableAccountState(lead: Lead): string {
     serviceCategory: lead.serviceCategory,
     serviceOffer: lead.serviceOffer ?? null,
     description: lead.description,
-    recommendedNextAction: lead.recommendedNextAction ?? null,
     accountIdentityKey: raw.accountIdentityKey ?? null,
     linkedJobs: raw.linkedUpworkJobIds ?? [],
     campaignMatches: raw.campaignMatches ?? [],
-    enrichment: raw.enrichment ?? null,
-    identityGraph: raw.identityGraph ?? null,
+    enrichmentCompany: asRecord(enrichment.company),
+    enrichmentPerson: asRecord(enrichment.person),
+    enrichmentRoutes: enrichment.contactRoutes ?? [],
+    enrichmentSuppression: enrichment.suppression ?? null,
+    personIdentity: asRecord(identity.person).id ?? null,
+    companyIdentity: asRecord(identity.company).id ?? null,
+    duplicateContactLeadIds: identity.duplicateContactLeadIds ?? [],
   });
 }
 
