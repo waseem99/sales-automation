@@ -51,6 +51,10 @@ export type ServiceCategory =
   | 'cybersecurity_compliance'
   | 'website_portal'
   | 'enterprise_systems'
+  | 'outsourcing_partnership'
+  | 'cybersecurity'
+  | 'digital_marketing'
+  | 'creative_production'
   | 'unknown';
 
 export type QualificationStatus = 'hot' | 'qualified' | 'nurture' | 'rejected';
