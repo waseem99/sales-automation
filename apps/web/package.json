@@ -21,9 +21,10 @@
     "start": "node dist/dev.js",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "lint": "tsc -p tsconfig.json --noEmit",
-    "test": "tsx src/prospect-server.test.ts && tsx src/dashboard-access.test.ts && tsx src/auto-prospect-handler.test.ts && tsx src/legacy-boundary.test.ts"
+    "test": "tsx src/prospect-server.test.ts && tsx src/dashboard-access.test.ts && tsx src/auto-prospect-handler.test.ts && tsx src/bd-workflow-handler.test.ts && tsx src/legacy-boundary.test.ts"
   },
   "dependencies": {
+    "@sales-automation/bd-workflow": "workspace:*",
     "@sales-automation/engagement-guidance": "workspace:*",
     "@sales-automation/evaluator": "workspace:*",
     "@sales-automation/prospect-discovery": "workspace:*",
