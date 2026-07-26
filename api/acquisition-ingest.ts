@@ -4,6 +4,7 @@ import { applyEnrichmentAfterIntake } from '../vercel/acquisition-enrichment-run
 import { applyIdentityGraphAfterIntake } from '../vercel/acquisition-identity-runtime.js';
 import { handleAcquisitionIntake } from '../vercel/acquisition-intake-runtime.js';
 import { handleSalesNavigatorIntake } from '../vercel/sales-navigator-intake-runtime.js';
+import { applyUpworkAccountIntelligenceAfterIntake } from '../vercel/upwork-account-intelligence-runtime.js';
 
 export const maxDuration = 300;
 const MAX_REQUEST_BYTES = 1_000_000;
@@ -43,7 +44,8 @@ export default {
       const intakeResponse = await handler({ body, databaseUrl });
       const identityResponse = await applyIdentityGraphAfterIntake({ response: intakeResponse, databaseUrl });
       const enrichmentResponse = await applyEnrichmentAfterIntake({ response: identityResponse, databaseUrl });
-      return applyCampaignEngineAfterIntake({ response: enrichmentResponse, databaseUrl });
+      const campaignResponse = await applyCampaignEngineAfterIntake({ response: enrichmentResponse, databaseUrl });
+      return applyUpworkAccountIntelligenceAfterIntake({ response: campaignResponse, databaseUrl });
     } catch (error) {
       console.error('ACQUISITION_INGEST_ERROR', {
         message: error instanceof Error ? error.message : String(error),
