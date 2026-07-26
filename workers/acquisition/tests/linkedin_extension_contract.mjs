@@ -54,15 +54,17 @@ for (const searchId of [
 
 for (const marker of [
   'data-codistan-opportunity-card="true"',
-  'data-codistan-source-url',
-  'resolveVisibleSearchCards',
+  'data-codistan-canonical-url',
+  'canonicalPostUrl',
+  'resolveVisibleCards',
   'CODISTAN_FORCE_LINKEDIN_SEARCH_RESOLUTION',
 ]) assert(resolver.includes(marker), `missing search resolver marker: ${marker}`);
 
 for (const marker of [
   'CODISTAN_SCROLL_LINKEDIN_RESULTS',
   'CODISTAN_RESTORE_LINKEDIN_SCROLL',
-  'scroll_container_candidates',
+  'scrollCandidates',
+  'scroller_candidates',
   'document.scrollingElement',
 ]) assert(resolver.includes(marker), `missing scroll resolver marker: ${marker}`);
 
@@ -98,4 +100,4 @@ assert(!resolver.includes("scrollIntoView"));
 assert(!background.includes("chrome.tabs.update"));
 assert(!background.includes("buyerIntentConfirmed: true"));
 
-console.log("LinkedIn warm extension contract passed.");
+console.log("LinkedIn warm capture extension contract passed.");
