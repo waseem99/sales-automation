@@ -61,7 +61,6 @@ export type CommercialServiceCategory =
 
 export type ServiceCategory =
   | OperationalServiceCategory
-  | CommercialServiceCategory
   | (string & { readonly __extensibleServiceCategory?: unique symbol });
 
 export type QualificationStatus = 'hot' | 'qualified' | 'nurture' | 'rejected';
