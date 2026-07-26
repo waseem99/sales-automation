@@ -54,7 +54,11 @@ jobs:
         id: behavior_tests
         continue-on-error: true
         shell: bash
-        run: pnpm --filter @sales-automation/upwork-account-intelligence test > upwork-account-behavior.log 2>&1
+        run: |
+          {
+            pnpm --filter @sales-automation/upwork-account-intelligence... build
+            pnpm --filter @sales-automation/upwork-account-intelligence test
+          } > upwork-account-behavior.log 2>&1
 
       - name: Validate evidence-only account bridge
         id: bridge_contract
