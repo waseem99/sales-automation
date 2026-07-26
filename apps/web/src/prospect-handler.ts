@@ -1,4 +1,16 @@
 import { createHmac, timingSafeEqual } from 'node:crypto';
+import {
+  attachBdWorkflow,
+  bdWorkflowStateEqual,
+  createBdTask,
+  readBdWorkflow,
+  recordBdPipelineEvent,
+  refreshBdWorkflow,
+  updateBdTask,
+  type BdChannel,
+  type BdTaskPriority,
+  type BdTaskStatus,
+} from '@sales-automation/bd-workflow';
 import type { ProspectDiscoveryResult, ProspectDiscoveryRunStore } from '@sales-automation/prospect-discovery';
 import type {
   ContactAccuracy,
@@ -135,10 +147,12 @@ export async function handleProspectDashboardRequest(
         generatedAt: now(context),
         leadIds: result.newLeads.map((lead) => lead.id),
       });
+      const workflowAudit = backfillBdWorkflows(context.repository, actor, now(context), result.newLeads.map((lead) => lead.id));
       return json({
         run: result.run,
         newLeads: result.newLeads.map((lead) => lead.id),
         engagementAudit,
+        workflowAudit,
       }, 201);
     }
 
@@ -152,6 +166,11 @@ export async function handleProspectDashboardRequest(
         force: payload.force === true || payload.force === 'true',
       });
       return json({ ok: true, ...result }, result.audited > 0 ? 201 : 200);
+    }
+
+    if (method === 'POST' && pathname === '/api/prospects/bd-workflow/backfill') {
+      const result = backfillBdWorkflows(context.repository, actor, now(context));
+      return json({ok: true, ...result}, result.updated > 0 ? 201 : 200);
     }
 
     const guidanceMatch = pathname.match(/^\/api\/prospects\/([^/]+)\/guidance\/(first-outreach|reply)$/);
@@ -170,7 +189,8 @@ export async function handleProspectDashboardRequest(
           actor,
           generatedAt,
         });
-        return json({ guidance: applied.guidance, prospect: serializeProspect(applied.record) }, 201);
+        const refreshed = refreshWorkflowRecord(context.repository, leadId, actor, generatedAt, 'First-outreach guidance was regenerated for human review.');
+        return json({ guidance: applied.guidance, prospect: serializeProspect(refreshed) }, 201);
       }
 
       const payload = asObject(request.body);
@@ -183,7 +203,57 @@ export async function handleProspectDashboardRequest(
         actor,
         generatedAt,
       });
-      return json({ guidance: applied.guidance, prospect: serializeProspect(applied.record) }, 201);
+      const refreshed = refreshWorkflowRecord(context.repository, leadId, actor, generatedAt, 'Buyer reply guidance was generated for human review.');
+      return json({ guidance: applied.guidance, prospect: serializeProspect(refreshed) }, 201);
+    }
+
+    const taskCollectionMatch = pathname.match(/^\/api\/prospects\/([^/]+)\/tasks$/);
+    if (method === 'POST' && taskCollectionMatch) {
+      const leadId = decodeURIComponent(taskCollectionMatch[1] ?? '');
+      const existing = context.repository.getLead(leadId);
+      if (!existing) return json({error: 'Prospect not found.'}, 404);
+      const payload = asObject(request.body);
+      const generatedAt = now(context);
+      const snapshot = createBdTask(existing.lead, {
+        title: requireString(payload.title, 'title'),
+        reason: requireString(payload.reason, 'reason'),
+        priority: optionalBdTaskPriority(payload.priority),
+        channel: optionalBdChannel(payload.channel),
+        dueAt: optionalString(payload.dueAt),
+        owner: optionalString(payload.owner),
+        note: optionalString(payload.note),
+      }, actor, generatedAt);
+      const record = saveWorkflowSnapshot(context.repository, leadId, snapshot, actor, `bd_task_created::${snapshot.tasks.at(-1)?.id ?? 'task'}::${payload.title}`);
+      return json({ok: true, workflow: snapshot, prospect: serializeProspect(record)}, 201);
+    }
+
+    const taskActionMatch = pathname.match(/^\/api\/prospects\/([^/]+)\/tasks\/([^/]+)\/(start|complete|hold|reopen|dismiss)$/);
+    if (method === 'POST' && taskActionMatch) {
+      const leadId = decodeURIComponent(taskActionMatch[1] ?? '');
+      const taskId = decodeURIComponent(taskActionMatch[2] ?? '');
+      const verb = taskActionMatch[3] ?? '';
+      const existing = context.repository.getLead(leadId);
+      if (!existing) return json({error: 'Prospect not found.'}, 404);
+      const payload = asObject(request.body);
+      const generatedAt = now(context);
+      const snapshot = updateBdTask(existing.lead, taskId, {
+        status: taskStatusForVerb(verb),
+        note: optionalString(payload.note),
+        dueAt: payload.dueAt === undefined ? undefined : optionalString(payload.dueAt),
+        owner: payload.owner === undefined ? undefined : optionalString(payload.owner),
+      }, actor, generatedAt);
+      const record = saveWorkflowSnapshot(context.repository, leadId, snapshot, actor, `bd_task_${verb}::${taskId}`);
+      return json({ok: true, workflow: snapshot, prospect: serializeProspect(record)});
+    }
+
+    const nextActionMatch = pathname.match(/^\/api\/prospects\/([^/]+)\/next-action$/);
+    if (method === 'POST' && nextActionMatch) {
+      const leadId = decodeURIComponent(nextActionMatch[1] ?? '');
+      const existing = context.repository.getLead(leadId);
+      if (!existing) return json({error: 'Prospect not found.'}, 404);
+      const generatedAt = now(context);
+      const record = refreshWorkflowRecord(context.repository, leadId, actor, generatedAt, 'Next-best-action guidance was manually refreshed.');
+      return json({ok: true, workflow: readBdWorkflow(record.lead), prospect: serializeProspect(record)});
     }
 
     const actionMatch = pathname.match(/^\/api\/prospects\/([^/]+)\/(status|owner|activity|feedback)$/);
@@ -193,17 +263,23 @@ export async function handleProspectDashboardRequest(
       const payload = asObject(request.body);
       const existing = context.repository.getLead(leadId);
       if (!existing) return json({ error: 'Prospect not found.' }, 404);
+      const generatedAt = now(context);
 
       if (action === 'status') {
         const status = requirePipelineStatus(payload.status);
         if (['won', 'lost', 'rejected'].includes(status) && existing.lead.feedback?.status !== 'complete') {
           return json({ error: 'Complete the required BD feedback before marking this prospect won, lost, or rejected.' }, 400);
         }
-        return json(serializeProspect(context.repository.updateStatus(leadId, status, actor)));
+        context.repository.updateStatus(leadId, status, actor);
+        const record = refreshWorkflowRecord(context.repository, leadId, actor, generatedAt, `Pipeline stage changed to ${status}.`);
+        return json(serializeProspect(record));
       }
 
       if (action === 'owner') {
-        return json(serializeProspect(context.repository.assignOwner(leadId, requireString(payload.owner, 'owner'), actor)));
+        const owner = requireString(payload.owner, 'owner');
+        context.repository.assignOwner(leadId, owner, actor);
+        const record = refreshWorkflowRecord(context.repository, leadId, actor, generatedAt, `Prospect ownership changed to ${owner}.`);
+        return json(serializeProspect(record));
       }
 
       if (action === 'feedback') {
@@ -218,7 +294,7 @@ export async function handleProspectDashboardRequest(
         ]);
         const reason = requireString(payload.reason, 'reason');
         if (reason.length < 10) return json({ error: 'Feedback reason must contain at least 10 characters.' }, 400);
-        const recordedAt = now(context);
+        const recordedAt = generatedAt;
         const updatedLead = {
           ...existing.lead,
           serviceCategory: correctedServiceCategory ?? existing.lead.serviceCategory,
@@ -236,11 +312,8 @@ export async function handleProspectDashboardRequest(
           updatedAt: recordedAt,
         };
         context.repository.upsertLead(updatedLead, actor);
-        const record = context.repository.addNote(
-          leadId,
-          `feedback::${relevanceRating}::${sourceQuality}::${repeatRecommendation}::${reason}`,
-          actor,
-        );
+        context.repository.addNote(leadId, `feedback::${relevanceRating}::${sourceQuality}::${repeatRecommendation}::${reason}`, actor);
+        const record = refreshWorkflowRecord(context.repository, leadId, actor, generatedAt, 'Commercial feedback was completed.');
         return json(serializeProspect(record));
       }
 
@@ -248,7 +321,7 @@ export async function handleProspectDashboardRequest(
       const channel = requireString(payload.channel ?? 'internal', 'channel');
       const activityBody = requireString(payload.body, 'body');
       if (activityBody.length < 5) return json({ error: 'Activity details must contain at least 5 characters.' }, 400);
-      const occurredAt = now(context);
+      const occurredAt = generatedAt;
 
       if (type === 'response') {
         const applied = applyReplyGuidance({
@@ -259,8 +332,9 @@ export async function handleProspectDashboardRequest(
           actor,
           generatedAt: occurredAt,
         });
+        const refreshed = refreshWorkflowRecord(context.repository, leadId, actor, occurredAt, `Buyer response recorded through ${channel}.`);
         return json({
-          ...serializeProspect(applied.record),
+          ...serializeProspect(refreshed),
           replyGuidance: applied.guidance,
         });
       }
@@ -271,6 +345,7 @@ export async function handleProspectDashboardRequest(
       let record = context.repository.addNote(leadId, `activity::${type}::${channel}::${activityBody}`, actor);
       const nextStatus = activityStatus(type);
       if (nextStatus && record.lead.pipelineStatus !== nextStatus) record = context.repository.updateStatus(leadId, nextStatus, actor);
+      record = refreshWorkflowRecord(context.repository, leadId, actor, occurredAt, `${labelActivity(type)} recorded through ${channel}.`);
       return json(serializeProspect(record));
     }
 
@@ -278,6 +353,43 @@ export async function handleProspectDashboardRequest(
   } catch (error) {
     return json({ error: (error as Error).message }, errorStatus(error));
   }
+}
+
+function backfillBdWorkflows(repository: LeadRepository, actor: string, generatedAt: string, leadIds?: string[]): {checked: number; updated: number; skipped: number} {
+  const records = leadIds?.length
+    ? leadIds.map((leadId) => repository.getLead(leadId)).filter((record): record is StoredLeadRecord => Boolean(record))
+    : repository.listLeads();
+  let updated = 0;
+  let skipped = 0;
+  for (const record of records) {
+    const previous = readBdWorkflow(record.lead);
+    const snapshot = refreshBdWorkflow(record.lead, generatedAt, actor);
+    if (bdWorkflowStateEqual(previous, snapshot)) {
+      skipped += 1;
+      continue;
+    }
+    saveWorkflowSnapshot(repository, record.lead.id, snapshot, actor, `bd_workflow_backfilled::${snapshot.nextBestAction.code}`);
+    updated += 1;
+  }
+  return {checked: records.length, updated, skipped};
+}
+
+function refreshWorkflowRecord(repository: LeadRepository, leadId: string, actor: string, generatedAt: string, summary: string): StoredLeadRecord {
+  const record = repository.getLead(leadId);
+  if (!record) throw new Error(`Prospect not found: ${leadId}`);
+  const previous = readBdWorkflow(record.lead);
+  const snapshot = recordBdPipelineEvent(record.lead, summary, actor, generatedAt);
+  if (bdWorkflowStateEqual(previous, snapshot)) return record;
+  return saveWorkflowSnapshot(repository, leadId, snapshot, actor, `bd_workflow_event::${snapshot.nextBestAction.code}::${summary}`);
+}
+
+function saveWorkflowSnapshot(repository: LeadRepository, leadId: string, snapshot: ReturnType<typeof refreshBdWorkflow>, actor: string, auditNote: string): StoredLeadRecord {
+  const record = repository.getLead(leadId);
+  if (!record) throw new Error(`Prospect not found: ${leadId}`);
+  repository.upsertLead(attachBdWorkflow(record.lead, snapshot), actor);
+  const updated = repository.getLead(leadId)!;
+  if (!updated.notes.includes(auditNote)) repository.addNote(leadId, auditNote, actor);
+  return repository.getLead(leadId)!;
 }
 
 function serializeProspect(record: StoredLeadRecord) {
@@ -291,10 +403,40 @@ function activityStatus(type: ActivityType): PipelineStatus | undefined {
   return undefined;
 }
 
+function labelActivity(type: ActivityType): string {
+  if (type === 'outreach') return 'Manual outreach';
+  if (type === 'meeting') return 'Meeting';
+  if (type === 'proposal') return 'Proposal';
+  return 'Internal activity';
+}
+
 type ActivityType = 'comment' | 'outreach' | 'response' | 'meeting' | 'proposal';
 
 function requireActivityType(value: unknown): ActivityType {
   return requireEnum<ActivityType>(value, 'type', ['comment', 'outreach', 'response', 'meeting', 'proposal']);
+}
+
+function taskStatusForVerb(value: string): BdTaskStatus {
+  const map: Record<string, BdTaskStatus> = {
+    start: 'in_progress',
+    complete: 'completed',
+    hold: 'on_hold',
+    reopen: 'open',
+    dismiss: 'dismissed',
+  };
+  const status = map[value];
+  if (!status) throw new Error('task action is invalid.');
+  return status;
+}
+
+function optionalBdTaskPriority(value: unknown): BdTaskPriority | undefined {
+  if (value === undefined || value === null || value === '') return undefined;
+  return requireEnum<BdTaskPriority>(value, 'priority', ['critical', 'high', 'normal', 'low']);
+}
+
+function optionalBdChannel(value: unknown): BdChannel | undefined {
+  if (value === undefined || value === null || value === '') return undefined;
+  return requireEnum<BdChannel>(value, 'channel', ['internal', 'upwork', 'linkedin', 'sales_navigator', 'email', 'referral', 'meeting']);
 }
 
 function requirePipelineStatus(value: unknown): PipelineStatus {
@@ -401,6 +543,10 @@ function requireString(value: unknown, field: string): string {
   return value.trim();
 }
 
+function optionalString(value: unknown): string | undefined {
+  return typeof value === 'string' && value.trim() ? value.trim() : undefined;
+}
+
 function securityHeaders(): Record<string, string> {
   return {
     'x-content-type-options': 'nosniff',
@@ -428,7 +574,7 @@ function trimTrailingSlash(value: string): string {
 
 function errorStatus(error: unknown): number {
   const message = (error as Error).message.toLowerCase();
-  if (message.includes('required') || message.includes('invalid') || message.includes('must contain') || message.includes('between')) return 400;
+  if (message.includes('required') || message.includes('invalid') || message.includes('must contain') || message.includes('between') || message.includes('valid date')) return 400;
   if (message.includes('not found')) return 404;
   return 500;
 }
