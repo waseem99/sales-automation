@@ -1,0 +1,130 @@
+name: Upwork Account Intelligence CI
+
+on:
+  pull_request:
+    branches:
+      - agent/offer-campaign-engine-230
+    paths:
+      - '.github/workflows/upwork-account-intelligence-ci.yml'
+      - 'packages/upwork-account-intelligence/**'
+      - 'api/acquisition-ingest.ts'
+      - 'vercel/upwork-account-intelligence-runtime.ts'
+      - 'vercel/prospect-workflow-ui.ts'
+      - 'workers/acquisition/tests/upwork_account_intelligence_bridge_contract.mjs'
+      - 'tsconfig.upwork-account-intelligence.json'
+      - 'package.json'
+      - 'pnpm-lock.yaml'
+      - 'packages/**'
+      - 'apps/web/**'
+      - 'vercel/**'
+      - 'scripts/**'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: upwork-account-intelligence-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  behavior:
+    name: Test account promotion and production integration
+    runs-on: ubuntu-latest
+    timeout-minutes: 28
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Install standalone pnpm
+        run: npm install --global --force @pnpm/exe@9.15.9
+
+      - name: Install workspace dependencies
+        run: pnpm install --no-frozen-lockfile
+
+      - name: Test Upwork account intelligence behavior
+        run: pnpm --filter @sales-automation/upwork-account-intelligence test
+
+      - name: Validate evidence-only account bridge
+        working-directory: workers/acquisition
+        run: node tests/upwork_account_intelligence_bridge_contract.mjs
+
+      - name: Preserve existing Upwork extension contract
+        working-directory: workers/acquisition
+        run: node tests/upwork_extension_contract.mjs
+
+      - name: Build full production workspace
+        shell: bash
+        run: |
+          set +e
+          pnpm build:vercel > upwork-account-production-build.log 2>&1
+          status=$?
+          tail -n 360 upwork-account-production-build.log
+          exit $status
+
+  typecheck:
+    name: Type-check Upwork account intake
+    runs-on: ubuntu-latest
+    timeout-minutes: 22
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Install standalone pnpm
+        run: npm install --global --force @pnpm/exe@9.15.9
+
+      - name: Install workspace dependencies
+        run: pnpm install --no-frozen-lockfile
+
+      - name: Build all workspace packages
+        id: workspace_build
+        continue-on-error: true
+        shell: bash
+        run: pnpm build > upwork-account-workspace-build.log 2>&1
+
+      - name: Type-check account-intelligence runtime
+        id: focused_typecheck
+        if: steps.workspace_build.outcome == 'success'
+        continue-on-error: true
+        shell: bash
+        run: pnpm exec tsc -p tsconfig.upwork-account-intelligence.json --noEmit > upwork-account-typecheck.log 2>&1
+
+      - name: Preserve diagnostics
+        if: always()
+        shell: bash
+        run: |
+          test -f upwork-account-workspace-build.log || touch upwork-account-workspace-build.log
+          test -f upwork-account-typecheck.log || touch upwork-account-typecheck.log
+
+      - name: Upload diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: upwork-account-intelligence-typecheck
+          path: |
+            upwork-account-workspace-build.log
+            upwork-account-typecheck.log
+          if-no-files-found: error
+          retention-days: 3
+
+      - name: Enforce workspace build
+        if: steps.workspace_build.outcome != 'success'
+        run: |
+          cat upwork-account-workspace-build.log
+          exit 1
+
+      - name: Enforce focused typecheck
+        if: steps.workspace_build.outcome == 'success' && steps.focused_typecheck.outcome != 'success'
+        run: |
+          cat upwork-account-typecheck.log
+          exit 1
