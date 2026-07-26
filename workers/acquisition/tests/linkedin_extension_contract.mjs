@@ -57,7 +57,7 @@ for (const marker of [
   'data-codistan-canonical-url',
   'canonicalPostUrl',
   'resolveVisibleCards',
-  'CODISTAN_FORCE_LINKEDIN_SEARCH_RESOLUTION',
+  'CODISTAN_RESOLVE_LINKEDIN_LINKS',
 ]) assert(resolver.includes(marker), `missing search resolver marker: ${marker}`);
 
 for (const marker of [
