@@ -33,7 +33,7 @@ jobs:
   behavior:
     name: Test BD workflow, authenticated mutations and production UI
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 32
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
@@ -49,11 +49,11 @@ jobs:
       - name: Install workspace dependencies
         run: pnpm install --no-frozen-lockfile
 
-      - name: Build BD workflow and dependencies
+      - name: Build workspace packages for behavior tests
         id: package_build
         continue-on-error: true
         shell: bash
-        run: pnpm --filter @sales-automation/bd-workflow... build > bd-workspace-package-build.log 2>&1
+        run: pnpm build > bd-workspace-package-build.log 2>&1
 
       - name: Test BD workflow behavior
         id: workflow_tests
