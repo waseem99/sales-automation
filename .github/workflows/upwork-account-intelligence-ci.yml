@@ -7,8 +7,11 @@ on:
     paths:
       - '.github/workflows/upwork-account-intelligence-ci.yml'
       - 'packages/upwork-account-intelligence/**'
+      - 'packages/shared/**'
       - 'api/acquisition-ingest.ts'
       - 'vercel/upwork-account-intelligence-runtime.ts'
+      - 'vercel/upwork-account-workspace-ui.ts'
+      - 'vercel/workspace-dashboard-runtime.js'
       - 'vercel/prospect-workflow-ui.ts'
       - 'workers/acquisition/tests/upwork_account_intelligence_bridge_contract.mjs'
       - 'tsconfig.upwork-account-intelligence.json'
@@ -48,24 +51,77 @@ jobs:
         run: pnpm install --no-frozen-lockfile
 
       - name: Test Upwork account intelligence behavior
-        run: pnpm --filter @sales-automation/upwork-account-intelligence test
+        id: behavior_tests
+        continue-on-error: true
+        shell: bash
+        run: pnpm --filter @sales-automation/upwork-account-intelligence test > upwork-account-behavior.log 2>&1
 
       - name: Validate evidence-only account bridge
+        id: bridge_contract
+        if: steps.behavior_tests.outcome == 'success'
+        continue-on-error: true
         working-directory: workers/acquisition
-        run: node tests/upwork_account_intelligence_bridge_contract.mjs
+        run: node tests/upwork_account_intelligence_bridge_contract.mjs > ../../upwork-account-bridge.log 2>&1
 
       - name: Preserve existing Upwork extension contract
+        id: extension_contract
+        if: steps.behavior_tests.outcome == 'success' && steps.bridge_contract.outcome == 'success'
+        continue-on-error: true
         working-directory: workers/acquisition
-        run: node tests/upwork_extension_contract.mjs
+        run: node tests/upwork_extension_contract.mjs > ../../upwork-account-extension.log 2>&1
 
       - name: Build full production workspace
+        id: production_build
+        if: steps.behavior_tests.outcome == 'success' && steps.bridge_contract.outcome == 'success' && steps.extension_contract.outcome == 'success'
+        continue-on-error: true
+        shell: bash
+        run: pnpm build:vercel > upwork-account-production-build.log 2>&1
+
+      - name: Preserve behavior diagnostics
+        if: always()
         shell: bash
         run: |
-          set +e
-          pnpm build:vercel > upwork-account-production-build.log 2>&1
-          status=$?
+          test -f upwork-account-behavior.log || touch upwork-account-behavior.log
+          test -f upwork-account-bridge.log || touch upwork-account-bridge.log
+          test -f upwork-account-extension.log || touch upwork-account-extension.log
+          test -f upwork-account-production-build.log || touch upwork-account-production-build.log
+
+      - name: Upload behavior diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: upwork-account-intelligence-behavior
+          path: |
+            upwork-account-behavior.log
+            upwork-account-bridge.log
+            upwork-account-extension.log
+            upwork-account-production-build.log
+          if-no-files-found: error
+          retention-days: 3
+
+      - name: Enforce account behavior tests
+        if: steps.behavior_tests.outcome != 'success'
+        run: |
+          cat upwork-account-behavior.log
+          exit 1
+
+      - name: Enforce account bridge
+        if: steps.behavior_tests.outcome == 'success' && steps.bridge_contract.outcome != 'success'
+        run: |
+          cat upwork-account-bridge.log
+          exit 1
+
+      - name: Enforce Upwork extension regression
+        if: steps.bridge_contract.outcome == 'success' && steps.extension_contract.outcome != 'success'
+        run: |
+          cat upwork-account-extension.log
+          exit 1
+
+      - name: Enforce production build
+        if: steps.extension_contract.outcome == 'success' && steps.production_build.outcome != 'success'
+        run: |
           tail -n 360 upwork-account-production-build.log
-          exit $status
+          exit 1
 
   typecheck:
     name: Type-check Upwork account intake
