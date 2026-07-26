@@ -98,7 +98,7 @@ export interface ProspectFeedback {
   contactAccuracy?: ContactAccuracy;
   sourceQuality?: SourceQuality;
   repeatRecommendation?: RepeatRecommendation;
-  correctedServiceCategory?: OperationalServiceCategory;
+  correctedServiceCategory?: ServiceCategory;
   reason?: string;
   recordedBy?: string;
   recordedAt?: string;
@@ -224,7 +224,7 @@ export interface Lead {
   country?: string;
   region?: string;
   industry?: string;
-  serviceCategory: OperationalServiceCategory;
+  serviceCategory: ServiceCategory;
   serviceOffer?: string;
   materialsToShare?: string;
   reachMethod?: string;
@@ -266,7 +266,7 @@ export interface PortfolioItem {
   projectName: string;
   industry?: string;
   confidentiality: 'public' | 'private' | 'anonymized';
-  serviceCategories: OperationalServiceCategory[];
+  serviceCategories: ServiceCategory[];
   techStack: string[];
   problemSolved: string;
   businessOutcome?: string;
@@ -279,7 +279,7 @@ export interface PortfolioItem {
 export interface ProfileCapability {
   profile: CodistanProfile;
   label: string;
-  serviceCategories: OperationalServiceCategory[];
+  serviceCategories: ServiceCategory[];
   proofTags: string[];
   geographyNotes?: string;
   complianceNotes?: string;
