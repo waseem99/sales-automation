@@ -7,6 +7,7 @@ const rootPackage = JSON.parse(fs.readFileSync(path.join(repoRoot, 'package.json
 const webPackage = JSON.parse(fs.readFileSync(path.join(repoRoot, 'apps/web/package.json'), 'utf8'));
 const packageJson = JSON.parse(fs.readFileSync(path.join(repoRoot, 'packages/bd-workflow/package.json'), 'utf8'));
 const source = fs.readFileSync(path.join(repoRoot, 'packages/bd-workflow/src/index.ts'), 'utf8');
+const publicSource = fs.readFileSync(path.join(repoRoot, 'packages/bd-workflow/src/public.ts'), 'utf8');
 const tests = fs.readFileSync(path.join(repoRoot, 'packages/bd-workflow/src/index.test.ts'), 'utf8');
 const handler = fs.readFileSync(path.join(repoRoot, 'apps/web/src/prospect-handler.ts'), 'utf8');
 const handlerTests = fs.readFileSync(path.join(repoRoot, 'apps/web/src/bd-workflow-handler.test.ts'), 'utf8');
@@ -20,6 +21,8 @@ assert.equal(rootPackage.dependencies['@sales-automation/bd-workflow'], 'workspa
 assert.equal(webPackage.dependencies['@sales-automation/bd-workflow'], 'workspace:*');
 assert(webPackage.scripts.test.includes('bd-workflow-handler.test.ts'));
 assert.equal(packageJson.name, '@sales-automation/bd-workflow');
+assert.equal(packageJson.main, 'dist/public.js');
+assert.equal(packageJson.types, 'dist/public.d.ts');
 assert.equal(packageJson.scripts.test, 'tsx src/index.test.ts');
 
 for (const marker of [
@@ -31,19 +34,28 @@ for (const marker of [
   'updateBdTask',
   'recordBdPipelineEvent',
   'workflowQueueFacts',
-  "code: 'assign_owner'",
-  "code: 'review_duplicate_contact'",
-  "code: 'review_suppression'",
-  "code: 'prepare_outreach'",
-  "code: 'schedule_follow_up'",
-  "code: 'classify_reply'",
-  "code: 'prepare_meeting'",
-  "code: 'follow_up_proposal'",
-  "code: 'capture_learning'",
+  "'assign_owner'",
+  "'review_duplicate_contact'",
+  "'review_suppression'",
+  "'prepare_outreach'",
+  "'schedule_follow_up'",
+  "'classify_reply'",
+  "'prepare_meeting'",
+  "'follow_up_proposal'",
+  "'capture_learning'",
   'humanReviewRequired: true',
   'externalActionPerformed: false',
   'Do not send or submit anything automatically',
 ]) assert(source.includes(marker), `missing BD workflow marker: ${marker}`);
+
+for (const marker of [
+  'PRESERVED_GENERATED_STATUSES',
+  'reconcileLifecycle',
+  'currentGeneratedIds',
+  'shouldPreserveTask',
+  "task.status === 'open' || task.status === 'in_progress'",
+  'refreshBaseWorkflow(stripWorkflow(lead)',
+]) assert(publicSource.includes(marker), `missing lifecycle-safe public API marker: ${marker}`);
 
 for (const marker of [
   "nextBestAction.code, 'assign_owner'",
@@ -57,6 +69,10 @@ for (const marker of [
   "nextBestAction.code, 'capture_learning'",
   "nextBestAction.code, 'no_action'",
   "status, 'completed'",
+  "pipelineStatus: 'approved_to_contact'",
+  "pipelineStatus: 'sent_manually'",
+  "task.code === 'review_qualification'",
+  "task.code === 'prepare_outreach'",
 ]) assert(tests.includes(marker), `missing BD workflow behavior test: ${marker}`);
 
 for (const marker of [
@@ -78,6 +94,8 @@ for (const marker of [
   "nextBestAction as Record<string, unknown>).code, 'schedule_follow_up'",
   'Authentication is required',
   'bd_task_created::',
+  "new InMemoryLeadRepository()",
+  "repository.upsertLead(lead, 'fixture')",
 ]) assert(handlerTests.includes(marker), `missing BD handler test marker: ${marker}`);
 
 for (const marker of [
@@ -128,6 +146,7 @@ const prohibited = [
 ];
 for (const marker of prohibited) {
   assert(!source.toLowerCase().includes(marker.toLowerCase()), `BD workflow source contains prohibited marker: ${marker}`);
+  assert(!publicSource.toLowerCase().includes(marker.toLowerCase()), `BD workflow public API contains prohibited marker: ${marker}`);
   assert(!intake.toLowerCase().includes(marker.toLowerCase()), `BD workflow intake contains prohibited marker: ${marker}`);
   assert(!ui.toLowerCase().includes(marker.toLowerCase()), `BD workspace UI contains prohibited marker: ${marker}`);
 }
