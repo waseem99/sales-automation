@@ -40,14 +40,7 @@ export type OpportunitySignalStatus =
 
 export type ProspectConfidence = 'high' | 'medium' | 'low';
 
-export type CommercialServiceCategory = (
-  | 'outsourcing_partnership'
-  | 'cybersecurity'
-  | 'digital_marketing'
-  | 'creative_production'
-) & { readonly __commercialOfferLane?: unique symbol };
-
-export type ServiceCategory =
+export type OperationalServiceCategory =
   | 'ai_automation'
   | 'rag_document_intelligence'
   | 'ai_saas_mvp'
@@ -58,8 +51,18 @@ export type ServiceCategory =
   | 'cybersecurity_compliance'
   | 'website_portal'
   | 'enterprise_systems'
-  | CommercialServiceCategory
   | 'unknown';
+
+export type CommercialServiceCategory =
+  | 'outsourcing_partnership'
+  | 'cybersecurity'
+  | 'digital_marketing'
+  | 'creative_production';
+
+export type ServiceCategory =
+  | OperationalServiceCategory
+  | CommercialServiceCategory
+  | (string & { readonly __extensibleServiceCategory?: unique symbol });
 
 export type QualificationStatus = 'hot' | 'qualified' | 'nurture' | 'rejected';
 
@@ -95,7 +98,7 @@ export interface ProspectFeedback {
   contactAccuracy?: ContactAccuracy;
   sourceQuality?: SourceQuality;
   repeatRecommendation?: RepeatRecommendation;
-  correctedServiceCategory?: ServiceCategory;
+  correctedServiceCategory?: OperationalServiceCategory;
   reason?: string;
   recordedBy?: string;
   recordedAt?: string;
@@ -221,7 +224,7 @@ export interface Lead {
   country?: string;
   region?: string;
   industry?: string;
-  serviceCategory: ServiceCategory;
+  serviceCategory: OperationalServiceCategory;
   serviceOffer?: string;
   materialsToShare?: string;
   reachMethod?: string;
@@ -263,7 +266,7 @@ export interface PortfolioItem {
   projectName: string;
   industry?: string;
   confidentiality: 'public' | 'private' | 'anonymized';
-  serviceCategories: ServiceCategory[];
+  serviceCategories: OperationalServiceCategory[];
   techStack: string[];
   problemSolved: string;
   businessOutcome?: string;
@@ -276,7 +279,7 @@ export interface PortfolioItem {
 export interface ProfileCapability {
   profile: CodistanProfile;
   label: string;
-  serviceCategories: ServiceCategory[];
+  serviceCategories: OperationalServiceCategory[];
   proofTags: string[];
   geographyNotes?: string;
   complianceNotes?: string;
