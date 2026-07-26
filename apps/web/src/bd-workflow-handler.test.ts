@@ -26,7 +26,8 @@ const lead: Lead = {
   updatedAt: now,
 };
 
-const repository = new InMemoryLeadRepository([lead]);
+const repository = new InMemoryLeadRepository();
+repository.upsertLead(lead, 'fixture');
 const runStore = new InMemoryProspectDiscoveryRunStore();
 const context = {
   repository,
