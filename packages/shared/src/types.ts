@@ -40,6 +40,13 @@ export type OpportunitySignalStatus =
 
 export type ProspectConfidence = 'high' | 'medium' | 'low';
 
+export type CommercialServiceCategory = (
+  | 'outsourcing_partnership'
+  | 'cybersecurity'
+  | 'digital_marketing'
+  | 'creative_production'
+) & { readonly __commercialOfferLane?: unique symbol };
+
 export type ServiceCategory =
   | 'ai_automation'
   | 'rag_document_intelligence'
@@ -51,10 +58,7 @@ export type ServiceCategory =
   | 'cybersecurity_compliance'
   | 'website_portal'
   | 'enterprise_systems'
-  | 'outsourcing_partnership'
-  | 'cybersecurity'
-  | 'digital_marketing'
-  | 'creative_production'
+  | CommercialServiceCategory
   | 'unknown';
 
 export type QualificationStatus = 'hot' | 'qualified' | 'nurture' | 'rejected';
