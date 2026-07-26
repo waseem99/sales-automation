@@ -10,8 +10,6 @@
     "apps/web/src/bd-workflow-handler.test.ts",
     "vercel/bd-workflow-intake-runtime.ts",
     "vercel/bd-workspace-ui.ts",
-    "vercel/workspace-dashboard-runtime.js",
-    "api/dashboard-runtime.ts",
     "api/acquisition-ingest.ts"
   ]
 }
