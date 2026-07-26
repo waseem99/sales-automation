@@ -27,6 +27,7 @@
     "node": "22.x"
   },
   "dependencies": {
+    "@sales-automation/bd-workflow": "workspace:*",
     "@sales-automation/campaign-engine": "workspace:*",
     "@sales-automation/enrichment": "workspace:*",
     "@sales-automation/evaluator": "workspace:*",
