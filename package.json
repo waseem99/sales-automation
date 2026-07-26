@@ -39,6 +39,7 @@
     "@sales-automation/prospect-discovery": "workspace:*",
     "@sales-automation/shared": "workspace:*",
     "@sales-automation/storage": "workspace:*",
+    "@sales-automation/upwork-account-intelligence": "workspace:*",
     "@sales-automation/web": "workspace:*",
     "nodemailer": "^6.10.1"
   },
