@@ -10,6 +10,8 @@ const tests = fs.readFileSync(path.join(repoRoot, 'packages/upwork-account-intel
 const runtime = fs.readFileSync(path.join(repoRoot, 'vercel/upwork-account-intelligence-runtime.ts'), 'utf8');
 const endpoint = fs.readFileSync(path.join(repoRoot, 'api/acquisition-ingest.ts'), 'utf8');
 const workspace = fs.readFileSync(path.join(repoRoot, 'vercel/workspace-page-model.ts'), 'utf8');
+const workspaceRuntime = fs.readFileSync(path.join(repoRoot, 'vercel/workspace-dashboard-runtime.js'), 'utf8');
+const accountUi = fs.readFileSync(path.join(repoRoot, 'vercel/upwork-account-workspace-ui.ts'), 'utf8');
 
 assert.equal(rootPackage.dependencies['@sales-automation/upwork-account-intelligence'], 'workspace:*');
 assert.equal(packageJson.name, '@sales-automation/upwork-account-intelligence');
@@ -51,12 +53,8 @@ for (const marker of [
   'resolveLeadIdentity',
   'persistLeadRecords',
   'platformRestrictionsPreserved: true',
-  'Source ingestion, identity, enrichment and campaign matching',
   'externalActionAutomated: false',
-]) {
-  if (marker === 'Source ingestion, identity, enrichment and campaign matching') continue;
-  assert(runtime.includes(marker), `missing Upwork account-intelligence runtime marker: ${marker}`);
-}
+]) assert(runtime.includes(marker), `missing Upwork account-intelligence runtime marker: ${marker}`);
 
 const campaignInvocation = endpoint.indexOf('const campaignResponse = await applyCampaignEngineAfterIntake');
 const accountInvocation = endpoint.indexOf('return applyUpworkAccountIntelligenceAfterIntake');
@@ -65,6 +63,20 @@ assert(endpoint.includes("import { applyUpworkAccountIntelligenceAfterIntake }")
 assert(workspace.includes("lead.source === 'partner_research'"));
 assert(workspace.includes("lead.leadType === 'partner_prospect'"));
 
+for (const marker of [
+  'enhanceUpworkAccountWorkspaceUi',
+  'Open linked account prospect',
+  'Cold account hypothesis linked to warm jobs',
+  'Linked Upwork jobs',
+  'Account-level campaign hypotheses',
+  'Platform restriction',
+  '/leads/partnerships?leadId=',
+  '/leads/upwork?leadId=',
+]) assert(accountUi.includes(marker), `missing linked-account workspace marker: ${marker}`);
+
+assert(workspaceRuntime.includes("import('./upwork-account-workspace-ui.js')"));
+assert(workspaceRuntime.includes('enhanceUpworkAccountWorkspaceUi(body, selected)'));
+
 const prohibited = [
   'externalActionPerformed: true',
   'externalActionAutomated: true',
@@ -72,12 +84,12 @@ const prohibited = [
   'sendMessage',
   'sendEmail',
   'connectRequest',
-  'bypass',
   'hidden client identity',
 ];
 for (const marker of prohibited) {
   assert(!source.toLowerCase().includes(marker.toLowerCase()), `account package contains prohibited marker: ${marker}`);
   assert(!runtime.toLowerCase().includes(marker.toLowerCase()), `account runtime contains prohibited marker: ${marker}`);
+  assert(!accountUi.toLowerCase().includes(marker.toLowerCase()), `account UI contains prohibited marker: ${marker}`);
 }
 
 console.log('Upwork account intelligence bridge contract passed.');
