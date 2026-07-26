@@ -1,3 +1,4 @@
+import { attachBdWorkflow, recordBdPipelineEvent } from '@sales-automation/bd-workflow';
 import { evaluateLead } from '@sales-automation/evaluator';
 import { samplePortfolioItems, verifiedStarterProspects } from '@sales-automation/fixtures';
 import {
@@ -45,6 +46,7 @@ const GLOBAL_ROUTES = new Set([
   '/api/prospects/run',
   '/api/prospects/auto-assign',
   '/api/prospects/guidance/backfill',
+  '/api/prospects/bd-workflow/backfill',
   '/api/prospects/pseb-sync',
   '/api/prospects/manual-intake',
 ]);
@@ -83,18 +85,28 @@ export async function handleAuthenticatedDashboardRequest(input: AuthenticatedDa
     if (!record) return responseJson({ error: 'Prospect not found.' }, 404);
     const repository = new InMemoryLeadRepository([record]);
     const payload = asObject(body);
+    const generatedAt = new Date().toISOString();
+    let workflowSummary = '';
     if (serviceMatch) {
       const serviceCategory = requiredString(payload.serviceCategory, 'serviceCategory');
       const serviceOffer = requiredString(payload.serviceOffer, 'serviceOffer');
       const materialsToShare = requiredString(payload.materialsToShare, 'materialsToShare');
-      repository.upsertLead({ ...record.lead, serviceCategory: serviceCategory as never, serviceOffer, materialsToShare, updatedAt: new Date().toISOString() }, access.identifier);
+      repository.upsertLead({ ...record.lead, serviceCategory: serviceCategory as never, serviceOffer, materialsToShare, updatedAt: generatedAt }, access.identifier);
       repository.addNote(leadId, `service::${serviceCategory}::${serviceOffer}::${materialsToShare}`, access.identifier);
+      workflowSummary = `Commercial service package updated to ${serviceOffer}.`;
     } else {
       const nextFollowUpAt = requiredString(payload.nextFollowUpAt, 'nextFollowUpAt');
       const date = new Date(nextFollowUpAt);
       if (Number.isNaN(date.getTime())) return responseJson({ error: 'nextFollowUpAt must be a valid date and time.' }, 400);
       repository.scheduleFollowUp(leadId, { nextFollowUpAt: date.toISOString(), followUpNote: optionalString(payload.followUpNote) }, access.identifier);
+      workflowSummary = `Next follow-up scheduled for ${date.toISOString()}.`;
     }
+    const updated = repository.getLead(leadId)!;
+    const workflow = recordBdPipelineEvent(updated.lead, workflowSummary, access.identifier, generatedAt);
+    repository.upsertLead(attachBdWorkflow(updated.lead, workflow), access.identifier);
+    const workflowNote = `bd_workflow_event::${workflow.nextBestAction.code}::${workflowSummary}`;
+    const refreshed = repository.getLead(leadId)!;
+    if (!refreshed.notes.includes(workflowNote)) repository.addNote(leadId, workflowNote, access.identifier);
     await persistLeadRecords(databaseUrl, repository.listLeads());
     return responseJson({ ok: true, prospect: serializeRecord(repository.getLead(leadId)!) });
   }
