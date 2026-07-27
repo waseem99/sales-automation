@@ -2,7 +2,7 @@
   "schema_version": 1,
   "product": "TalentTrack Pilot",
   "product_version": "1.0.0",
-  "runtime_version": "0.3.0",
+  "runtime_version": "0.3.1",
   "release_status": "live_validation",
   "state_root": "%LOCALAPPDATA%\\Codistan\\Acquisition",
   "internal_runtime_package": "acquisition_v4",
@@ -12,7 +12,23 @@
     "check": "CHECK-TALENTTRACK.cmd",
     "diagnose": "DIAGNOSE-TALENTTRACK.cmd",
     "rollback": "ROLLBACK-TALENTTRACK.cmd",
-    "review": "OPEN-TALENTTRACK-REVIEW.cmd"
+    "review": "OPEN-TALENTTRACK-REVIEW.cmd",
+    "enable_local_postgres": "ENABLE-TALENTTRACK-POSTGRES.cmd",
+    "check_local_postgres": "CHECK-TALENTTRACK-POSTGRES.cmd",
+    "backup_local_postgres": "BACKUP-TALENTTRACK-POSTGRES.cmd",
+    "restore_local_postgres": "RESTORE-TALENTTRACK-POSTGRES.cmd"
+  },
+  "storage": {
+    "default_backend": "jsonl",
+    "optional_local_postgres": {
+      "status": "live_validation",
+      "image": "postgres:16-alpine",
+      "host": "127.0.0.1",
+      "default_port": 55432,
+      "json_rollback_shadow": true,
+      "automatic_fallback": false
+    },
+    "production_prospect_desk": "postgresql"
   },
   "legacy_compatibility": {
     "enabled": true,
@@ -38,6 +54,7 @@
     "Preserve captured records and deduplication fingerprints.",
     "Preserve review output and Prospect Desk synchronization configuration.",
     "Preserve the previous application package for rollback.",
+    "Preserve the local PostgreSQL volume, secret configuration, backups and JSON rollback shadow.",
     "Do not delete paused or superseded-reference code during installation."
   ]
 }
