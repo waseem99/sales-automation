@@ -12,6 +12,7 @@
     "test": "tsx src/index.test.ts"
   },
   "dependencies": {
+    "@sales-automation/evaluator": "workspace:*",
     "@sales-automation/outreach-workbench": "workspace:*",
     "@sales-automation/shared": "workspace:*",
     "@sales-automation/storage": "workspace:*"
