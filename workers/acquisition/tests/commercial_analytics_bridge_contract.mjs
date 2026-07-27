@@ -39,7 +39,7 @@ for (const marker of [
   'draft.sentVersions',
   'approved.approval?.revisionId',
   "revision.source === 'human_edit'",
-  "task.code === 'schedule_follow_up'",
+  "['schedule_follow_up', 'follow_up_proposal'].includes(task.code)",
   "source: 'manual_entry'",
   'explicitValue: true',
   'fabricatedOutcomeCount: 0',
