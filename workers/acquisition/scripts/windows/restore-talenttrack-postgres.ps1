@@ -43,10 +43,10 @@ if ($confirmation -ne "RESTORE TALENTTRACK") { throw "Restore cancelled." }
 
 $backupScript = Join-Path $PSScriptRoot "backup-talenttrack-postgres.ps1"
 & $backupScript -InstallRoot $InstallRoot -StateRoot $StateRoot
-if ($LASTEXITCODE -ne 0) { throw "The pre-restore safety backup did not complete." }
 $safetyBackup = Get-ChildItem (Join-Path $StateRoot "backups") -Filter "talenttrack-postgres-*.dump" -File |
     Sort-Object LastWriteTimeUtc -Descending |
     Select-Object -First 1
+if (-not $safetyBackup) { throw "The pre-restore safety backup could not be verified." }
 
 Stop-TalentTrackRuntime -StateRoot $StateRoot
 $user = [string]$values["TALENTTRACK_POSTGRES_USER"]
@@ -73,7 +73,7 @@ try {
     )
 } catch {
     Write-Host "Restore failed. TalentTrack collectors remain stopped to avoid writing into a partial database."
-    if ($safetyBackup) { Write-Host "Pre-restore safety backup: $($safetyBackup.FullName)" }
+    Write-Host "Pre-restore safety backup: $($safetyBackup.FullName)"
     throw
 } finally {
     $null = Invoke-TalentTrackCompose -Context $context -Arguments @("exec", "-T", "postgres", "rm", "-f", $containerPath) -AllowFailure
