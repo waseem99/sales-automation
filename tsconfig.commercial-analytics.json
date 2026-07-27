@@ -1,0 +1,12 @@
+{
+  "extends": "./tsconfig.base.json",
+  "compilerOptions": {
+    "noEmit": true,
+    "rootDir": "."
+  },
+  "include": [
+    "packages/commercial-analytics/src/**/*.ts",
+    "packages/neon-state/src/commercial-calibration.ts",
+    "api/commercial-analytics.ts"
+  ]
+}
