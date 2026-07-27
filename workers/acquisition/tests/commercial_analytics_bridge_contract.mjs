@@ -89,8 +89,14 @@ for (const marker of [
   'Do not optimize for volume',
   'An algorithm suggestion is not an official decision',
   '7,30,90,180',
-  'source,campaign,channel,service,owner',
+  'const dimensions: CommercialDimension[]',
+  'dimension===input.dimension',
 ]) assert(api.includes(marker), `missing commercial analytics API/UI marker: ${marker}`);
+
+for (const dimension of ['source','campaign','channel','service','owner']) {
+  assert(source.includes(`'${dimension}'`), `analytics engine is missing dimension: ${dimension}`);
+  assert(api.includes(`'${dimension}'`), `analytics dashboard is missing dimension: ${dimension}`);
+}
 
 const combined = `${source}\n${persistence}\n${api}`.toLowerCase();
 for (const marker of [
