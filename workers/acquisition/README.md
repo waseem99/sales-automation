@@ -1,15 +1,19 @@
-# Acquisition Engine V5
+# TalentTrack Pilot
 
-This directory contains the Windows-first acquisition runtime for:
+TalentTrack is Codistan’s Windows-first acquisition and business-development operating runtime. It brings together:
 
-- Upwork saved-search opportunities;
+- approved Upwork saved-search opportunities;
 - warm LinkedIn buyer requirements;
-- Sales Navigator product- and service-specific cold campaigns;
-- the combined local review queue;
-- durable synchronization into Prospect Desk.
+- Sales Navigator product and service campaigns;
+- a combined local review queue;
+- durable synchronization into Prospect Desk;
+- BD tasks, human-controlled outreach and commercial learning.
+
+The authoritative release identity and component states are defined in [`RELEASE.json`](RELEASE.json) and [`../../docs/TALENTTRACK_RELEASE_BASELINE.md`](../../docs/TALENTTRACK_RELEASE_BASELINE.md).
 
 ## Release boundary
 
+- Product: **TalentTrack Pilot 1.0.0**
 - Runtime: `0.3.0`
 - Upwork collector: `127.0.0.1:8765`
 - LinkedIn warm collector: `127.0.0.1:8775`
@@ -20,17 +24,19 @@ This directory contains the Windows-first acquisition runtime for:
 - No Playwright, hidden browser profile, credential storage or account-challenge handling
 - No proposal, application, message, InMail, connection request, follow, reaction, comment or email action
 
+The internal Python package remains named `acquisition_v4` during the pilot to avoid a risky state or installer migration. Operators should use only the TalentTrack command names below. Legacy V4/V5 command files remain compatibility aliases until the upgrade and rollback gate passes.
+
 Local capture remains operational if Prospect Desk or the internet is temporarily unavailable.
 
 ## One-time Windows setup
 
-1. Check out the V5 branch after its V4 base is available.
-2. Open `workers\acquisition`.
-3. Run `START-HERE-ACQUISITION-V4.cmd`.
-4. Reload the unpacked extensions in `chrome://extensions/`:
+1. Open `workers\acquisition`.
+2. Run `START-HERE-TALENTTRACK.cmd`.
+3. Reload the unpacked extensions in `chrome://extensions/`:
    - `%LOCALAPPDATA%\Codistan\Acquisition\extensions\upwork`
    - `%LOCALAPPDATA%\Codistan\Acquisition\extensions\linkedin`
-5. Confirm the LinkedIn extension shows version `1.4.1`.
+4. Confirm the LinkedIn extension shows version `1.4.1`.
+5. Run `CHECK-TALENTTRACK.cmd`.
 
 The installer:
 
@@ -39,8 +45,24 @@ The installer:
 - starts and validates ports 8765, 8775 and 8785;
 - migrates older sync configurations to all three sources;
 - keeps the previous installed application for rollback;
-- creates desktop and Windows-startup shortcuts;
+- creates canonical TalentTrack desktop and Windows-startup shortcuts;
+- removes stale V5 shortcut duplicates without deleting legacy command files;
 - adds **Check Sales Navigator Pilot** for the live acceptance gate.
+
+## Canonical operator commands
+
+| Action | Command |
+|---|---|
+| Install or upgrade | `START-HERE-TALENTTRACK.cmd` |
+| Start | `START-TALENTTRACK.cmd` |
+| Check health | `CHECK-TALENTTRACK.cmd` |
+| Open local review | `OPEN-TALENTTRACK-REVIEW.cmd` |
+| Safe diagnostics | `DIAGNOSE-TALENTTRACK.cmd` |
+| Restore previous package | `ROLLBACK-TALENTTRACK.cmd` |
+| Configure Prospect Desk sync | `CONFIGURE-PROSPECT-DESK-SYNC.cmd` |
+| Open approved Upwork searches | `OPEN-UPWORK-SEARCHES.cmd` |
+| Open LinkedIn lead searches | `OPEN-LINKEDIN-LEAD-SEARCHES.cmd` |
+| Check Sales Navigator sample | `CHECK-SALES-NAVIGATOR-PILOT.cmd` |
 
 ## Upwork
 
@@ -53,88 +75,52 @@ Opening the saved-search pages remains the discovery trigger. Proposal submissio
 
 ## Warm LinkedIn
 
-The existing five buyer-intent searches run every 15 minutes while normal logged-in Chrome is open. They cover software delivery, AI automation, digital marketing, video/animation and cybersecurity.
+The approved buyer-intent searches run every 15 minutes while normal logged-in Chrome is open. They cover software delivery, AI automation, digital marketing, video/animation and cybersecurity.
 
-The extension processes one inactive temporary tab at a time, performs a bounded four-step scan, captures only resolvable buyer-authored requirements and closes the tab. Non-Reject records synchronize to:
+The extension processes one inactive temporary tab at a time, performs a bounded scan, captures only resolvable buyer-authored requirements and closes the tab. Non-Reject records synchronize to:
 
 - `/leads/linkedin`
 - `/prospects`
 
-These records may be treated as warm opportunities only when the original post contains explicit supported-service demand.
+A record is warm only when the original post contains explicit supported-service demand.
 
 ## Sales Navigator cold campaigns
 
-Sales Navigator is a separate campaign-driven source. It does not share warm-opportunity classification.
+Sales Navigator is a separate campaign-driven source. It never shares the warm-opportunity classification.
 
-### Default campaign
+The seeded campaign is **FinTech Backend Operations Platform**, covering product delivery, managed software services, white-label/overflow partnerships, integrations and workflow automation where supported.
 
-The seeded campaign is:
-
-**FinTech Backend Operations Platform**
-
-It positions:
-
-- a FinTech backend operations platform;
-- managed product and software delivery;
-- white-label, overflow and outsourcing partnership;
-- integrations, workflow automation and AI-enabled operations where supported.
-
-Default account themes include fintech, payments, digital banking, wallets, lending/NBFC, microfinance, remittance, cross-border payments and financial infrastructure.
-
-Default personas include founders, CEOs, COOs, CTOs, CIOs, product and engineering leaders, operations leaders, platform/integration leaders, digital-transformation leaders and partnership leaders.
-
-### Register a Sales Navigator search
+### Register an approved search
 
 1. Use Sales Navigator normally to create or refine a lead search.
-2. Keep the resulting lead-search or people-list page open.
+2. Keep the lead-search or people-list page open.
 3. Open the Codistan LinkedIn extension.
 4. Select **Open Sales Navigator campaigns**.
-5. Review or edit:
-   - campaign and offer name;
-   - offer summary;
-   - service route and service lanes;
-   - target industries;
-   - target personas;
-   - target geographies.
-6. Under **Approved searches**, leave the URL field blank to use the most recently opened Sales Navigator tab, or paste the current Sales Navigator lead-search URL.
-7. Click **Register search**.
-8. Keep scheduled capture disabled.
-9. Click **Run this campaign now** for the manual pilot.
-10. Review the per-search diagnostics shown in the campaign screen.
-11. Run **Check Sales Navigator Pilot** from the desktop.
+5. Review the campaign, offer, service lanes, industries, personas and geographies.
+6. Register the current approved search URL.
+7. Keep scheduled capture disabled for the first manual pilot.
+8. Run the campaign manually.
+9. Review per-search diagnostics.
+10. Run **Check Sales Navigator Pilot**.
 
-Only explicitly registered lead-search or people-list URLs are eligible for recurring scans.
+After explicit operator approval, registered searches may run every 12 hours while Chrome is open and a licensed Sales Navigator session is available.
 
-### Scheduled behavior
-
-The campaign screen disables scheduled Sales Navigator capture on first use until the manual pilot is registered and reviewed. After explicit operator approval, registered searches may run every 12 hours while Chrome is open and the Sales Navigator session is available.
-
-Each run:
+Each scheduled run:
 
 1. opens one registered search in an inactive tab;
 2. waits for normal rendering;
 3. captures visible person cards;
 4. performs at most three scroll steps;
 5. keeps at most 30 unique people per search;
-6. attaches the campaign and offer definition;
-7. classifies each person as a cold prospect;
-8. sends accepted/enriched evidence to the collector on port 8785;
+6. attaches campaign and offer evidence;
+7. labels every person as a cold prospect;
+8. submits accepted evidence to port 8785;
 9. closes the temporary tab;
 10. blocks overlapping runs.
-
-Visible evidence may include person name, role, company, location, relationship degree, mutual connections, recent LinkedIn activity, Posted on LinkedIn, TeamLink and role-change signals where LinkedIn displays them.
 
 The extension does not click Save, Connect, Message, InMail, Follow or any other LinkedIn control. Login, checkpoint, auth-wall or unavailable-seat redirects are reported and never bypassed.
 
 ### Pilot acceptance
-
-The strategic and operating plan is in `SALES-NAVIGATOR-LIVE-PILOT.md`.
-
-The desktop shortcut **Check Sales Navigator Pilot** writes:
-
-```text
-%LOCALAPPDATA%\Codistan\Acquisition\review\sales-navigator-acceptance.json
-```
 
 The technical gate requires:
 
@@ -147,50 +133,14 @@ The technical gate requires:
 - cold/no-explicit-intent warning retained;
 - zero external-action records.
 
-Passing the technical gate only means the sample is ready for human commercial review. At least 15 A/B records must then be reviewed under the 10-point rubric in the pilot guide. Scheduled routine operation is approved only if at least 60% of that sample is commercially review-worthy.
-
-### Cold qualification
-
-Sales Navigator prospects are stored as:
-
-- `source: sales_navigator`
-- `leadType: sales_navigator_cold_prospect`
-- `prospectStage: cold_prospect`
-- no confirmed `live_opportunity` status
-
-Scoring dimensions are:
-
-- persona authority;
-- account and industry fit;
-- campaign and offer fit;
-- activity and relationship signals;
-- evidence completeness.
-
-Every prospect retains the risk that no explicit buying intent has been established. Priority A/B means strong campaign fit, not a confirmed request.
+Passing the technical gate only means the sample is ready for human commercial review. At least 15 A/B records must be reviewed, and routine operation is approved only if at least 60% of that sample is commercially review-worthy.
 
 Accepted/enriched records synchronize to:
 
 - `/leads/sales-navigator`
 - `/prospects`
 
-Prospect Desk stores the campaign, offer, ICP evidence, score, confidence, missing evidence and risks, then prepares owner assignment, recommended Codistan profile, approved portfolio proof, next action and a human-reviewable outreach draft.
-
-## Adding another product or service campaign
-
-The campaign engine is not limited to FinTech.
-
-A new campaign should define:
-
-- stable campaign ID and name;
-- offer type: product, service or hybrid;
-- offer name and summary;
-- primary service route and service lanes;
-- target industries and account themes;
-- target personas and seniority;
-- optional target geographies;
-- one or more approved Sales Navigator lead-search URLs.
-
-The extension settings page is the operator interface. The underlying campaign store supports multiple campaign records, although the first UI is focused on the seeded FinTech campaign.
+Priority A/B means strong campaign fit, not confirmed demand.
 
 ## Prospect Desk synchronization
 
@@ -199,18 +149,10 @@ Deploy `api/acquisition-ingest.ts` with:
 - `DATABASE_URL`
 - `ACQUISITION_INGEST_TOKEN` containing at least 32 characters
 
-Run **Configure Prospect Desk Sync** and enter the deployment URL and the same token. The local config is stored at:
+Run **Configure Prospect Desk Sync** and enter the deployment URL and token. The local configuration remains at:
 
 ```text
 %LOCALAPPDATA%\Codistan\Acquisition\config\prospect-desk-sync.json
-```
-
-It enables:
-
-```json
-{
-  "sources": ["linkedin", "upwork", "sales_navigator"]
-}
 ```
 
 Each source has independent retry and fingerprint state under `%LOCALAPPDATA%\Codistan\Acquisition\sync`. The bridge retries every 60 seconds, sends only new or enriched non-Reject records and never exposes the token in health output.
@@ -221,11 +163,13 @@ Repeated captures update the same canonical job, post or person while preserving
 
 The combined review queue includes all three sources:
 
-- `%LOCALAPPDATA%\Codistan\Acquisition\review\index.html`
-- `%LOCALAPPDATA%\Codistan\Acquisition\review\queue.json`
-- `%LOCALAPPDATA%\Codistan\Acquisition\review\queue.csv`
+```text
+%LOCALAPPDATA%\Codistan\Acquisition\review\index.html
+%LOCALAPPDATA%\Codistan\Acquisition\review\queue.json
+%LOCALAPPDATA%\Codistan\Acquisition\review\queue.csv
+```
 
-Check health:
+Health endpoints:
 
 ```powershell
 Invoke-RestMethod http://127.0.0.1:8765/health
@@ -234,6 +178,18 @@ Invoke-RestMethod http://127.0.0.1:8785/health
 ```
 
 Safe diagnostics contain health, versions, process metadata and runtime log tails only. They exclude opportunity bodies, cookies, credentials and sync tokens.
+
+## Upgrade and rollback
+
+Application files live under `app-current`; the prior package is retained as `app-previous`. Records and configuration live outside both folders in the stable state root.
+
+`ROLLBACK-TALENTTRACK.cmd` restores the previous application package without deleting:
+
+- captured records;
+- deduplication fingerprints;
+- review output;
+- Prospect Desk sync state;
+- configuration.
 
 ## Developer validation
 
@@ -246,9 +202,10 @@ node tests/linkedin_extension_contract.mjs
 node tests/sales_navigator_extension_contract.mjs
 node tests/prospect_desk_bridge_contract.mjs
 node tests/sales_navigator_bridge_contract.mjs
+node tests/talenttrack_release_baseline_contract.mjs
 ```
 
-Run all three collectors:
+Run the collectors locally:
 
 ```bash
 PYTHONPATH=. python -m acquisition_v4.supervisor --state-root ./local-state
