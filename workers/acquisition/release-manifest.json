@@ -9,7 +9,9 @@
     "upwork_extension": "1.1.0",
     "linkedin_sales_navigator_extension": "1.5.0",
     "bd_workflow": "bd-workflow.v1",
-    "outreach_workbench": "outreach-workbench.v1"
+    "outreach_workbench": "outreach-workbench.v1",
+    "commercial_readiness": "commercial-readiness.v1",
+    "combined_pilot_acceptance": "codistan-prospecting-os-acceptance.v1"
   },
   "collectors": [
     {"source": "upwork", "port": 8765, "workspace": "/leads/upwork"},
@@ -25,14 +27,22 @@
     "identity, evidence and campaign-fit stages",
     "Upwork buyer-account intelligence",
     "BD ownership, tasks, stages and next-best-action",
-    "human-controlled outreach review and exact sent-version logging"
+    "human-controlled outreach review and exact sent-version logging",
+    "commercial offer readiness enforcement before cold outreach approval",
+    "combined technical and human commercial pilot acceptance report"
   ],
+  "offer_release_policy": {
+    "fintech_operations_platform": "research_only",
+    "managed_software_ai_delivery": "outreach_ready_limited",
+    "warm_opportunity_responses": "allowed_with_human_review_and_verified_capability_only"
+  },
   "live_validation_required": [
     "real Upwork saved-search pilot",
     "real LinkedIn warm-post pilot",
     "licensed Sales Navigator pilot",
     "Prospect Desk deployment and three-source synchronization",
-    "human review of commercial quality and outreach usefulness"
+    "human review of commercial quality and outreach usefulness",
+    "combined pilot report reaches commercial_gate_passed"
   ],
   "on_hold": [
     {
@@ -49,6 +59,11 @@
       "capability": "additional acquisition sources",
       "reason": "Current sources must prove commercial quality before expanding collection volume.",
       "reactivation_criteria": "Existing source pilots meet acceptance thresholds and reveal a documented coverage gap."
+    },
+    {
+      "capability": "cold outreach for the FinTech Backend Operations Platform",
+      "reason": "Exact workflows, demo, integrations, pilot pricing, proof and approved security/compliance statements are incomplete.",
+      "reactivation_criteria": "Commercial readiness profile is reviewed and changed from research_only by the offer owner."
     }
   ],
   "state_contract": {
@@ -62,6 +77,7 @@
       "sync fingerprints and retry state",
       "campaign configuration",
       "BD and outreach history",
+      "human commercial review evidence",
       "app-previous rollback package"
     ],
     "external_actions_enabled": false
