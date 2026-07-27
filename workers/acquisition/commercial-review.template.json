@@ -1,0 +1,12 @@
+{
+  "schema_version": "codistan-prospecting-os-commercial-review.v1",
+  "reviews": [
+    {
+      "dedupe_key": "replace-with-priority-a-or-b-dedupe-key",
+      "accepted_for_pursuit": true,
+      "reviewer": "reviewer@codistan.org",
+      "reviewed_at": "2026-07-27T00:00:00.000Z",
+      "notes": "State why this record is or is not commercially worth pursuing."
+    }
+  ]
+}
