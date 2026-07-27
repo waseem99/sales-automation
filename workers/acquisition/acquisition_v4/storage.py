@@ -272,30 +272,32 @@ class PostgresRecordStore:
             rows.append((self.source, key, self._jsonb(record)))
         if rows:
             with self._connect() as connection:
-                connection.executemany(
-                    """
-                    INSERT INTO talenttrack_capture_records (source, dedupe_key, record, first_seen_at, updated_at)
-                    VALUES (%s, %s, %s, NOW(), NOW())
-                    ON CONFLICT (source, dedupe_key) DO UPDATE SET
-                        record = EXCLUDED.record,
-                        updated_at = NOW()
-                    """,
-                    rows,
-                )
+                with connection.cursor() as cursor:
+                    cursor.executemany(
+                        """
+                        INSERT INTO talenttrack_capture_records (source, dedupe_key, record, first_seen_at, updated_at)
+                        VALUES (%s, %s, %s, NOW(), NOW())
+                        ON CONFLICT (source, dedupe_key) DO UPDATE SET
+                            record = EXCLUDED.record,
+                            updated_at = NOW()
+                        """,
+                        rows,
+                    )
         self.shadow.persist_records(materialized)
 
     def persist_seen(self, seen: set[str]) -> None:
         rows = [(self.source, key) for key in sorted({item.strip() for item in seen if item.strip()})]
         if rows:
             with self._connect() as connection:
-                connection.executemany(
-                    """
-                    INSERT INTO talenttrack_capture_seen (source, dedupe_key, first_seen_at)
-                    VALUES (%s, %s, NOW())
-                    ON CONFLICT (source, dedupe_key) DO NOTHING
-                    """,
-                    rows,
-                )
+                with connection.cursor() as cursor:
+                    cursor.executemany(
+                        """
+                        INSERT INTO talenttrack_capture_seen (source, dedupe_key, first_seen_at)
+                        VALUES (%s, %s, NOW())
+                        ON CONFLICT (source, dedupe_key) DO NOTHING
+                        """,
+                        rows,
+                    )
         self.shadow.persist_seen(seen)
 
     def persist_status(self, status: dict[str, object]) -> None:
