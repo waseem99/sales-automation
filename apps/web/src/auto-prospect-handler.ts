@@ -40,8 +40,8 @@ const NON_AUDIT_PATHS = new Set([
  *
  * Outreach workbench mutations intentionally run only after the secure handler
  * has authenticated the request and authorized access to the selected record.
- * The base handler returns 404 for these additive routes, then this wrapper
- * executes the internal-only mutation. No external action is performed.
+ * The secure layer marks only a successfully authorized additive-route
+ * fallthrough; ordinary 404 responses never reach the workbench handler.
  */
 export async function handleProspectDashboardRequest(
   request: ProspectDashboardRequest,
@@ -51,7 +51,12 @@ export async function handleProspectDashboardRequest(
   const method = request.method.toUpperCase();
   const pathname = trimTrailingSlash(new URL(request.url, 'http://localhost').pathname) || '/';
 
-  if (response.status === 404 && method === 'POST' && isOutreachWorkbenchPath(pathname)) {
+  if (
+    response.status === 404
+    && response.headers['x-prospect-authorized-route'] === 'outreach-workbench'
+    && method === 'POST'
+    && isOutreachWorkbenchPath(pathname)
+  ) {
     const access = context.access;
     return handleOutreachWorkbenchRequest({
       method,
