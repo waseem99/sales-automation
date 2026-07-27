@@ -40,13 +40,60 @@ jobs:
       - name: Install dependencies
         run: pnpm install --no-frozen-lockfile
       - name: Build workspace packages
-        run: pnpm build
+        id: workspace_build
+        continue-on-error: true
+        run: pnpm build > outreach-workbench-build.log 2>&1
       - name: Test outreach workbench behavior
-        run: pnpm --filter @sales-automation/outreach-workbench test
+        id: behavior
+        if: steps.workspace_build.outcome == 'success'
+        continue-on-error: true
+        run: pnpm --filter @sales-automation/outreach-workbench test > outreach-workbench-test.log 2>&1
       - name: Validate outreach safety bridge
+        id: contract
+        if: steps.behavior.outcome == 'success'
+        continue-on-error: true
         working-directory: workers/acquisition
-        run: node tests/outreach_workbench_contract.mjs
+        run: node tests/outreach_workbench_contract.mjs > ../../outreach-workbench-contract.log 2>&1
       - name: Type-check Vercel integration
-        run: pnpm typecheck:vercel
+        id: vercel_typecheck
+        if: steps.contract.outcome == 'success'
+        continue-on-error: true
+        run: pnpm typecheck:vercel > outreach-workbench-vercel-typecheck.log 2>&1
       - name: Build production workspace
-        run: pnpm build:vercel
+        id: production_build
+        if: steps.vercel_typecheck.outcome == 'success'
+        continue-on-error: true
+        run: pnpm build:vercel > outreach-workbench-production-build.log 2>&1
+      - name: Prepare diagnostics
+        if: always()
+        run: |
+          for file in outreach-workbench-build.log outreach-workbench-test.log outreach-workbench-contract.log outreach-workbench-vercel-typecheck.log outreach-workbench-production-build.log; do
+            test -f "$file" || touch "$file"
+          done
+      - name: Upload diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: outreach-workbench-diagnostics
+          path: |
+            outreach-workbench-build.log
+            outreach-workbench-test.log
+            outreach-workbench-contract.log
+            outreach-workbench-vercel-typecheck.log
+            outreach-workbench-production-build.log
+          retention-days: 3
+      - name: Enforce workspace build
+        if: steps.workspace_build.outcome != 'success'
+        run: cat outreach-workbench-build.log && exit 1
+      - name: Enforce behavior
+        if: steps.workspace_build.outcome == 'success' && steps.behavior.outcome != 'success'
+        run: cat outreach-workbench-test.log && exit 1
+      - name: Enforce safety contract
+        if: steps.behavior.outcome == 'success' && steps.contract.outcome != 'success'
+        run: cat outreach-workbench-contract.log && exit 1
+      - name: Enforce Vercel type-check
+        if: steps.contract.outcome == 'success' && steps.vercel_typecheck.outcome != 'success'
+        run: cat outreach-workbench-vercel-typecheck.log && exit 1
+      - name: Enforce production build
+        if: steps.vercel_typecheck.outcome == 'success' && steps.production_build.outcome != 'success'
+        run: tail -n 400 outreach-workbench-production-build.log && exit 1
