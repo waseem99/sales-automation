@@ -1,0 +1,204 @@
+name: Commercial Analytics and Calibration CI
+
+on:
+  pull_request:
+    branches:
+      - agent/outreach-workbench-233
+    paths:
+      - '.github/workflows/commercial-analytics-ci.yml'
+      - 'packages/commercial-analytics/**'
+      - 'packages/neon-state/src/commercial-calibration.ts'
+      - 'packages/neon-state/package.json'
+      - 'api/commercial-analytics.ts'
+      - 'vercel.json'
+      - 'workers/acquisition/tests/commercial_analytics_bridge_contract.mjs'
+      - 'workers/acquisition/tests/*extension_contract.mjs'
+      - 'tsconfig.commercial-analytics.json'
+      - 'package.json'
+      - 'pnpm-lock.yaml'
+      - 'packages/**'
+      - 'vercel/**'
+      - 'scripts/**'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: commercial-analytics-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  behavior:
+    name: Test commercial metrics, calibration and production dashboard
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Install standalone pnpm
+        run: npm install --global --force @pnpm/exe@9.15.9
+
+      - name: Install workspace dependencies
+        run: pnpm install --no-frozen-lockfile
+
+      - name: Build workspace packages for analytics tests
+        id: package_build
+        continue-on-error: true
+        shell: bash
+        run: pnpm build > commercial-analytics-package-build.log 2>&1
+
+      - name: Test commercial funnel and calibration behavior
+        id: package_tests
+        if: steps.package_build.outcome == 'success'
+        continue-on-error: true
+        shell: bash
+        run: pnpm --filter @sales-automation/commercial-analytics test > commercial-analytics-package-tests.log 2>&1
+
+      - name: Validate analytics safety, persistence and dashboard bridge
+        id: bridge_contract
+        if: steps.package_tests.outcome == 'success'
+        continue-on-error: true
+        working-directory: workers/acquisition
+        shell: bash
+        run: node tests/commercial_analytics_bridge_contract.mjs > ../../commercial-analytics-bridge.log 2>&1
+
+      - name: Preserve acquisition source regressions
+        id: source_regressions
+        if: steps.bridge_contract.outcome == 'success'
+        continue-on-error: true
+        working-directory: workers/acquisition
+        shell: bash
+        run: |
+          {
+            node tests/upwork_extension_contract.mjs
+            node tests/linkedin_extension_contract.mjs
+            node tests/sales_navigator_extension_contract.mjs
+          } > ../../commercial-analytics-source-regressions.log 2>&1
+
+      - name: Build full production workspace
+        id: production_build
+        if: steps.source_regressions.outcome == 'success'
+        continue-on-error: true
+        shell: bash
+        run: pnpm build:vercel > commercial-analytics-production-build.log 2>&1
+
+      - name: Preserve behavior diagnostics
+        if: always()
+        shell: bash
+        run: |
+          for file in commercial-analytics-package-build.log commercial-analytics-package-tests.log commercial-analytics-bridge.log commercial-analytics-source-regressions.log commercial-analytics-production-build.log; do
+            test -f "$file" || touch "$file"
+          done
+
+      - name: Upload behavior diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: commercial-analytics-behavior
+          path: |
+            commercial-analytics-package-build.log
+            commercial-analytics-package-tests.log
+            commercial-analytics-bridge.log
+            commercial-analytics-source-regressions.log
+            commercial-analytics-production-build.log
+          if-no-files-found: error
+          retention-days: 3
+
+      - name: Enforce package build
+        if: steps.package_build.outcome != 'success'
+        run: |
+          cat commercial-analytics-package-build.log
+          exit 1
+
+      - name: Enforce commercial analytics behavior
+        if: steps.package_build.outcome == 'success' && steps.package_tests.outcome != 'success'
+        run: |
+          cat commercial-analytics-package-tests.log
+          exit 1
+
+      - name: Enforce safety and dashboard bridge
+        if: steps.package_tests.outcome == 'success' && steps.bridge_contract.outcome != 'success'
+        run: |
+          cat commercial-analytics-bridge.log
+          exit 1
+
+      - name: Enforce source regressions
+        if: steps.bridge_contract.outcome == 'success' && steps.source_regressions.outcome != 'success'
+        run: |
+          cat commercial-analytics-source-regressions.log
+          exit 1
+
+      - name: Enforce production build
+        if: steps.source_regressions.outcome == 'success' && steps.production_build.outcome != 'success'
+        run: |
+          tail -n 500 commercial-analytics-production-build.log
+          exit 1
+
+  typecheck:
+    name: Type-check commercial analytics integration
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Install standalone pnpm
+        run: npm install --global --force @pnpm/exe@9.15.9
+
+      - name: Install workspace dependencies
+        run: pnpm install --no-frozen-lockfile
+
+      - name: Build all workspace packages
+        id: workspace_build
+        continue-on-error: true
+        shell: bash
+        run: pnpm build > commercial-analytics-full-build.log 2>&1
+
+      - name: Type-check commercial analytics runtime
+        id: focused_typecheck
+        if: steps.workspace_build.outcome == 'success'
+        continue-on-error: true
+        shell: bash
+        run: pnpm exec tsc -p tsconfig.commercial-analytics.json --noEmit > commercial-analytics-typecheck.log 2>&1
+
+      - name: Preserve typecheck diagnostics
+        if: always()
+        shell: bash
+        run: |
+          test -f commercial-analytics-full-build.log || touch commercial-analytics-full-build.log
+          test -f commercial-analytics-typecheck.log || touch commercial-analytics-typecheck.log
+
+      - name: Upload typecheck diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: commercial-analytics-typecheck
+          path: |
+            commercial-analytics-full-build.log
+            commercial-analytics-typecheck.log
+          if-no-files-found: error
+          retention-days: 3
+
+      - name: Enforce workspace build
+        if: steps.workspace_build.outcome != 'success'
+        run: |
+          cat commercial-analytics-full-build.log
+          exit 1
+
+      - name: Enforce focused typecheck
+        if: steps.workspace_build.outcome == 'success' && steps.focused_typecheck.outcome != 'success'
+        run: |
+          cat commercial-analytics-typecheck.log
+          exit 1
