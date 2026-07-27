@@ -6,7 +6,10 @@ param(
 $ErrorActionPreference = "Stop"
 $sourceRoot = Join-Path $InstallRoot "workers\acquisition"
 if (-not (Test-Path (Join-Path $sourceRoot "acquisition_v4\supervisor.py"))) {
-    throw "The Acquisition source package was not found."
+    throw "The TalentTrack runtime source package was not found."
+}
+if (-not (Test-Path (Join-Path $sourceRoot "RELEASE.json"))) {
+    throw "The TalentTrack release manifest was not found."
 }
 
 function Find-Python312 {
@@ -32,7 +35,7 @@ if (-not $pythonCommand) {
     if ($LASTEXITCODE -ne 0) { throw "Python 3.12 installation failed." }
     $env:Path = [Environment]::GetEnvironmentVariable("Path", "User") + ";" + [Environment]::GetEnvironmentVariable("Path", "Machine")
     $pythonCommand = Find-Python312
-    if (-not $pythonCommand) { throw "Python 3.12 was installed but is not available yet. Sign out and rerun START-HERE." }
+    if (-not $pythonCommand) { throw "Python 3.12 was installed but is not available yet. Sign out and rerun START-HERE-TALENTTRACK." }
 }
 
 New-Item -ItemType Directory -Force -Path $StateRoot | Out-Null
@@ -114,23 +117,34 @@ function New-Shortcut([string]$Path, [string]$Target, [string]$WorkingDirectory,
 $commands = Join-Path $appCurrent "workers\acquisition"
 $desktop = [Environment]::GetFolderPath("Desktop")
 $startup = [Environment]::GetFolderPath("Startup")
+$legacyShortcutNames = @(
+    "Start Acquisition V5.lnk",
+    "Check Acquisition V5.lnk",
+    "Diagnose Acquisition V5.lnk",
+    "Rollback Acquisition V5.lnk",
+    "Codistan Acquisition V5.lnk"
+)
+foreach ($legacyName in $legacyShortcutNames) {
+    Remove-Item (Join-Path $desktop $legacyName) -Force -ErrorAction SilentlyContinue
+    Remove-Item (Join-Path $startup $legacyName) -Force -ErrorAction SilentlyContinue
+}
 $shortcutMap = @{
-    "Start Acquisition V5.lnk" = "START-ACQUISITION-V4.cmd"
-    "Check Acquisition V5.lnk" = "CHECK-ACQUISITION-V4.cmd"
+    "Start TalentTrack Pilot.lnk" = "START-TALENTTRACK.cmd"
+    "Check TalentTrack Pilot.lnk" = "CHECK-TALENTTRACK.cmd"
     "Check Sales Navigator Pilot.lnk" = "CHECK-SALES-NAVIGATOR-PILOT.cmd"
     "Configure Prospect Desk Sync.lnk" = "CONFIGURE-PROSPECT-DESK-SYNC.cmd"
     "Open Upwork Searches.lnk" = "OPEN-UPWORK-SEARCHES.cmd"
     "Open LinkedIn Lead Searches.lnk" = "OPEN-LINKEDIN-LEAD-SEARCHES.cmd"
-    "Open Acquisition Review.lnk" = "OPEN-ACQUISITION-REVIEW.cmd"
-    "Diagnose Acquisition V5.lnk" = "DIAGNOSE-ACQUISITION-V4.cmd"
-    "Rollback Acquisition V5.lnk" = "ROLLBACK-ACQUISITION-V4.cmd"
+    "Open TalentTrack Review.lnk" = "OPEN-TALENTTRACK-REVIEW.cmd"
+    "TalentTrack Pilot Diagnostics.lnk" = "DIAGNOSE-TALENTTRACK.cmd"
+    "Rollback TalentTrack Pilot.lnk" = "ROLLBACK-TALENTTRACK.cmd"
 }
 foreach ($entry in $shortcutMap.GetEnumerator()) {
     New-Shortcut (Join-Path $desktop $entry.Key) (Join-Path $commands $entry.Value) $commands
 }
-New-Shortcut (Join-Path $startup "Codistan Acquisition V5.lnk") (Join-Path $commands "START-ACQUISITION-V4.cmd") $commands
+New-Shortcut (Join-Path $startup "Codistan TalentTrack Pilot.lnk") (Join-Path $commands "START-TALENTTRACK.cmd") $commands
 
-Start-Process -FilePath (Join-Path $commands "START-ACQUISITION-V4.cmd") -WindowStyle Minimized
+Start-Process -FilePath (Join-Path $commands "START-TALENTTRACK.cmd") -WindowStyle Minimized
 $healthy = $false
 for ($attempt = 0; $attempt -lt 25; $attempt++) {
     Start-Sleep -Seconds 1
@@ -146,12 +160,15 @@ if (-not $healthy) {
         if (Test-Path $appCurrent) { Remove-Item $appCurrent -Recurse -Force }
         Move-Item $appPrevious $appCurrent
     }
-    throw "The installed collectors did not become healthy. The previous application folder was restored where available."
+    throw "The TalentTrack collectors did not become healthy. The previous application folder was restored where available."
 }
 
+$release = Get-Content (Join-Path $commands "RELEASE.json") -Raw | ConvertFrom-Json
 Write-Host ""
-Write-Host "Acquisition V5 installed and healthy."
+Write-Host "TalentTrack Pilot $($release.product_version) installed and healthy."
+Write-Host "Runtime version: $($release.runtime_version)"
 Write-Host "Extensions: $extensionRoot"
+Write-Host "State and captured records preserved at: $StateRoot"
 Write-Host "Prospect Desk sync config: $configPath"
 Write-Host "Sync sources: LinkedIn warm, Upwork and Sales Navigator cold campaigns"
 Write-Host "Load or reload both unpacked extensions in chrome://extensions/."
