@@ -88,7 +88,7 @@ for (const marker of [
 for (const marker of [
   '# TalentTrack Local PostgreSQL',
   'binds only to `127.0.0.1`',
-  'fail closed',
+  'fail-closed',
   'JSON rollback shadow',
   'BACKUP-TALENTTRACK-POSTGRES.cmd',
   'RESTORE-TALENTTRACK-POSTGRES.cmd',
