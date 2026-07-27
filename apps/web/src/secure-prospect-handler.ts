@@ -68,6 +68,16 @@ export async function handleProspectDashboardRequest(
       actor: access.identifier,
     });
 
+    if (response.status === 404 && leadAction && pathname.includes('/outreach')) {
+      return {
+        ...response,
+        headers: {
+          ...response.headers,
+          'x-prospect-authorized-route': 'outreach-workbench',
+        },
+      };
+    }
+
     if (response.status >= 400) return response;
 
     if (method === 'GET' && (pathname === '/' || pathname === '/prospects') && context.pagination) {
