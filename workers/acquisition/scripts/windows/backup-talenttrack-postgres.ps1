@@ -18,6 +18,7 @@ $metadataPath = "$backupPath.json"
 $containerPath = "/tmp/talenttrack-postgres-$timestamp.dump"
 $user = [string]$values["TALENTTRACK_POSTGRES_USER"]
 $database = [string]$values["TALENTTRACK_POSTGRES_DB"]
+$dockerPath = [string]$context.DockerPath
 
 $readyCode = Invoke-TalentTrackCompose -Context $context -Arguments @("exec", "-T", "postgres", "pg_isready", "-U", $user, "-d", $database) -AllowFailure
 if ($readyCode -ne 0) { throw "TalentTrack PostgreSQL is not ready for backup." }
@@ -32,10 +33,10 @@ try {
         "--file=$containerPath"
     )
 
-    $containerId = (& $context.DockerPath compose --project-name $context.ProjectName --env-file $context.EnvPath -f $context.ComposePath ps -q postgres | Select-Object -First 1)
+    $containerId = (& $dockerPath compose --project-name $context.ProjectName --env-file $context.EnvPath -f $context.ComposePath ps -q postgres | Select-Object -First 1)
     $containerId = [string]$containerId
     if (-not $containerId.Trim()) { throw "The TalentTrack PostgreSQL container could not be identified." }
-    & $context.DockerPath cp "${containerId}:$containerPath" $backupPath
+    & $dockerPath cp "${containerId}:$containerPath" $backupPath
     if ($LASTEXITCODE -ne 0) { throw "The PostgreSQL backup could not be copied from the local container." }
 } finally {
     $null = Invoke-TalentTrackCompose -Context $context -Arguments @("exec", "-T", "postgres", "rm", "-f", $containerPath) -AllowFailure
