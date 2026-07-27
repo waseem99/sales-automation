@@ -14,7 +14,7 @@ from . import __version__
 from .models import NormalizedRecord, SUPPORTED_SOURCES, utc_now_iso
 from .qualification import qualify_record
 from .review import write_review_outputs
-from .storage import AtomicRecordStore
+from .storage import create_record_store
 from .sync import ProspectDeskSync
 
 MAX_REQUEST_BYTES = 1_000_000
@@ -105,7 +105,7 @@ class CollectorState:
     def __post_init__(self) -> None:
         if self.source not in SUPPORTED_SOURCES:
             raise ValueError("Unsupported collector source.")
-        self.store = AtomicRecordStore(self.state_root, self.source)
+        self.store = create_record_store(self.state_root, self.source)
         self.records = self.store.load_records()
         self.seen = self.store.load_seen()
         previous_status = self.store.load_status()
@@ -238,6 +238,7 @@ class CollectorState:
             "rejected": rejected,
             "total_records": len(self.records),
             "records_path": str(self.store.records_path),
+            "storage_backend": self.store.backend,
             "accepted_priority_counts": self._priority_counts(accepted),
             "priority_counts": self._priority_counts(self.records),
             "review": review,
@@ -276,6 +277,7 @@ class CollectorState:
             "duplicates": self.total_duplicates,
             "enriched": self.total_enriched,
             "rejected": self.total_rejected,
+            "storage_backend": self.store.backend,
             "records_path": str(self.store.records_path),
             "status_path": str(self.store.status_path),
             "priority_counts": self._priority_counts(self.records),
@@ -373,7 +375,7 @@ def create_server(source: str, state_root: Path, port: int, parser_version: str)
 
 
 def build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(description="Run one Codistan Acquisition V4 local collector.")
+    parser = argparse.ArgumentParser(description="Run one TalentTrack local collector.")
     parser.add_argument("--source", choices=sorted(SUPPORTED_SOURCES), required=True)
     parser.add_argument("--state-root", type=Path, required=True)
     parser.add_argument("--port", type=int, required=True)
@@ -384,7 +386,7 @@ def build_parser() -> argparse.ArgumentParser:
 def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
     server = create_server(args.source, args.state_root, args.port, args.parser_version)
-    print(f"Codistan {args.source} collector ready at http://127.0.0.1:{args.port}")
+    print(f"TalentTrack {args.source} collector ready at http://127.0.0.1:{args.port}")
     try:
         server.serve_forever(poll_interval=0.25)
     except KeyboardInterrupt:
