@@ -1,0 +1,52 @@
+name: Outreach Workbench CI
+
+on:
+  pull_request:
+    branches:
+      - agent/bd-workspace-foundation-232
+    paths:
+      - '.github/workflows/outreach-workbench-ci.yml'
+      - 'packages/outreach-workbench/**'
+      - 'api/outreach-workbench.ts'
+      - 'vercel/outreach-workbench-ui.ts'
+      - 'vercel/workspace-dashboard-runtime.js'
+      - 'vercel.json'
+      - 'workers/acquisition/tests/outreach_workbench_contract.mjs'
+      - 'package.json'
+      - 'pnpm-lock.yaml'
+      - 'packages/**'
+      - 'vercel/**'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: outreach-workbench-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  validate:
+    name: Validate outreach lifecycle, safety and production build
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install pnpm
+        run: npm install --global --force @pnpm/exe@9.15.9
+      - name: Install dependencies
+        run: pnpm install --no-frozen-lockfile
+      - name: Build workspace packages
+        run: pnpm build
+      - name: Test outreach workbench behavior
+        run: pnpm --filter @sales-automation/outreach-workbench test
+      - name: Validate outreach safety bridge
+        working-directory: workers/acquisition
+        run: node tests/outreach_workbench_contract.mjs
+      - name: Type-check Vercel integration
+        run: pnpm typecheck:vercel
+      - name: Build production workspace
+        run: pnpm build:vercel
