@@ -11,6 +11,9 @@ if (-not (Test-Path (Join-Path $sourceRoot "acquisition_v4\supervisor.py"))) {
 if (-not (Test-Path (Join-Path $sourceRoot "RELEASE.json"))) {
     throw "The TalentTrack release manifest was not found."
 }
+if (-not (Test-Path (Join-Path $sourceRoot "requirements.txt"))) {
+    throw "The TalentTrack Python requirements file was not found."
+}
 
 function Find-Python312 {
     $py = Get-Command py.exe -ErrorAction SilentlyContinue
@@ -41,6 +44,7 @@ if (-not $pythonCommand) {
 New-Item -ItemType Directory -Force -Path $StateRoot | Out-Null
 $configDirectory = Join-Path $StateRoot "config"
 $configPath = Join-Path $configDirectory "prospect-desk-sync.json"
+$localPostgresEnvPath = Join-Path $configDirectory "local-postgres.env"
 New-Item -ItemType Directory -Force -Path $configDirectory | Out-Null
 $enabledSources = @("linkedin", "upwork", "sales_navigator")
 if (-not (Test-Path $configPath)) {
@@ -97,12 +101,26 @@ New-Item -ItemType Directory -Force -Path (Join-Path $appCurrent "workers") | Ou
 Copy-Item -Path $sourceRoot -Destination (Join-Path $appCurrent "workers\acquisition") -Recurse -Force
 Get-ChildItem (Join-Path $appCurrent "workers\acquisition") -Directory -Recurse -Filter __pycache__ -ErrorAction SilentlyContinue | Remove-Item -Recurse -Force
 
+$commands = Join-Path $appCurrent "workers\acquisition"
+$pythonExe = [string]$pythonCommand[0]
+$pythonPrefixArgs = @()
+if ($pythonCommand.Count -gt 1) { $pythonPrefixArgs = @($pythonCommand[1..($pythonCommand.Count - 1)]) }
+Write-Host "Installing the pinned TalentTrack Python runtime dependency..."
+& $pythonExe @pythonPrefixArgs -m pip install --disable-pip-version-check --user --requirement (Join-Path $commands "requirements.txt")
+if ($LASTEXITCODE -ne 0) {
+    if (Test-Path $appPrevious) {
+        if (Test-Path $appCurrent) { Remove-Item $appCurrent -Recurse -Force }
+        Move-Item $appPrevious $appCurrent
+    }
+    throw "TalentTrack Python dependency installation failed. The previous application package was restored."
+}
+
 $extensionRoot = Join-Path $StateRoot "extensions"
 foreach ($source in @("upwork", "linkedin")) {
     $target = Join-Path $extensionRoot $source
     if (Test-Path $target) { Remove-Item $target -Recurse -Force }
     New-Item -ItemType Directory -Force -Path $target | Out-Null
-    Copy-Item -Path (Join-Path $appCurrent "workers\acquisition\extensions\$source\*") -Destination $target -Recurse -Force
+    Copy-Item -Path (Join-Path $commands "extensions\$source\*") -Destination $target -Recurse -Force
 }
 
 function New-Shortcut([string]$Path, [string]$Target, [string]$WorkingDirectory, [int]$WindowStyle = 7) {
@@ -114,7 +132,6 @@ function New-Shortcut([string]$Path, [string]$Target, [string]$WorkingDirectory,
     $shortcut.Save()
 }
 
-$commands = Join-Path $appCurrent "workers\acquisition"
 $desktop = [Environment]::GetFolderPath("Desktop")
 $startup = [Environment]::GetFolderPath("Startup")
 $legacyShortcutNames = @(
@@ -138,35 +155,59 @@ $shortcutMap = @{
     "Open TalentTrack Review.lnk" = "OPEN-TALENTTRACK-REVIEW.cmd"
     "TalentTrack Pilot Diagnostics.lnk" = "DIAGNOSE-TALENTTRACK.cmd"
     "Rollback TalentTrack Pilot.lnk" = "ROLLBACK-TALENTTRACK.cmd"
+    "Enable TalentTrack Local PostgreSQL.lnk" = "ENABLE-TALENTTRACK-POSTGRES.cmd"
+    "Check TalentTrack Local PostgreSQL.lnk" = "CHECK-TALENTTRACK-POSTGRES.cmd"
+    "Backup TalentTrack Local PostgreSQL.lnk" = "BACKUP-TALENTTRACK-POSTGRES.cmd"
+    "Restore TalentTrack Local PostgreSQL.lnk" = "RESTORE-TALENTTRACK-POSTGRES.cmd"
 }
 foreach ($entry in $shortcutMap.GetEnumerator()) {
     New-Shortcut (Join-Path $desktop $entry.Key) (Join-Path $commands $entry.Value) $commands
 }
 New-Shortcut (Join-Path $startup "Codistan TalentTrack Pilot.lnk") (Join-Path $commands "START-TALENTTRACK.cmd") $commands
 
+$expectedBackend = if (Test-Path $localPostgresEnvPath) { "postgresql" } else { "jsonl" }
 Start-Process -FilePath (Join-Path $commands "START-TALENTTRACK.cmd") -WindowStyle Minimized
 $healthy = $false
-for ($attempt = 0; $attempt -lt 25; $attempt++) {
+for ($attempt = 0; $attempt -lt 60; $attempt++) {
     Start-Sleep -Seconds 1
     try {
         $upwork = Invoke-RestMethod -Uri "http://127.0.0.1:8765/health" -TimeoutSec 2
         $linkedin = Invoke-RestMethod -Uri "http://127.0.0.1:8775/health" -TimeoutSec 2
         $salesNavigator = Invoke-RestMethod -Uri "http://127.0.0.1:8785/health" -TimeoutSec 2
-        if ($upwork.ready -and $linkedin.ready -and $salesNavigator.ready) { $healthy = $true; break }
+        if ($upwork.ready -and $linkedin.ready -and $salesNavigator.ready -and
+            $upwork.storage_backend -eq $expectedBackend -and
+            $linkedin.storage_backend -eq $expectedBackend -and
+            $salesNavigator.storage_backend -eq $expectedBackend) {
+            $healthy = $true
+            break
+        }
     } catch {}
 }
 if (-not $healthy) {
+    foreach ($pidName in @("watchdog.pid", "runtime.pid")) {
+        $failedPidPath = Join-Path $StateRoot $pidName
+        if (Test-Path $failedPidPath) {
+            $failedProcessId = 0
+            [void][int]::TryParse((Get-Content $failedPidPath -Raw).Trim(), [ref]$failedProcessId)
+            if ($failedProcessId -gt 0) { Stop-Process -Id $failedProcessId -Force -ErrorAction SilentlyContinue }
+            Remove-Item $failedPidPath -Force -ErrorAction SilentlyContinue
+        }
+    }
+    Get-NetTCPConnection -State Listen -LocalPort 8765,8775,8785 -ErrorAction SilentlyContinue |
+        Select-Object -ExpandProperty OwningProcess -Unique |
+        ForEach-Object { Stop-Process -Id $_ -Force -ErrorAction SilentlyContinue }
     if (Test-Path $appPrevious) {
         if (Test-Path $appCurrent) { Remove-Item $appCurrent -Recurse -Force }
         Move-Item $appPrevious $appCurrent
     }
-    throw "The TalentTrack collectors did not become healthy. The previous application folder was restored where available."
+    throw "The TalentTrack collectors did not become healthy on $expectedBackend storage. The previous application folder was restored where available."
 }
 
 $release = Get-Content (Join-Path $commands "RELEASE.json") -Raw | ConvertFrom-Json
 Write-Host ""
 Write-Host "TalentTrack Pilot $($release.product_version) installed and healthy."
 Write-Host "Runtime version: $($release.runtime_version)"
+Write-Host "Storage backend: $expectedBackend"
 Write-Host "Extensions: $extensionRoot"
 Write-Host "State and captured records preserved at: $StateRoot"
 Write-Host "Prospect Desk sync config: $configPath"
@@ -175,3 +216,8 @@ Write-Host "Load or reload both unpacked extensions in chrome://extensions/."
 Write-Host "Open the LinkedIn extension popup, then open Sales Navigator campaigns to register an approved lead search."
 Write-Host "Use Check Sales Navigator Pilot after each live run to measure the acceptance gate."
 Write-Host "Use Configure Prospect Desk Sync once the production endpoint and token are ready."
+if ($expectedBackend -eq "jsonl") {
+    Write-Host "Optional: use Enable TalentTrack Local PostgreSQL after Docker Desktop is installed."
+} else {
+    Write-Host "Local PostgreSQL remains enabled; use its Check, Backup and Restore shortcuts for operations."
+}
