@@ -9,13 +9,16 @@ $ErrorActionPreference = "Stop"
 $context = Get-TalentTrackPostgresContext -InstallRoot $InstallRoot -StateRoot $StateRoot
 $values = Read-TalentTrackPostgresEnv -Path $context.EnvPath
 Require-TalentTrackDocker $context
+$configuredUser = [string]$values["TALENTTRACK_POSTGRES_USER"]
+$configuredDatabase = [string]$values["TALENTTRACK_POSTGRES_DB"]
+$configuredPort = [string]$values["TALENTTRACK_POSTGRES_PORT"]
 
 Write-Host "TalentTrack local PostgreSQL service:"
 $null = Invoke-TalentTrackCompose -Context $context -Arguments @("ps", "postgres")
 $readyCode = Invoke-TalentTrackCompose -Context $context -Arguments @(
     "exec", "-T", "postgres", "pg_isready",
-    "-U", [string]$values["TALENTTRACK_POSTGRES_USER"],
-    "-d", [string]$values["TALENTTRACK_POSTGRES_DB"]
+    "-U", $configuredUser,
+    "-d", $configuredDatabase
 ) -AllowFailure
 if ($readyCode -ne 0) { throw "TalentTrack PostgreSQL is not accepting connections." }
 
@@ -33,8 +36,8 @@ foreach ($port in @(8765, 8775, 8785)) {
 $postgresCollectors = @($health | Where-Object { $_.ready -and $_.storage_backend -eq "postgresql" }).Count
 Write-Host ""
 Write-Host "PostgreSQL host: 127.0.0.1"
-Write-Host "PostgreSQL port: $($values['TALENTTRACK_POSTGRES_PORT'])"
-Write-Host "PostgreSQL database: $($values['TALENTTRACK_POSTGRES_DB'])"
+Write-Host "PostgreSQL port: $configuredPort"
+Write-Host "PostgreSQL database: $configuredDatabase"
 Write-Host "Collectors using PostgreSQL: $postgresCollectors/3"
 Write-Host "JSON rollback shadow: enabled"
 Write-Host "No password or connection URL was displayed."
