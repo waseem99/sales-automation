@@ -82,9 +82,10 @@ for (const marker of [
   "Configure Prospect Desk Sync.lnk",
   "prospect-desk-sync.json",
   'enabled = $false',
-  '$enabledSources = @("linkedin", "upwork", "sales_navigator")',
-  "LinkedIn warm, Upwork and Sales Navigator cold campaigns",
-  "$migratedConfig"
+  '$enabledSources = @(\"linkedin\", \"upwork\", \"sales_navigator\")',
+  "Sync sources: LinkedIn warm, Upwork warm and Sales Navigator cold campaigns",
+  "$migratedConfig",
+  "external_actions_enabled -eq $false"
 ]) assert(installer.includes(marker), `missing installer sync marker: ${marker}`);
 
 for (const marker of [
@@ -92,7 +93,7 @@ for (const marker of [
   "ACQUISITION_INGEST_TOKEN",
   "Read-Host $Prompt -AsSecureString",
   "Token: stored locally and not printed",
-  '$enabledSources = @("linkedin", "upwork", "sales_navigator")',
+  '$enabledSources = @(\"linkedin\", \"upwork\", \"sales_navigator\")',
   "Sources: LinkedIn warm leads, Upwork jobs and Sales Navigator cold prospects",
   "http://127.0.0.1:8765/health",
   "http://127.0.0.1:8775/health",
@@ -111,4 +112,4 @@ for (const prohibited of [
   assert(!`${api}\n${runtime}\n${sync}`.includes(prohibited), `bridge contains prohibited action: ${prohibited}`);
 }
 
-console.log("Prospect Desk warm-source bridge guarantees passed inside the three-source runtime.");
+console.log("Prospect Desk warm-source bridge guarantees passed inside the consolidated three-source product.");
