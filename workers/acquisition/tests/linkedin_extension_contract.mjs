@@ -80,7 +80,7 @@ for (const marker of [
 assert(popup.includes("CODISTAN_RUN_LINKEDIN_SCHEDULED_SCAN_NOW"));
 assert(popup.includes("CODISTAN_SET_LINKEDIN_AUTOMATION"));
 assert(popup.includes("CODISTAN_GET_LINKEDIN_AUTOMATION_STATUS"));
-assert(popupHtml.includes("Run all five approved searches now"));
+assert(popupHtml.includes("Run all approved searches now"));
 assert(popupHtml.includes("Run all five approved searches every 15 minutes"));
 assert(signalSource.includes("classifyLinkedInRequirement"));
 assert(adapter.includes("resolvePostUrl"));
