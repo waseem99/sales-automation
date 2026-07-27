@@ -52,7 +52,7 @@ export async function handleProspectDashboardRequest(
       return json({ ok: true, ...(await context.syncPseb()) }, 201);
     }
 
-    const leadAction = pathname.match(/^\/api\/(?:prospects|opportunities)\/([^/]+)\/(?:service|followup|guidance\/first-outreach|guidance\/reply|status|owner|activity|feedback|notes|follow-up|outcome|alert-sent)$/);
+    const leadAction = pathname.match(/^\/api\/(?:prospects|opportunities)\/([^/]+)\/(?:service|followup|guidance\/first-outreach|guidance\/reply|status|owner|activity|feedback|notes|follow-up|outcome|alert-sent|tasks(?:\/.*)?|next-action|outreach(?:\/.*)?)$/);
     if (leadAction) {
       const leadId = decodeURIComponent(leadAction[1] ?? '');
       const record = context.repository.getLead(leadId);
@@ -119,39 +119,14 @@ function serializeProspect(record: StoredLeadRecord) {
   return { ...record.lead, notes: record.notes, auditLog: record.auditLog, evaluation: record.latestEvaluation };
 }
 
+function trimTrailingSlash(value: string): string {
+  return value.length > 1 ? value.replace(/\/+$/, '') : value;
+}
+
 function html(body: string, status = 200): ProspectDashboardResponse {
-  return {
-    status,
-    headers: {
-      ...securityHeaders(),
-      'content-type': 'text/html; charset=utf-8',
-      'cache-control': 'no-store',
-    },
-    body,
-  };
+  return { status, headers: { 'content-type': 'text/html; charset=utf-8', 'cache-control': 'no-store' }, body };
 }
 
 function json(value: unknown, status = 200): ProspectDashboardResponse {
-  return {
-    status,
-    headers: {
-      ...securityHeaders(),
-      'content-type': 'application/json; charset=utf-8',
-      'cache-control': 'no-store',
-    },
-    body: JSON.stringify(value),
-  };
-}
-
-function securityHeaders(): Record<string, string> {
-  return {
-    'x-content-type-options': 'nosniff',
-    'x-frame-options': 'DENY',
-    'referrer-policy': 'same-origin',
-    'content-security-policy': "default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'",
-  };
-}
-
-function trimTrailingSlash(value: string): string {
-  return value.length > 1 ? value.replace(/\/+$/, '') : value;
+  return { status, headers: { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store' }, body: JSON.stringify(value) };
 }
