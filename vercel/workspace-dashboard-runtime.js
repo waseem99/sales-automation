@@ -31,7 +31,7 @@ export async function handleWorkspaceDashboardRuntime(input) {
   const runtimeState = workspaceRuntimeWarm ? 'warm' : 'cold';
   workspaceRuntimeWarm = true;
   const modulesStartedAt = performance.now();
-  const [neonState, prospectDiscovery, storage, prospectHandler, workspacePages, workflowUi, bdWorkspaceUi, upworkAccountUi, partialNavigation] = await Promise.all([
+  const [neonState, prospectDiscovery, storage, prospectHandler, workspacePages, workflowUi, bdWorkspaceUi, outreachWorkbenchUi, upworkAccountUi, partialNavigation] = await Promise.all([
     import('@sales-automation/neon-state'),
     import('@sales-automation/prospect-discovery'),
     import('@sales-automation/storage'),
@@ -39,6 +39,7 @@ export async function handleWorkspaceDashboardRuntime(input) {
     import('./workspace-pages.js'),
     import('./prospect-workflow-ui.js'),
     import('./bd-workspace-ui.js'),
+    import('./outreach-workbench-ui.js'),
     import('./upwork-account-workspace-ui.js'),
     import('./prospect-partial-navigation.js'),
   ]);
@@ -124,6 +125,20 @@ export async function handleWorkspaceDashboardRuntime(input) {
     } catch (error) {
       console.error('PROSPECT_WORKFLOW_UI_ERROR', {
         route: pathname,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
+    try {
+      body = outreachWorkbenchUi.enhanceOutreachWorkbenchUi(body, {
+        selected,
+        actorIdentifier: input.session.identifier,
+        actorDisplayName: input.session.displayName,
+        canManagerApprove: access.canAssignOwners || access.canRunGlobalOperations,
+      });
+    } catch (error) {
+      console.error('OUTREACH_WORKBENCH_UI_ERROR', {
+        route: pathname,
+        leadId: selected?.lead?.id,
         error: error instanceof Error ? error.message : String(error),
       });
     }
