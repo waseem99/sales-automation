@@ -9,24 +9,26 @@ TalentTrack is Codistan’s Windows-first acquisition and business-development o
 - durable synchronization into Prospect Desk;
 - BD tasks, human-controlled outreach and commercial learning.
 
-The authoritative release identity and component states are defined in [`RELEASE.json`](RELEASE.json) and [`../../docs/TALENTTRACK_RELEASE_BASELINE.md`](../../docs/TALENTTRACK_RELEASE_BASELINE.md).
+The authoritative release identity and component states are defined in [`RELEASE.json`](RELEASE.json) and [`../../docs/TALENTTRACK_RELEASE_BASELINE.md`](../../docs/TALENTTRACK_RELEASE_BASELINE.md). Optional local PostgreSQL operations are documented in [`../../docs/TALENTTRACK_LOCAL_POSTGRES.md`](../../docs/TALENTTRACK_LOCAL_POSTGRES.md).
 
 ## Release boundary
 
 - Product: **TalentTrack Pilot 1.0.0**
-- Runtime: `0.3.0`
+- Runtime: `0.3.1`
 - Upwork collector: `127.0.0.1:8765`
 - LinkedIn warm collector: `127.0.0.1:8775`
 - Sales Navigator cold collector: `127.0.0.1:8785`
 - Combined LinkedIn extension: `1.4.1`
 - State: `%LOCALAPPDATA%\Codistan\Acquisition`
+- Default local capture store: JSONL
+- Optional local capture store: loopback-only PostgreSQL with JSON rollback shadow
 - Normal logged-in Chrome only
 - No Playwright, hidden browser profile, credential storage or account-challenge handling
 - No proposal, application, message, InMail, connection request, follow, reaction, comment or email action
 
 The internal Python package remains named `acquisition_v4` during the pilot to avoid a risky state or installer migration. Operators should use only the TalentTrack command names below. Legacy V4/V5 command files remain compatibility aliases until the upgrade and rollback gate passes.
 
-Local capture remains operational if Prospect Desk or the internet is temporarily unavailable.
+Local capture remains operational if Prospect Desk or the internet is temporarily unavailable. When optional PostgreSQL is enabled, Docker and PostgreSQL must remain available; the collectors fail closed rather than silently creating a divergent JSON-only history.
 
 ## One-time Windows setup
 
@@ -41,8 +43,11 @@ Local capture remains operational if Prospect Desk or the internet is temporaril
 The installer:
 
 - installs Python 3.12 when required;
+- installs the pinned Psycopg binary dependency;
 - preserves records, review output, deduplication and sync configuration;
+- preserves an existing local PostgreSQL volume, secret configuration and backups;
 - starts and validates ports 8765, 8775 and 8785;
+- requires the collectors to report the configured storage backend;
 - migrates older sync configurations to all three sources;
 - keeps the previous installed application for rollback;
 - creates canonical TalentTrack desktop and Windows-startup shortcuts;
@@ -63,6 +68,28 @@ The installer:
 | Open approved Upwork searches | `OPEN-UPWORK-SEARCHES.cmd` |
 | Open LinkedIn lead searches | `OPEN-LINKEDIN-LEAD-SEARCHES.cmd` |
 | Check Sales Navigator sample | `CHECK-SALES-NAVIGATOR-PILOT.cmd` |
+| Enable optional local PostgreSQL | `ENABLE-TALENTTRACK-POSTGRES.cmd` |
+| Check local PostgreSQL | `CHECK-TALENTTRACK-POSTGRES.cmd` |
+| Back up local PostgreSQL | `BACKUP-TALENTTRACK-POSTGRES.cmd` |
+| Restore local PostgreSQL | `RESTORE-TALENTTRACK-POSTGRES.cmd` |
+
+## Optional local PostgreSQL
+
+JSONL remains the default. After installing and starting Docker Desktop, run `ENABLE-TALENTTRACK-POSTGRES.cmd` to make local PostgreSQL the authoritative collector store.
+
+The enable workflow:
+
+- binds PostgreSQL only to `127.0.0.1:55432` by default;
+- generates and protects a per-user password;
+- starts the repository-provided `postgres:16-alpine` service;
+- imports existing JSONL records when the source tables are empty;
+- mirrors every committed record, seen fingerprint and status update back to JSON;
+- restarts TalentTrack and requires all three collectors to report `storage_backend=postgresql`;
+- does not display the password or connection URL.
+
+Use the dedicated Check, Backup and Restore commands for operations. Backups use PostgreSQL custom format, include adjacent checksum metadata and are stored under `%LOCALAPPDATA%\Codistan\Acquisition\backups`. Restore requires the exact confirmation `RESTORE TALENTTRACK` and creates a fresh safety backup before replacing the database.
+
+Do not delete the Docker volume or secret file as an improvised disable process. Automatic fallback is intentionally unavailable because it could create two competing histories.
 
 ## Upwork
 
@@ -177,7 +204,7 @@ Invoke-RestMethod http://127.0.0.1:8775/health
 Invoke-RestMethod http://127.0.0.1:8785/health
 ```
 
-Safe diagnostics contain health, versions, process metadata and runtime log tails only. They exclude opportunity bodies, cookies, credentials and sync tokens.
+Health reports only the non-secret storage label `jsonl` or `postgresql`. Safe diagnostics contain health, versions, process metadata and runtime log tails only. They exclude opportunity bodies, cookies, credentials, database connection URLs and sync tokens.
 
 ## Upgrade and rollback
 
@@ -189,6 +216,8 @@ Application files live under `app-current`; the prior package is retained as `ap
 - deduplication fingerprints;
 - review output;
 - Prospect Desk sync state;
+- local PostgreSQL volume, secret configuration or backups;
+- JSON rollback shadow;
 - configuration.
 
 ## Developer validation
@@ -203,6 +232,7 @@ node tests/sales_navigator_extension_contract.mjs
 node tests/prospect_desk_bridge_contract.mjs
 node tests/sales_navigator_bridge_contract.mjs
 node tests/talenttrack_release_baseline_contract.mjs
+node tests/local_postgres_contract.mjs
 ```
 
 Run the collectors locally:
