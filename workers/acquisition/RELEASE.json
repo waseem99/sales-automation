@@ -1,0 +1,98 @@
+{
+  "schema_version": "codistan-acquisition-release.v1",
+  "product_name": "Codistan Acquisition",
+  "release_version": "1.0.0-rc.1",
+  "release_status": "live-validation",
+  "release_channel": "candidate",
+  "operator_vocabulary": "Codistan Acquisition",
+  "internal_compatibility": {
+    "python_module": "acquisition_v4",
+    "legacy_command_suffixes": ["V4", "V5"],
+    "policy": "Retained as compatibility aliases until post-release retention review. Do not use in new operator instructions."
+  },
+  "components": {
+    "local_runtime_package": "1.0.0-rc.1",
+    "health_schema": "codistan-acquisition-health.v1",
+    "upwork_extension": "1.1.0",
+    "linkedin_sales_navigator_extension": "1.5.0",
+    "prospect_desk": "stack through PR #253",
+    "commercial_analytics": "commercial-analytics.v1"
+  },
+  "active_sources": [
+    {
+      "id": "upwork",
+      "label": "Upwork jobs",
+      "collector_port": 8765,
+      "extension_folder": "extensions/upwork",
+      "acceptance_gate": "operator-live-validation-required"
+    },
+    {
+      "id": "linkedin",
+      "label": "LinkedIn warm requirements",
+      "collector_port": 8775,
+      "extension_folder": "extensions/linkedin",
+      "acceptance_gate": "operator-live-validation-required"
+    },
+    {
+      "id": "sales_navigator",
+      "label": "Sales Navigator cold prospects",
+      "collector_port": 8785,
+      "extension_folder": "extensions/linkedin",
+      "acceptance_gate": "operator-live-validation-required"
+    }
+  ],
+  "state_contract": {
+    "root": "%LOCALAPPDATA%/Codistan/Acquisition",
+    "application_slots": ["app-current", "app-previous"],
+    "stable_extension_root": "extensions",
+    "protected_files": [
+      "config/prospect-desk-sync.json",
+      "upwork/records.jsonl",
+      "upwork/seen.json",
+      "linkedin/records.jsonl",
+      "linkedin/seen.json",
+      "sales_navigator/records.jsonl",
+      "sales_navigator/seen.json"
+    ],
+    "regenerable_files": [
+      "upwork/status.json",
+      "linkedin/status.json",
+      "sales_navigator/status.json",
+      "review/index.html",
+      "logs/*",
+      "runtime.pid",
+      "watchdog.pid",
+      "watchdog.lock"
+    ],
+    "rule": "Install and rollback may replace application and extension files but must not delete or rewrite protected state."
+  },
+  "stack": [
+    {"pr": 223, "capability": "Upwork and LinkedIn warm capture", "state": "code-complete; live validation required"},
+    {"pr": 225, "capability": "Sales Navigator campaign capture", "state": "code-complete; live validation required"},
+    {"pr": 250, "capability": "Upwork account intelligence", "state": "dedicated CI green"},
+    {"pr": 251, "capability": "Operational BD workspace", "state": "dedicated CI green"},
+    {"pr": 252, "capability": "Human-controlled outreach workbench", "state": "dedicated CI green"},
+    {"pr": 253, "capability": "Commercial analytics and calibration", "state": "dedicated CI green"},
+    {"issue": 244, "capability": "Release consolidation", "state": "pre-acceptance tooling in progress; merge blocked by live gates"}
+  ],
+  "external_action_policy": {
+    "automatic_upwork_proposals": false,
+    "automatic_email": false,
+    "automatic_linkedin_messages": false,
+    "automatic_inmail": false,
+    "automatic_connections": false,
+    "automatic_follows_reactions_comments": false,
+    "manual_actions_may_be_recorded": true
+  },
+  "merge_gate": {
+    "main_update_allowed": false,
+    "requirements": [
+      "Upwork live acceptance recorded",
+      "LinkedIn warm live acceptance recorded",
+      "Sales Navigator live acceptance recorded",
+      "Prospect Desk state and owner history verified",
+      "Install and rollback state-preservation tests green",
+      "Operator explicitly approves consolidation"
+    ]
+  }
+}
