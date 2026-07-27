@@ -126,15 +126,11 @@ export function initializeOutreachWorkbench(
 ): OutreachWorkbenchSnapshot {
   const existing = readOutreachWorkbench(lead);
   if (existing) return existing;
-  const drafts = generatedDrafts.map((draft) => fromGeneratedDraft(lead, draft, actor, generatedAt));
-  return {
-    version: OUTREACH_WORKBENCH_VERSION,
-    leadId: lead.id,
-    drafts,
-    updatedAt: generatedAt,
-    humanReviewRequired: true,
-    automaticSendingEnabled: false,
-  };
+  return updateSnapshot(
+    emptySnapshot(lead.id, generatedAt),
+    generatedDrafts.map((draft) => fromGeneratedDraft(lead, draft, actor, generatedAt)),
+    generatedAt,
+  );
 }
 
 export function createManualDraft(
@@ -146,16 +142,16 @@ export function createManualDraft(
   const snapshot = readOutreachWorkbench(lead) ?? emptySnapshot(lead.id, generatedAt);
   const body = requiredText(input.body, 'body', 12000);
   const draftId = `outreach-${shortHash(`${lead.id}:${input.channel}:${generatedAt}:${actor}`)}`;
-  const revision = revision(draftId, 1, input.subject, body, actor, generatedAt, 'human_edit');
+  const firstRevision = createRevision(draftId, 1, input.subject, body, actor, generatedAt, 'human_edit');
   const record: OutreachDraftRecord = {
     id: draftId,
     leadId: lead.id,
     channel: input.channel,
     status: 'working',
-    currentRevisionId: revision.id,
-    revisions: [revision],
+    currentRevisionId: firstRevision.id,
+    revisions: [firstRevision],
     sentVersions: [],
-    events: [event('draft_created', 'Manual outreach draft created.', actor, generatedAt, revision.id)],
+    events: [createEvent('draft_created', 'Manual outreach draft created.', actor, generatedAt, firstRevision.id)],
     assumptions: unique(input.assumptions ?? []),
     safeguards: unique([
       'Human approval is required before any external action.',
@@ -181,20 +177,28 @@ export function editOutreachDraft(
 ): OutreachWorkbenchSnapshot {
   const snapshot = requireSnapshot(lead);
   const draft = requireDraft(snapshot, draftId);
-  if (draft.status === 'sent_manually') throw new Error('A sent draft is immutable. Create a new draft for further outreach.');
-  const nextNumber = Math.max(...draft.revisions.map((item) => item.number), 0) + 1;
-  const nextRevision = revision(draft.id, nextNumber, input.subject, requiredText(input.body, 'body', 12000), actor, generatedAt, 'human_edit', input.changeNote);
-  const updated: OutreachDraftRecord = {
+  assertMutable(draft);
+  const nextNumber = Math.max(0, ...draft.revisions.map((item) => item.number)) + 1;
+  const nextRevision = createRevision(
+    draft.id,
+    nextNumber,
+    input.subject,
+    requiredText(input.body, 'body', 12000),
+    actor,
+    generatedAt,
+    'human_edit',
+    input.changeNote,
+  );
+  return replaceDraft(snapshot, {
     ...draft,
     status: 'working',
     currentRevisionId: nextRevision.id,
     revisions: [...draft.revisions, nextRevision],
     approval: undefined,
-    events: [...draft.events, event('draft_edited', `Draft edited as revision ${nextNumber}.`, actor, generatedAt, nextRevision.id, {changeNote: input.changeNote})],
+    events: [...draft.events, createEvent('draft_edited', `Draft edited as revision ${nextNumber}.`, actor, generatedAt, nextRevision.id, {changeNote: input.changeNote})],
     updatedAt: generatedAt,
     updatedBy: actor,
-  };
-  return replaceDraft(snapshot, updated, generatedAt);
+  }, generatedAt);
 }
 
 export function submitDraftForReview(lead: Lead, draftId: string, actor: string, generatedAt = new Date().toISOString()): OutreachWorkbenchSnapshot {
@@ -202,13 +206,15 @@ export function submitDraftForReview(lead: Lead, draftId: string, actor: string,
 }
 
 export function requestDraftChanges(lead: Lead, draftId: string, note: string, actor: string, generatedAt = new Date().toISOString()): OutreachWorkbenchSnapshot {
-  return transition(lead, draftId, 'changes_requested', 'changes_requested', requiredText(note, 'note', 1000), actor, generatedAt, {note});
+  const normalized = requiredText(note, 'note', 1000);
+  return transition(lead, draftId, 'changes_requested', 'changes_requested', normalized, actor, generatedAt, {note: normalized});
 }
 
 export function approveOutreachDraft(lead: Lead, draftId: string, note: string | undefined, actor: string, generatedAt = new Date().toISOString()): OutreachWorkbenchSnapshot {
   const snapshot = requireSnapshot(lead);
   const draft = requireDraft(snapshot, draftId);
-  if (!['in_review', 'working', 'changes_requested'].includes(draft.status)) throw new Error('Draft cannot be approved from its current status.');
+  assertMutable(draft);
+  if (!['working', 'in_review', 'changes_requested'].includes(draft.status)) throw new Error('Draft cannot be approved from its current status.');
   const current = currentRevision(draft);
   const approval: OutreachApproval = {
     revisionId: current.id,
@@ -217,28 +223,26 @@ export function approveOutreachDraft(lead: Lead, draftId: string, note: string |
     note: optionalText(note, 1000),
     contentHash: current.contentHash,
   };
-  const updated: OutreachDraftRecord = {
+  return replaceDraft(snapshot, {
     ...draft,
     status: 'approved',
     approval,
-    events: [...draft.events, event('approved', `Revision ${current.number} approved for manual use.`, actor, generatedAt, current.id, {note})],
+    events: [...draft.events, createEvent('approved', `Revision ${current.number} approved for manual use.`, actor, generatedAt, current.id, {note})],
     updatedAt: generatedAt,
     updatedBy: actor,
-  };
-  return replaceDraft(snapshot, updated, generatedAt);
+  }, generatedAt);
 }
 
 export function recordDraftCopied(lead: Lead, draftId: string, actor: string, generatedAt = new Date().toISOString()): OutreachWorkbenchSnapshot {
   const snapshot = requireSnapshot(lead);
   const draft = requireDraft(snapshot, draftId);
   const current = currentRevision(draft);
-  const updated = {
+  return replaceDraft(snapshot, {
     ...draft,
-    events: [...draft.events, event('copied', `Revision ${current.number} copied by a human for manual use.`, actor, generatedAt, current.id)],
+    events: [...draft.events, createEvent('copied', `Revision ${current.number} copied by a human for manual use.`, actor, generatedAt, current.id)],
     updatedAt: generatedAt,
     updatedBy: actor,
-  };
-  return replaceDraft(snapshot, updated, generatedAt);
+  }, generatedAt);
 }
 
 export function markDraftSentManually(
@@ -251,52 +255,53 @@ export function markDraftSentManually(
   const snapshot = requireSnapshot(lead);
   const draft = requireDraft(snapshot, draftId);
   if (draft.status !== 'approved' || !draft.approval) throw new Error('Only an approved draft can be marked as sent.');
-  const revision = draft.revisions.find((item) => item.id === input.revisionId);
-  if (!revision) throw new Error('Revision not found.');
-  if (draft.approval.revisionId !== revision.id || draft.approval.contentHash !== revision.contentHash) throw new Error('The exact approved revision must be marked as sent.');
+  const approvedRevision = draft.revisions.find((item) => item.id === input.revisionId);
+  if (!approvedRevision) throw new Error('Revision not found.');
+  if (draft.approval.revisionId !== approvedRevision.id || draft.approval.contentHash !== approvedRevision.contentHash) {
+    throw new Error('The exact approved revision must be marked as sent.');
+  }
   const sentAt = validDate(input.sentAt ?? generatedAt, 'sentAt');
   const sent: OutreachSentVersion = {
-    id: `sent-${shortHash(`${draft.id}:${revision.id}:${sentAt}:${actor}`)}`,
-    revisionId: revision.id,
-    subject: revision.subject,
-    body: revision.body,
+    id: `sent-${shortHash(`${draft.id}:${approvedRevision.id}:${sentAt}:${actor}`)}`,
+    revisionId: approvedRevision.id,
+    subject: approvedRevision.subject,
+    body: approvedRevision.body,
     channel: draft.channel,
     sentAt,
     sentBy: actor,
     destinationLabel: optionalText(input.destinationLabel, 300),
     externalReference: optionalText(input.externalReference, 1000),
-    contentHash: revision.contentHash,
+    contentHash: approvedRevision.contentHash,
     manuallyConfirmed: true,
     externalActionPerformedBySystem: false,
   };
-  const updated: OutreachDraftRecord = {
+  return replaceDraft(snapshot, {
     ...draft,
     status: 'sent_manually',
     sentVersions: [...draft.sentVersions, sent],
-    events: [...draft.events, event('marked_sent', `Approved revision ${revision.number} marked as manually sent.`, actor, generatedAt, revision.id, {sentId: sent.id, sentAt})],
+    events: [...draft.events, createEvent('marked_sent', `Approved revision ${approvedRevision.number} marked as manually sent.`, actor, generatedAt, approvedRevision.id, {sentId: sent.id, sentAt})],
     updatedAt: generatedAt,
     updatedBy: actor,
-  };
-  return replaceDraft(snapshot, updated, generatedAt);
+  }, generatedAt);
 }
 
 export function rejectOutreachDraft(lead: Lead, draftId: string, note: string, actor: string, generatedAt = new Date().toISOString()): OutreachWorkbenchSnapshot {
-  return transition(lead, draftId, 'rejected', 'rejected', requiredText(note, 'note', 1000), actor, generatedAt, {note});
+  const normalized = requiredText(note, 'note', 1000);
+  return transition(lead, draftId, 'rejected', 'rejected', normalized, actor, generatedAt, {note: normalized});
 }
 
 function fromGeneratedDraft(lead: Lead, generated: GeneratedDraft, actor: string, generatedAt: string): OutreachDraftRecord {
-  const channel = channelFromGenerated(generated);
   const draftId = `outreach-${shortHash(`${lead.id}:${generated.id}`)}`;
-  const first = revision(draftId, 1, generated.subject, generated.body, actor, generatedAt, 'generated');
+  const firstRevision = createRevision(draftId, 1, generated.subject, generated.body, actor, generatedAt, 'generated');
   return {
     id: draftId,
     leadId: lead.id,
-    channel,
-    status: generated.status === 'approved' ? 'approved' : 'working',
-    currentRevisionId: first.id,
-    revisions: [first],
+    channel: channelFromGenerated(generated),
+    status: 'working',
+    currentRevisionId: firstRevision.id,
+    revisions: [firstRevision],
     sentVersions: [],
-    events: [event('draft_created', `Generated ${generated.type} imported for human review.`, actor, generatedAt, first.id, {sourceDraftId: generated.id})],
+    events: [createEvent('draft_created', `Generated ${generated.type} imported for human review.`, actor, generatedAt, firstRevision.id, {sourceDraftId: generated.id})],
     assumptions: [...generated.metadata.assumptions],
     safeguards: unique([...generated.metadata.safeguards, 'The system does not send, submit, comment, connect or message automatically.']),
     createdAt: generatedAt,
@@ -308,23 +313,40 @@ function fromGeneratedDraft(lead: Lead, generated: GeneratedDraft, actor: string
   };
 }
 
-function transition(lead: Lead, draftId: string, status: OutreachDraftStatus, type: OutreachEventType, summary: string, actor: string, generatedAt: string, metadata?: Record<string, unknown>): OutreachWorkbenchSnapshot {
+function transition(
+  lead: Lead,
+  draftId: string,
+  status: OutreachDraftStatus,
+  type: OutreachEventType,
+  summary: string,
+  actor: string,
+  generatedAt: string,
+  metadata?: Record<string, unknown>,
+): OutreachWorkbenchSnapshot {
   const snapshot = requireSnapshot(lead);
   const draft = requireDraft(snapshot, draftId);
-  if (draft.status === 'sent_manually') throw new Error('A sent draft is immutable.');
+  assertMutable(draft);
   const current = currentRevision(draft);
-  const updated: OutreachDraftRecord = {
+  return replaceDraft(snapshot, {
     ...draft,
     status,
     approval: status === 'approved' ? draft.approval : undefined,
-    events: [...draft.events, event(type, summary, actor, generatedAt, current.id, metadata)],
+    events: [...draft.events, createEvent(type, summary, actor, generatedAt, current.id, metadata)],
     updatedAt: generatedAt,
     updatedBy: actor,
-  };
-  return replaceDraft(snapshot, updated, generatedAt);
+  }, generatedAt);
 }
 
-function revision(draftId: string, number: number, subject: string | undefined, body: string, actor: string, createdAt: string, source: OutreachRevision['source'], changeNote?: string): OutreachRevision {
+function createRevision(
+  draftId: string,
+  number: number,
+  subject: string | undefined,
+  body: string,
+  actor: string,
+  createdAt: string,
+  source: OutreachRevision['source'],
+  changeNote?: string,
+): OutreachRevision {
   const normalizedSubject = optionalText(subject, 500);
   const contentHash = hash(`${normalizedSubject ?? ''}\n${body}`);
   return {
@@ -341,7 +363,14 @@ function revision(draftId: string, number: number, subject: string | undefined, 
   };
 }
 
-function event(type: OutreachEventType, summary: string, actor: string, occurredAt: string, revisionId?: string, metadata?: Record<string, unknown>): OutreachEvent {
+function createEvent(
+  type: OutreachEventType,
+  summary: string,
+  actor: string,
+  occurredAt: string,
+  revisionId?: string,
+  metadata?: Record<string, unknown>,
+): OutreachEvent {
   return {
     id: `outreach-event-${shortHash(`${type}:${summary}:${actor}:${occurredAt}:${revisionId ?? ''}`)}`,
     type,
@@ -370,6 +399,10 @@ function requireDraft(snapshot: OutreachWorkbenchSnapshot, draftId: string): Out
   const draft = snapshot.drafts.find((item) => item.id === draftId);
   if (!draft) throw new Error(`Outreach draft not found: ${draftId}`);
   return draft;
+}
+
+function assertMutable(draft: OutreachDraftRecord): void {
+  if (draft.status === 'sent_manually') throw new Error('A sent draft is immutable. Create a new draft for further outreach.');
 }
 
 function replaceDraft(snapshot: OutreachWorkbenchSnapshot, updated: OutreachDraftRecord, generatedAt: string): OutreachWorkbenchSnapshot {
