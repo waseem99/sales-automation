@@ -1,0 +1,17 @@
+{
+  "extends": "./tsconfig.base.json",
+  "compilerOptions": {
+    "noEmit": true,
+    "rootDir": "."
+  },
+  "include": [
+    "packages/outreach-workbench/src/**/*.ts",
+    "apps/web/src/outreach-workbench-automation.ts",
+    "apps/web/src/outreach-workbench-handler.ts",
+    "apps/web/src/outreach-workbench-handler.test.ts",
+    "apps/web/src/auto-prospect-handler.ts",
+    "apps/web/src/secure-prospect-handler.ts",
+    "vercel/outreach-workbench-ui.ts",
+    "vercel/workspace-dashboard-runtime.js"
+  ]
+}
