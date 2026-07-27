@@ -83,7 +83,9 @@ assert(popup.includes("CODISTAN_GET_LINKEDIN_AUTOMATION_STATUS"));
 assert(popupHtml.includes("Run all approved searches now"));
 assert(popupHtml.includes("Run all five approved searches every 15 minutes"));
 assert(signalSource.includes("classifyOpportunity"));
-assert(adapter.includes("resolvePostUrl"));
+for (const marker of ['plausibleCard', 'nearestCardFromActor', 'annotate']) {
+  assert(adapter.includes(marker), `missing LinkedIn adapter marker: ${marker}`);
+}
 
 for (const source of [entry, background, adapter, resolver, content, popup, signalSource]) {
   assert.doesNotThrow(() => new vm.Script(source));
