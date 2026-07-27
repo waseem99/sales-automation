@@ -69,12 +69,12 @@ for (const marker of [
 ]) assert(resolver.includes(marker), `missing scroll resolver marker: ${marker}`);
 
 for (const marker of [
-  'CODISTAN_CAPTURE_VISIBLE_LINKEDIN_REQUIREMENTS',
-  'active_saved_search_name',
-  'visible_cards',
-  'buyer_intent_matches',
-  'resolved_post_links',
-  'missing_canonical_urls',
+  'CODISTAN_CAPTURE_VISIBLE_LINKEDIN_POSTS',
+  'visible_post_containers',
+  'classified_candidates',
+  'candidate_urls',
+  'containers_with_permalink_hint',
+  'missing_canonical_url',
 ]) assert(content.includes(marker), `missing LinkedIn content marker: ${marker}`);
 
 assert(popup.includes("CODISTAN_RUN_LINKEDIN_SCHEDULED_SCAN_NOW"));
