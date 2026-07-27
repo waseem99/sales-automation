@@ -26,7 +26,7 @@ for (const marker of [
   'talenttrack_capture_seen',
   'talenttrack_capture_status',
   'PRIMARY KEY (source, dedupe_key)',
-  'Existing JSONL records are imported only when the source table is empty',
+  'JSONL records are imported only when the source table is empty',
   'self.shadow.persist_records',
   'self.shadow.persist_seen',
   'self.shadow.persist_status',
