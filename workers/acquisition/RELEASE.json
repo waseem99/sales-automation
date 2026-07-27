@@ -1,0 +1,43 @@
+{
+  "schema_version": 1,
+  "product": "TalentTrack Pilot",
+  "product_version": "1.0.0",
+  "runtime_version": "0.3.0",
+  "release_status": "live_validation",
+  "state_root": "%LOCALAPPDATA%\\Codistan\\Acquisition",
+  "internal_runtime_package": "acquisition_v4",
+  "canonical_commands": {
+    "install": "START-HERE-TALENTTRACK.cmd",
+    "start": "START-TALENTTRACK.cmd",
+    "check": "CHECK-TALENTTRACK.cmd",
+    "diagnose": "DIAGNOSE-TALENTTRACK.cmd",
+    "rollback": "ROLLBACK-TALENTTRACK.cmd",
+    "review": "OPEN-TALENTTRACK-REVIEW.cmd"
+  },
+  "legacy_compatibility": {
+    "enabled": true,
+    "reason": "Existing installations and desktop shortcuts may still invoke Acquisition V4 command names.",
+    "removal_policy": "Retain until one accepted pilot upgrade and rollback drill confirms no remaining dependency."
+  },
+  "collectors": {
+    "upwork": {"port": 8765, "status": "live_validation"},
+    "linkedin_warm": {"port": 8775, "status": "live_validation"},
+    "sales_navigator_cold": {"port": 8785, "status": "live_validation"}
+  },
+  "extensions": {
+    "upwork": {"status": "live_validation"},
+    "linkedin_combined": {"version": "1.4.1", "status": "live_validation"}
+  },
+  "external_action_policy": {
+    "automatic_sending": false,
+    "upwork_submission": false,
+    "linkedin_messaging": false,
+    "sales_navigator_actions": false
+  },
+  "upgrade_guarantees": [
+    "Preserve captured records and deduplication fingerprints.",
+    "Preserve review output and Prospect Desk synchronization configuration.",
+    "Preserve the previous application package for rollback.",
+    "Do not delete paused or superseded-reference code during installation."
+  ]
+}
