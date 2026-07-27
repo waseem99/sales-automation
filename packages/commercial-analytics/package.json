@@ -12,6 +12,7 @@
     "test": "tsx src/index.test.ts"
   },
   "dependencies": {
+    "@sales-automation/bd-workflow": "workspace:*",
     "@sales-automation/evaluator": "workspace:*",
     "@sales-automation/outreach-workbench": "workspace:*",
     "@sales-automation/shared": "workspace:*",
