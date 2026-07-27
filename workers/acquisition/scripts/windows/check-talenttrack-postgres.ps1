@@ -29,7 +29,7 @@ foreach ($port in @(8765, 8775, 8785)) {
         $health += $item
         Write-Host ("Collector {0}: ready={1}, storage={2}, records={3}" -f $item.source, $item.ready, $item.storage_backend, $item.accepted)
     } catch {
-        Write-Host "Collector on port $port: unavailable"
+        Write-Host "Collector on port ${port}: unavailable"
     }
 }
 
