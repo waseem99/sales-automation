@@ -31,7 +31,8 @@ $metadataPath = "$resolvedBackup.json"
 if (Test-Path $metadataPath) {
     $metadata = Get-Content $metadataPath -Raw | ConvertFrom-Json
     $actualHash = (Get-FileHash -Path $resolvedBackup -Algorithm SHA256).Hash.ToLowerInvariant()
-    if (-not $metadata.sha256 -or [string]$metadata.sha256 -ne $actualHash) { throw "The backup SHA-256 does not match its metadata." }
+    $expectedHash = if ($metadata.sha256) { [string]$metadata.sha256 } else { "" }
+    if (-not $expectedHash -or $expectedHash -ne $actualHash) { throw "The backup SHA-256 does not match its metadata." }
 }
 
 Write-Host ""
@@ -53,12 +54,13 @@ $user = [string]$values["TALENTTRACK_POSTGRES_USER"]
 $database = [string]$values["TALENTTRACK_POSTGRES_DB"]
 $timestamp = (Get-Date).ToUniversalTime().ToString("yyyyMMdd-HHmmss")
 $containerPath = "/tmp/talenttrack-restore-$timestamp.dump"
-$containerId = (& $context.DockerPath compose --project-name $context.ProjectName --env-file $context.EnvPath -f $context.ComposePath ps -q postgres | Select-Object -First 1)
+$dockerPath = [string]$context.DockerPath
+$containerId = (& $dockerPath compose --project-name $context.ProjectName --env-file $context.EnvPath -f $context.ComposePath ps -q postgres | Select-Object -First 1)
 $containerId = [string]$containerId
 if (-not $containerId.Trim()) { throw "The TalentTrack PostgreSQL container could not be identified." }
 
 try {
-    & $context.DockerPath cp $resolvedBackup "${containerId}:$containerPath"
+    & $dockerPath cp $resolvedBackup "${containerId}:$containerPath"
     if ($LASTEXITCODE -ne 0) { throw "The selected backup could not be copied into the local PostgreSQL container." }
 
     $null = Invoke-TalentTrackCompose -Context $context -Arguments @("exec", "-T", "postgres", "dropdb", "--if-exists", "--force", "-U", $user, $database)
