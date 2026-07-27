@@ -57,7 +57,7 @@ for (const marker of [
   'Closed PRs #252 and #253 are obsolete implementations',
   'keep `%LOCALAPPDATA%\\Codistan\\Acquisition` unchanged',
   'restore the previous application package',
-  'main must not be updated merely because code checks pass',
+  '`main` must not be updated merely because code checks pass',
 ]) assert(baseline.includes(marker), `release baseline missing marker: ${marker}`);
 
 for (const marker of [
@@ -75,12 +75,12 @@ for (const marker of [
   'app-previous',
 ]) assert(installer.includes(marker), `installer missing release-baseline marker: ${marker}`);
 
-const combined = `${release}\n${readme}\n${baseline}\n${installer}`.toLowerCase();
+const combined = `${JSON.stringify(release)}\n${readme}\n${baseline}\n${installer}`.toLowerCase();
 for (const prohibited of [
-  'automatic_sending": true',
-  'upwork_submission": true',
-  'linkedin_messaging": true',
-  'sales_navigator_actions": true',
+  'automatic_sending":true',
+  'upwork_submission":true',
+  'linkedin_messaging":true',
+  'sales_navigator_actions":true',
   'delete captured records',
   'delete deduplication',
   'captcha bypass',
