@@ -53,6 +53,7 @@ for (const marker of [
 assert(!compose.includes('0.0.0.0'));
 
 for (const marker of [
+  'local-postgres.env',
   'New-TalentTrackRandomSecret',
   'Protect-TalentTrackSecretFile',
   'TALENTTRACK_POSTGRES_PASSWORD',
@@ -63,7 +64,6 @@ for (const marker of [
 ]) assert(common.includes(marker), `common PostgreSQL control missing marker: ${marker}`);
 
 for (const marker of [
-  'local-postgres.env',
   'json_shadow_enabled = $true',
   'Invoke-TalentTrackCompose',
   'Wait-TalentTrackCollectorBackend -Backend "postgresql"',
