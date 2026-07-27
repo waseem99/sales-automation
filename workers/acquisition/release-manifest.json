@@ -1,0 +1,69 @@
+{
+  "schema_version": "codistan-prospecting-os-release.v1",
+  "product": "Codistan Prospecting OS",
+  "release_version": "1.0.0-rc.1",
+  "release_status": "live_validation",
+  "built_from": "agent/outreach-workbench-foundation-233",
+  "components": {
+    "local_runtime": "0.3.0",
+    "upwork_extension": "1.1.0",
+    "linkedin_sales_navigator_extension": "1.5.0",
+    "bd_workflow": "bd-workflow.v1",
+    "outreach_workbench": "outreach-workbench.v1"
+  },
+  "collectors": [
+    {"source": "upwork", "port": 8765, "workspace": "/leads/upwork"},
+    {"source": "linkedin", "port": 8775, "workspace": "/leads/linkedin"},
+    {"source": "sales_navigator", "port": 8785, "workspace": "/leads/sales-navigator"}
+  ],
+  "active_capabilities": [
+    "bounded scheduled Upwork saved-search capture",
+    "bounded scheduled LinkedIn warm-requirement capture",
+    "registered Sales Navigator cold campaigns",
+    "local persistence, deduplication and enrichment",
+    "Prospect Desk synchronization",
+    "identity, evidence and campaign-fit stages",
+    "Upwork buyer-account intelligence",
+    "BD ownership, tasks, stages and next-best-action",
+    "human-controlled outreach review and exact sent-version logging"
+  ],
+  "live_validation_required": [
+    "real Upwork saved-search pilot",
+    "real LinkedIn warm-post pilot",
+    "licensed Sales Navigator pilot",
+    "Prospect Desk deployment and three-source synchronization",
+    "human review of commercial quality and outreach usefulness"
+  ],
+  "on_hold": [
+    {
+      "capability": "automatic external outreach",
+      "reason": "Human approval, platform-risk and commercial-quality gates are not complete.",
+      "reactivation_criteria": "Separate approved issue, legal/platform review, live conversion evidence and explicit release authorization."
+    },
+    {
+      "capability": "paid enrichment providers",
+      "reason": "Provider, credentials, permitted-use and unit-economics decisions are pending.",
+      "reactivation_criteria": "Approved provider contract, privacy review and measurable pilot need."
+    },
+    {
+      "capability": "additional acquisition sources",
+      "reason": "Current sources must prove commercial quality before expanding collection volume.",
+      "reactivation_criteria": "Existing source pilots meet acceptance thresholds and reveal a documented coverage gap."
+    }
+  ],
+  "state_contract": {
+    "root": "%LOCALAPPDATA%\\Codistan\\Acquisition",
+    "preserve": [
+      "records",
+      "seen and deduplication fingerprints",
+      "status and diagnostics",
+      "review outputs",
+      "Prospect Desk sync configuration",
+      "sync fingerprints and retry state",
+      "campaign configuration",
+      "BD and outreach history",
+      "app-previous rollback package"
+    ],
+    "external_actions_enabled": false
+  }
+}
