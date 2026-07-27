@@ -50,15 +50,20 @@ jobs:
           python -m unittest discover -s tests -p 'test_sync.py' -v
           python -m unittest discover -s tests -p 'test_windows_bundle.py' -v
           python -m unittest discover -s tests -p 'test_sales_navigator_acceptance.py' -v
-      - name: Validate acquisition source contracts
-        run: |
-          node tests/upwork_extension_contract.mjs
-          node tests/linkedin_extension_contract.mjs
-          node tests/sales_navigator_extension_contract.mjs
-          node tests/prospect_desk_bridge_contract.mjs
-          node tests/sales_navigator_bridge_contract.mjs
-          node tests/outreach_workbench_contract.mjs
-          node tests/prospecting_os_release_contract.mjs
+      - name: Validate Upwork extension contract
+        run: node tests/upwork_extension_contract.mjs
+      - name: Validate LinkedIn extension contract
+        run: node tests/linkedin_extension_contract.mjs
+      - name: Validate Sales Navigator extension contract
+        run: node tests/sales_navigator_extension_contract.mjs
+      - name: Validate Prospect Desk bridge contract
+        run: node tests/prospect_desk_bridge_contract.mjs
+      - name: Validate Sales Navigator bridge contract
+        run: node tests/sales_navigator_bridge_contract.mjs
+      - name: Validate outreach workbench contract
+        run: node tests/outreach_workbench_contract.mjs
+      - name: Validate consolidated release contract
+        run: node tests/prospecting_os_release_contract.mjs
       - name: Parse PowerShell release scripts
         shell: pwsh
         run: |
