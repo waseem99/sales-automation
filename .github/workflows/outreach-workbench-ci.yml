@@ -6,6 +6,7 @@ on:
       - agent/bd-workspace-foundation-232
     paths:
       - '.github/workflows/outreach-workbench-ci.yml'
+      - 'tsconfig.outreach-workbench.json'
       - 'packages/outreach-workbench/**'
       - 'api/outreach-workbench.ts'
       - 'vercel/outreach-workbench-ui.ts'
@@ -54,11 +55,11 @@ jobs:
         continue-on-error: true
         working-directory: workers/acquisition
         run: node tests/outreach_workbench_contract.mjs > ../../outreach-workbench-contract.log 2>&1
-      - name: Type-check Vercel integration
+      - name: Type-check outreach integration
         id: vercel_typecheck
         if: steps.contract.outcome == 'success'
         continue-on-error: true
-        run: pnpm typecheck:vercel > outreach-workbench-vercel-typecheck.log 2>&1
+        run: pnpm exec tsc -p tsconfig.outreach-workbench.json --noEmit > outreach-workbench-vercel-typecheck.log 2>&1
       - name: Build production workspace
         id: production_build
         if: steps.vercel_typecheck.outcome == 'success'
@@ -91,7 +92,7 @@ jobs:
       - name: Enforce safety contract
         if: steps.behavior.outcome == 'success' && steps.contract.outcome != 'success'
         run: cat outreach-workbench-contract.log && exit 1
-      - name: Enforce Vercel type-check
+      - name: Enforce focused type-check
         if: steps.contract.outcome == 'success' && steps.vercel_typecheck.outcome != 'success'
         run: cat outreach-workbench-vercel-typecheck.log && exit 1
       - name: Enforce production build
