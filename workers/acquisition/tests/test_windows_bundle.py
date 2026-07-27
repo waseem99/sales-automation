@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from pathlib import Path
 import unittest
 
@@ -14,15 +15,28 @@ class WindowsBundleTests(unittest.TestCase):
         configure = (root / "scripts/windows/configure-prospect-desk-sync.ps1").read_text(encoding="utf-8")
         sales_nav_pilot = (root / "scripts/windows/check-sales-navigator-pilot.ps1").read_text(encoding="utf-8")
         supervisor = (root / "acquisition_v4/supervisor.py").read_text(encoding="utf-8")
+        release = json.loads((root / "RELEASE.json").read_text(encoding="utf-8"))
+
         for marker in [
             "app-current", "app-previous", "$extensionRoot", '@("upwork", "linkedin")',
-            "Open Upwork Searches.lnk", "Open LinkedIn Lead Searches.lnk", "Open Acquisition Review.lnk",
-            "Check Sales Navigator Pilot.lnk", "Configure Prospect Desk Sync.lnk", "Codistan Acquisition V5.lnk",
+            "Start TalentTrack Pilot.lnk", "Check TalentTrack Pilot.lnk", "Open TalentTrack Review.lnk",
+            "TalentTrack Pilot Diagnostics.lnk", "Rollback TalentTrack Pilot.lnk", "Codistan TalentTrack Pilot.lnk",
+            "Check Sales Navigator Pilot.lnk", "Configure Prospect Desk Sync.lnk",
             "127.0.0.1:8765", "127.0.0.1:8775", "127.0.0.1:8785", "watchdog.pid",
             '$enabledSources = @("linkedin", "upwork", "sales_navigator")',
             "$migratedConfig", "Sync sources: LinkedIn warm, Upwork and Sales Navigator cold campaigns",
+            "RELEASE.json", "State and captured records preserved at", "$legacyShortcutNames",
+            "START-TALENTTRACK.cmd", "DIAGNOSE-TALENTTRACK.cmd", "ROLLBACK-TALENTTRACK.cmd",
         ]:
             self.assertIn(marker, installer)
+
+        for marker in [
+            "Start Acquisition V5.lnk", "Check Acquisition V5.lnk",
+            "Diagnose Acquisition V5.lnk", "Rollback Acquisition V5.lnk",
+            "Codistan Acquisition V5.lnk",
+        ]:
+            self.assertIn(marker, installer)
+
         for marker in [
             '$enabledSources = @("linkedin", "upwork", "sales_navigator")',
             "Sources: LinkedIn warm leads, Upwork jobs and Sales Navigator cold prospects",
@@ -32,12 +46,14 @@ class WindowsBundleTests(unittest.TestCase):
             "All running collectors will detect this configuration",
         ]:
             self.assertIn(marker, configure)
+
         for marker in [
             "watchdog.pid", "watchdog.lock", "watchdog.log", "runtime.log",
             "Test-CollectorHealth", "while ($true)", "Restarting in 5 seconds",
             "acquisition_v4.supervisor", "Sales Navigator collector", "8765, 8775, 8785",
         ]:
             self.assertIn(marker, starter)
+
         for marker in [
             "http://127.0.0.1:8785/health",
             "extensions\\linkedin\\manifest.json",
@@ -47,6 +63,26 @@ class WindowsBundleTests(unittest.TestCase):
             "Local review",
         ]:
             self.assertIn(marker, sales_nav_pilot)
+
+        self.assertEqual(release["product"], "TalentTrack Pilot")
+        self.assertEqual(release["product_version"], "1.0.0")
+        self.assertEqual(release["state_root"], "%LOCALAPPDATA%\\Codistan\\Acquisition")
+        self.assertEqual(release["internal_runtime_package"], "acquisition_v4")
+        self.assertTrue(release["legacy_compatibility"]["enabled"])
+        self.assertFalse(release["external_action_policy"]["automatic_sending"])
+
+        for canonical, legacy in {
+            "START-HERE-TALENTTRACK.cmd": "START-HERE-ACQUISITION-V4.cmd",
+            "START-TALENTTRACK.cmd": "START-ACQUISITION-V4.cmd",
+            "CHECK-TALENTTRACK.cmd": "CHECK-ACQUISITION-V4.cmd",
+            "DIAGNOSE-TALENTTRACK.cmd": "DIAGNOSE-ACQUISITION-V4.cmd",
+            "ROLLBACK-TALENTTRACK.cmd": "ROLLBACK-ACQUISITION-V4.cmd",
+            "OPEN-TALENTTRACK-REVIEW.cmd": "OPEN-ACQUISITION-REVIEW.cmd",
+        }.items():
+            wrapper = (root / canonical).read_text(encoding="utf-8")
+            self.assertIn(legacy, wrapper)
+            self.assertIn("exit /b %ERRORLEVEL%", wrapper)
+
         self.assertIn('"sales_navigator": 8785', supervisor)
         self.assertIn("runtime.pid", supervisor)
         self.assertIn("watchdog_pid_present", diagnostics)
