@@ -1,5 +1,9 @@
 import { createHmac, timingSafeEqual } from 'node:crypto';
 import { attachBdWorkflow, recordBdPipelineEvent } from '@sales-automation/bd-workflow';
+import {
+  assertCommerciallyReadyForApproval,
+  evaluateCommercialReadiness,
+} from '@sales-automation/commercial-readiness';
 import { loadNeonProspectRecord, persistLeadRecords, requireDatabaseUrl, type ProspectVisibility } from '@sales-automation/neon-state';
 import {
   approveOutreachDraft,
@@ -39,12 +43,14 @@ export default {
       const databaseUrl = requireDatabaseUrl(process.env.DATABASE_URL);
       const record = await loadNeonProspectRecord(databaseUrl, leadId, visibility(actor));
       if (!record) return json({error: 'Prospect not found or not visible to this account.'}, 404);
+      const commercialReadiness = evaluateCommercialReadiness(record.lead);
 
       if (request.method === 'GET') {
         return json({
           leadId,
           workflow: readOutreachWorkbench(record.lead),
           generatedDraftCount: record.latestEvaluation?.drafts.length ?? 0,
+          commercialReadiness,
           humanReviewRequired: true,
           automaticSendingEnabled: false,
         });
@@ -78,6 +84,7 @@ export default {
         } else if (action === 'changes') {
           snapshot = requestDraftChanges(record.lead, draftId, requireString(payload.note, 'note'), actor, generatedAt);
         } else if (action === 'approve') {
+          assertCommerciallyReadyForApproval(record.lead);
           snapshot = approveOutreachDraft(record.lead, draftId, optionalString(payload.note), actor, generatedAt);
         } else if (action === 'copy') {
           snapshot = recordDraftCopied(record.lead, draftId, actor, generatedAt);
@@ -116,6 +123,7 @@ export default {
         leadId,
         pipelineStatus: updated.lead.pipelineStatus,
         workflow: snapshot,
+        commercialReadiness: evaluateCommercialReadiness(updated.lead),
         humanReviewRequired: true,
         automaticSendingEnabled: false,
         externalActionPerformedBySystem: false,
@@ -177,6 +185,6 @@ function createActorToken(identifier: string, secret: string): string { const en
 function safeEqual(left: string, right: string): boolean { const a = Buffer.from(left); const b = Buffer.from(right); return a.length === b.length && timingSafeEqual(a, b); }
 function isAuthenticated(cookieHeader: string | null, secret: string): boolean { const token = parseCookies(cookieHeader ?? undefined)[SESSION_COOKIE]; const match = token?.match(/^(\d+)\.([A-Za-z0-9_-]+)$/); if (!match?.[1]) return false; const expiresAt = Number(match[1]); return Number.isFinite(expiresAt) && expiresAt > Math.floor(Date.now() / 1000) && safeEqual(token ?? '', createSessionToken(expiresAt, secret)); }
 function verifyActorToken(token: string | undefined, secret: string): string | undefined { const match = token?.match(/^([A-Za-z0-9_-]+)\.([A-Za-z0-9_-]+)$/); if (!match?.[1]) return undefined; const identifier = Buffer.from(match[1], 'base64url').toString('utf8').trim().toLowerCase(); return safeEqual(token ?? '', createActorToken(identifier, secret)) ? identifier : undefined; }
-function errorStatus(message: string): number { const value = message.toLowerCase(); if (value.includes('not found')) return 404; if (value.includes('immutable') || value.includes('approved') || value.includes('initialize')) return 409; if (value.includes('required') || value.includes('invalid') || value.includes('at most') || value.includes('valid date')) return 400; return 500; }
+function errorStatus(message: string): number { const value = message.toLowerCase(); if (value.includes('not found')) return 404; if (value.includes('immutable') || value.includes('approved') || value.includes('initialize') || value.includes('commercial approval blocked')) return 409; if (value.includes('required') || value.includes('invalid') || value.includes('at most') || value.includes('valid date')) return 400; return 500; }
 function securityHeaders(): Record<string, string> { return {'x-content-type-options': 'nosniff', 'x-frame-options': 'DENY', 'referrer-policy': 'same-origin', 'content-security-policy': "default-src 'none'; frame-ancestors 'none'; base-uri 'none'"}; }
 function json(value: unknown, status = 200, extra: Record<string, string> = {}): Response { return new Response(JSON.stringify(value), {status, headers: {...securityHeaders(), ...extra, 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store'}}); }
