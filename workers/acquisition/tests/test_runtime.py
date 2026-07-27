@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 from pathlib import Path
 import tempfile
 import unittest
@@ -8,6 +9,7 @@ from unittest.mock import patch
 
 from acquisition_v4.models import canonical_source_url
 from acquisition_v4.runtime import CollectorState
+from acquisition_v4.storage import LOCAL_DATABASE_ENV
 
 
 def upwork_payload() -> dict[str, object]:
@@ -59,6 +61,15 @@ def linkedin_payload() -> dict[str, object]:
 
 
 class RuntimeTests(unittest.TestCase):
+    def setUp(self) -> None:
+        self.database_url = os.environ.pop(LOCAL_DATABASE_ENV, None)
+
+    def tearDown(self) -> None:
+        if self.database_url is not None:
+            os.environ[LOCAL_DATABASE_ENV] = self.database_url
+        else:
+            os.environ.pop(LOCAL_DATABASE_ENV, None)
+
     def test_url_normalization_removes_tracking(self) -> None:
         self.assertEqual(
             canonical_source_url("upwork", "https://upwork.com/jobs/~abc/?foo=bar"),
@@ -79,6 +90,7 @@ class RuntimeTests(unittest.TestCase):
             first = upwork.capture(upwork_payload())
             self.assertEqual(first["accepted"], 1)
             self.assertEqual(first["duplicates"], 0)
+            self.assertEqual(first["storage_backend"], "jsonl")
 
             duplicate = upwork.capture(upwork_payload())
             self.assertEqual(duplicate["accepted"], 0)
@@ -169,12 +181,15 @@ class RuntimeTests(unittest.TestCase):
             self.assertEqual(state.seen, original_seen)
             self.assertFalse(state.store.checkpoint_path.exists())
 
-    def test_health_contains_no_capture_body(self) -> None:
+    def test_health_contains_no_capture_body_or_database_secret(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             state = CollectorState("linkedin", Path(directory), "test")
             state.capture(linkedin_payload())
             serialized = json.dumps(state.health())
             self.assertNotIn("digital marketing agency", serialized)
+            self.assertNotIn("postgresql://", serialized)
+            self.assertNotIn(LOCAL_DATABASE_ENV, serialized)
+            self.assertEqual(state.health()["storage_backend"], "jsonl")
             self.assertFalse(state.health()["external_actions_enabled"])
 
 
