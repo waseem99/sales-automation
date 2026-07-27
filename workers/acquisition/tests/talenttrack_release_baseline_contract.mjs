@@ -93,7 +93,7 @@ for (const marker of [
   'BACKUP-TALENTTRACK-POSTGRES.cmd',
   'RESTORE-TALENTTRACK-POSTGRES.cmd',
   'RESTORE TALENTTRACK',
-  'does not replace or modify Prospect Desk',
+  'does not replace or modify the PostgreSQL/Neon production boundary',
 ]) assert(postgresGuide.includes(marker), `local PostgreSQL guide missing marker: ${marker}`);
 
 for (const marker of [
