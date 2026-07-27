@@ -29,6 +29,7 @@
   "dependencies": {
     "@sales-automation/bd-workflow": "workspace:*",
     "@sales-automation/campaign-engine": "workspace:*",
+    "@sales-automation/commercial-analytics": "workspace:*",
     "@sales-automation/enrichment": "workspace:*",
     "@sales-automation/evaluator": "workspace:*",
     "@sales-automation/fixtures": "workspace:*",
