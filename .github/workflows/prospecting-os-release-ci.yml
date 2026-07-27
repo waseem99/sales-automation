@@ -1,0 +1,113 @@
+name: Prospecting OS Release CI
+
+on:
+  pull_request:
+    branches:
+      - agent/outreach-workbench-foundation-233
+    paths:
+      - '.github/workflows/prospecting-os-release-ci.yml'
+      - 'workers/acquisition/**'
+      - 'docs/prospecting-os/**'
+      - 'api/**'
+      - 'vercel/**'
+      - 'packages/**'
+      - 'apps/web/**'
+      - 'vercel.json'
+      - 'package.json'
+      - 'pnpm-lock.yaml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: prospecting-os-release-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  runtime:
+    name: Validate consolidated runtime, extensions and release contract
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: workers/acquisition
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Compile local runtime
+        run: python -m compileall -q acquisition_v4 tests
+      - name: Preserve collector, sync and Windows state regressions
+        env:
+          PYTHONPATH: .
+        run: |
+          python -m unittest discover -s tests -p 'test_runtime.py' -v
+          python -m unittest discover -s tests -p 'test_sync.py' -v
+          python -m unittest discover -s tests -p 'test_windows_bundle.py' -v
+          python -m unittest discover -s tests -p 'test_sales_navigator_acceptance.py' -v
+      - name: Validate acquisition source contracts
+        run: |
+          node tests/upwork_extension_contract.mjs
+          node tests/linkedin_extension_contract.mjs
+          node tests/sales_navigator_extension_contract.mjs
+          node tests/prospect_desk_bridge_contract.mjs
+          node tests/sales_navigator_bridge_contract.mjs
+          node tests/outreach_workbench_contract.mjs
+          node tests/prospecting_os_release_contract.mjs
+      - name: Parse PowerShell release scripts
+        shell: pwsh
+        run: |
+          $files = @(
+            'scripts/windows/install-acquisition-v4.ps1',
+            'scripts/windows/check-prospecting-os-release.ps1'
+          )
+          foreach ($file in $files) {
+            $tokens = $null
+            $errors = $null
+            [void][System.Management.Automation.Language.Parser]::ParseFile((Resolve-Path $file), [ref]$tokens, [ref]$errors)
+            if ($errors.Count -gt 0) {
+              $errors | ForEach-Object { Write-Error $_.Message }
+              exit 1
+            }
+          }
+      - name: Run three-source localhost integration
+        env:
+          PYTHONPATH: .
+        shell: bash
+        run: |
+          set -euo pipefail
+          state_root="$(mktemp -d)"
+          python -m acquisition_v4.supervisor --state-root "$state_root" >"$state_root/supervisor.log" 2>&1 &
+          runtime_pid=$!
+          trap 'kill "$runtime_pid" 2>/dev/null || true' EXIT
+          sleep 2
+          for endpoint in 8765 8775 8785; do
+            curl --fail --silent "http://127.0.0.1:${endpoint}/health" | grep '"external_actions_enabled": false'
+            curl --fail --silent "http://127.0.0.1:${endpoint}/health" | grep '"runtime_version": "0.3.0"'
+          done
+
+  production:
+    name: Validate Prospect Desk and release production build
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install pnpm
+        run: npm install --global --force @pnpm/exe@9.15.9
+      - name: Install dependencies
+        run: pnpm install --no-frozen-lockfile
+      - name: Build production workspace
+        run: pnpm build:vercel
+      - name: Re-run outreach behavior and release contracts
+        run: |
+          pnpm --filter @sales-automation/outreach-workbench test
+          node workers/acquisition/tests/outreach_workbench_contract.mjs
+          node workers/acquisition/tests/prospecting_os_release_contract.mjs
