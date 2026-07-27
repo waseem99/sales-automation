@@ -1,0 +1,217 @@
+name: Human-Controlled Outreach Workbench CI
+
+on:
+  pull_request:
+    branches:
+      - agent/bd-workspace-foundation-232
+    paths:
+      - '.github/workflows/outreach-workbench-ci.yml'
+      - 'packages/outreach-workbench/**'
+      - 'apps/web/**'
+      - 'vercel/outreach-workbench-ui.ts'
+      - 'vercel/workspace-dashboard-runtime.js'
+      - 'workers/acquisition/tests/outreach_workbench_bridge_contract.mjs'
+      - 'workers/acquisition/tests/*extension_contract.mjs'
+      - 'tsconfig.outreach-workbench.json'
+      - 'package.json'
+      - 'pnpm-lock.yaml'
+      - 'packages/**'
+      - 'vercel/**'
+      - 'scripts/**'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: outreach-workbench-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  behavior:
+    name: Test immutable drafts, secured mutations and production UI
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Install standalone pnpm
+        run: npm install --global --force @pnpm/exe@9.15.9
+
+      - name: Install workspace dependencies
+        run: pnpm install --no-frozen-lockfile
+
+      - name: Build workspace packages for behavior tests
+        id: package_build
+        continue-on-error: true
+        shell: bash
+        run: pnpm build > outreach-workbench-package-build.log 2>&1
+
+      - name: Test immutable outreach lifecycle
+        id: package_tests
+        if: steps.package_build.outcome == 'success'
+        continue-on-error: true
+        shell: bash
+        run: pnpm --filter @sales-automation/outreach-workbench test > outreach-workbench-package-tests.log 2>&1
+
+      - name: Test secured Prospect Desk mutations
+        id: handler_tests
+        if: steps.package_tests.outcome == 'success'
+        continue-on-error: true
+        shell: bash
+        run: pnpm --filter @sales-automation/web test > outreach-workbench-handler-tests.log 2>&1
+
+      - name: Validate workbench safety and UI bridge
+        id: bridge_contract
+        if: steps.handler_tests.outcome == 'success'
+        continue-on-error: true
+        working-directory: workers/acquisition
+        shell: bash
+        run: node tests/outreach_workbench_bridge_contract.mjs > ../../outreach-workbench-bridge.log 2>&1
+
+      - name: Preserve acquisition source regressions
+        id: source_regressions
+        if: steps.bridge_contract.outcome == 'success'
+        continue-on-error: true
+        working-directory: workers/acquisition
+        shell: bash
+        run: |
+          {
+            node tests/upwork_extension_contract.mjs
+            node tests/linkedin_extension_contract.mjs
+            node tests/sales_navigator_extension_contract.mjs
+          } > ../../outreach-workbench-source-regressions.log 2>&1
+
+      - name: Build full production workspace
+        id: production_build
+        if: steps.source_regressions.outcome == 'success'
+        continue-on-error: true
+        shell: bash
+        run: pnpm build:vercel > outreach-workbench-production-build.log 2>&1
+
+      - name: Preserve behavior diagnostics
+        if: always()
+        shell: bash
+        run: |
+          for file in outreach-workbench-package-build.log outreach-workbench-package-tests.log outreach-workbench-handler-tests.log outreach-workbench-bridge.log outreach-workbench-source-regressions.log outreach-workbench-production-build.log; do
+            test -f "$file" || touch "$file"
+          done
+
+      - name: Upload behavior diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: outreach-workbench-behavior
+          path: |
+            outreach-workbench-package-build.log
+            outreach-workbench-package-tests.log
+            outreach-workbench-handler-tests.log
+            outreach-workbench-bridge.log
+            outreach-workbench-source-regressions.log
+            outreach-workbench-production-build.log
+          if-no-files-found: error
+          retention-days: 3
+
+      - name: Enforce package build
+        if: steps.package_build.outcome != 'success'
+        run: |
+          cat outreach-workbench-package-build.log
+          exit 1
+
+      - name: Enforce immutable lifecycle
+        if: steps.package_build.outcome == 'success' && steps.package_tests.outcome != 'success'
+        run: |
+          cat outreach-workbench-package-tests.log
+          exit 1
+
+      - name: Enforce secured mutations
+        if: steps.package_tests.outcome == 'success' && steps.handler_tests.outcome != 'success'
+        run: |
+          cat outreach-workbench-handler-tests.log
+          exit 1
+
+      - name: Enforce safety bridge
+        if: steps.handler_tests.outcome == 'success' && steps.bridge_contract.outcome != 'success'
+        run: |
+          cat outreach-workbench-bridge.log
+          exit 1
+
+      - name: Enforce source regressions
+        if: steps.bridge_contract.outcome == 'success' && steps.source_regressions.outcome != 'success'
+        run: |
+          cat outreach-workbench-source-regressions.log
+          exit 1
+
+      - name: Enforce production build
+        if: steps.source_regressions.outcome == 'success' && steps.production_build.outcome != 'success'
+        run: |
+          tail -n 500 outreach-workbench-production-build.log
+          exit 1
+
+  typecheck:
+    name: Type-check outreach workbench integration
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Install standalone pnpm
+        run: npm install --global --force @pnpm/exe@9.15.9
+
+      - name: Install workspace dependencies
+        run: pnpm install --no-frozen-lockfile
+
+      - name: Build all workspace packages
+        id: workspace_build
+        continue-on-error: true
+        shell: bash
+        run: pnpm build > outreach-workbench-full-build.log 2>&1
+
+      - name: Type-check outreach workbench runtime
+        id: focused_typecheck
+        if: steps.workspace_build.outcome == 'success'
+        continue-on-error: true
+        shell: bash
+        run: pnpm exec tsc -p tsconfig.outreach-workbench.json --noEmit > outreach-workbench-typecheck.log 2>&1
+
+      - name: Preserve typecheck diagnostics
+        if: always()
+        shell: bash
+        run: |
+          test -f outreach-workbench-full-build.log || touch outreach-workbench-full-build.log
+          test -f outreach-workbench-typecheck.log || touch outreach-workbench-typecheck.log
+
+      - name: Upload typecheck diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: outreach-workbench-typecheck
+          path: |
+            outreach-workbench-full-build.log
+            outreach-workbench-typecheck.log
+          if-no-files-found: error
+          retention-days: 3
+
+      - name: Enforce workspace build
+        if: steps.workspace_build.outcome != 'success'
+        run: |
+          cat outreach-workbench-full-build.log
+          exit 1
+
+      - name: Enforce focused typecheck
+        if: steps.workspace_build.outcome == 'success' && steps.focused_typecheck.outcome != 'success'
+        run: |
+          cat outreach-workbench-typecheck.log
+          exit 1
