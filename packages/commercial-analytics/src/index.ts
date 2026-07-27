@@ -199,7 +199,6 @@ const ACCEPTED_STATUSES = new Set<PipelineStatus>([
   'approved_to_contact', 'draft_ready', 'sent_manually', 'replied', 'meeting_booked', 'proposal_sent', 'won',
 ]);
 const TERMINAL_STATUSES = new Set<PipelineStatus>(['won', 'lost', 'rejected', 'archived']);
-const OUTCOME_STATUSES = new Set<PipelineStatus>(['replied', 'meeting_booked', 'proposal_sent', 'won', 'lost', 'rejected']);
 const DAY_MS = 24 * 60 * 60 * 1000;
 
 export function buildCommercialAnalytics(input: BuildCommercialAnalyticsInput): CommercialAnalyticsReport {
@@ -225,15 +224,16 @@ export function buildCommercialAnalytics(input: BuildCommercialAnalyticsInput): 
 
 export function recordCommercialValue(lead: Lead, input: RecordCommercialValueInput): Lead {
   const enteredAt = validIso(input.enteredAt) ?? new Date().toISOString();
+  const kind = requireValueKind(input.kind);
   const amount = finiteNonNegative(input.amount, 'amount');
   const currency = normalizeCurrency(input.currency);
-  if (input.kind === 'won_revenue' && lead.pipelineStatus !== 'won' && lead.outcomeStatus !== 'won') {
+  if (kind === 'won_revenue' && lead.pipelineStatus !== 'won' && lead.outcomeStatus !== 'won') {
     throw new Error('Won revenue may be recorded only after the prospect is marked won.');
   }
   const entry: CommercialValueEntry = {
-    id: `commercial-value-${shortHash(`${lead.id}:${input.kind}:${amount}:${currency}:${enteredAt}:${input.actor}`)}`,
+    id: `commercial-value-${shortHash(`${lead.id}:${kind}:${amount}:${currency}:${enteredAt}:${input.actor}`)}`,
     leadId: lead.id,
-    kind: input.kind,
+    kind,
     amount,
     currency,
     note: requiredText(input.note, 'note', 1200),
@@ -637,6 +637,7 @@ function positiveInteger(value: number, field: string): number { if (!Number.isI
 function boundedInteger(value: number | undefined, fallback: number, minimum: number, maximum: number): number { return Number.isInteger(value) ? Math.min(maximum, Math.max(minimum, Number(value))) : fallback; }
 function requireDimension(value: string): CommercialDimension { if (!['source','campaign','channel','service','owner'].includes(value)) throw new Error('dimension is invalid.'); return value as CommercialDimension; }
 function requireDecision(value: string): CalibrationDecisionValue { if (!['keep','change','stop'].includes(value)) throw new Error('decision is invalid.'); return value as CalibrationDecisionValue; }
+function requireValueKind(value: string): CommercialValueKind { if (!['pipeline','proposal','won_revenue'].includes(value)) throw new Error('kind is invalid.'); return value as CommercialValueKind; }
 function isCommercialValueEntry(value: unknown): value is CommercialValueEntry {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
   const entry = value as Partial<CommercialValueEntry>;
