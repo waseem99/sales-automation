@@ -21,6 +21,10 @@
     "./operational-telemetry": {
       "types": "./dist/operational-telemetry.d.ts",
       "default": "./dist/operational-telemetry.js"
+    },
+    "./commercial-calibration": {
+      "types": "./dist/commercial-calibration.d.ts",
+      "default": "./dist/commercial-calibration.js"
     }
   },
   "scripts": {
@@ -31,6 +35,7 @@
   },
   "dependencies": {
     "@neondatabase/serverless": "^1.0.2",
+    "@sales-automation/commercial-analytics": "workspace:*",
     "@sales-automation/prospect-discovery": "workspace:*",
     "@sales-automation/shared": "workspace:*",
     "@sales-automation/storage": "workspace:*"
