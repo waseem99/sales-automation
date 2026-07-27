@@ -6,7 +6,7 @@ Internal opportunity-intelligence, tender-discovery and business-development wor
 
 The production application is the **Prospect Desk**, operated with the Windows-first **TalentTrack Pilot** acquisition runtime. Together they discover public prospects and formal tenders, retain evidence, qualify opportunities, assign owners, recommend compliant next actions, prepare human-reviewed outreach, track manually completed contact actions, and measure commercial outcomes.
 
-The authoritative TalentTrack release identity, component states, installer vocabulary and rollback policy are documented in [`docs/TALENTTRACK_RELEASE_BASELINE.md`](docs/TALENTTRACK_RELEASE_BASELINE.md).
+The authoritative TalentTrack release identity, component states, installer vocabulary and rollback policy are documented in [`docs/TALENTTRACK_RELEASE_BASELINE.md`](docs/TALENTTRACK_RELEASE_BASELINE.md). Optional local PostgreSQL operations are documented in [`docs/TALENTTRACK_LOCAL_POSTGRES.md`](docs/TALENTTRACK_LOCAL_POSTGRES.md).
 
 ## Production routes
 
@@ -40,6 +40,7 @@ The old Local MVP Lead Desk and duplicate API runtime have been retired.
 - Strict source, procurement-intent, language and service validation.
 - Scoring, qualification, owner assignment and recommended contact channel.
 - Scoped PostgreSQL-backed dashboard access, filtering, pagination and metrics.
+- Optional local PostgreSQL collector storage with one-time JSON import and JSON rollback shadow.
 - BD tasks, follow-ups and evidence-grounded next-best-action.
 - Exact outreach revision approval and immutable manual-send history.
 - Qualification audit, portfolio proof and inbound-reply guidance.
@@ -59,6 +60,7 @@ TalentTrack Pilot keeps every external proposal, message, InMail, connection req
 - Node.js 22.
 - Vercel serverless functions and Cron Jobs.
 - PostgreSQL through the current Neon production boundary.
+- Optional loopback-only PostgreSQL 16 container for local collector state.
 - Server-rendered internal dashboard.
 - Normal logged-in Chrome extensions for approved source capture.
 
@@ -103,6 +105,8 @@ State and captured records remain under:
 
 Use `CHECK-TALENTTRACK.cmd`, `DIAGNOSE-TALENTTRACK.cmd` and `ROLLBACK-TALENTTRACK.cmd` for health, safe diagnostics and state-preserving rollback.
 
+JSONL remains the default local collector store. After Docker Desktop is installed, `ENABLE-TALENTTRACK-POSTGRES.cmd` can make local PostgreSQL authoritative while preserving a continuously updated JSON rollback shadow. Use the dedicated Check, Backup and Restore commands rather than deleting the container volume or secret file.
+
 ## Production configuration
 
 Use `.env.example` as the authoritative list of variable names. Real values belong in deployment or local secret stores and must never be committed.
@@ -127,6 +131,7 @@ OUTREACH_DRY_RUN=true
 ## Documentation
 
 - [`docs/TALENTTRACK_RELEASE_BASELINE.md`](docs/TALENTTRACK_RELEASE_BASELINE.md)
+- [`docs/TALENTTRACK_LOCAL_POSTGRES.md`](docs/TALENTTRACK_LOCAL_POSTGRES.md)
 - [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md)
 - [`docs/PROTECTED_ROUTE_CONTRACT.md`](docs/PROTECTED_ROUTE_CONTRACT.md)
 - [`docs/DEVELOPER_HANDOFF.md`](docs/DEVELOPER_HANDOFF.md)
