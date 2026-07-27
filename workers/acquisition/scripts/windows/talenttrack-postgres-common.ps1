@@ -41,7 +41,13 @@ function Read-TalentTrackPostgresEnv {
     foreach ($name in @("TALENTTRACK_POSTGRES_USER", "TALENTTRACK_POSTGRES_PASSWORD", "TALENTTRACK_POSTGRES_DB", "TALENTTRACK_POSTGRES_PORT")) {
         if (-not $values.ContainsKey($name) -or -not [string]$values[$name]) { throw "The TalentTrack PostgreSQL configuration is incomplete." }
     }
+    foreach ($name in @("TALENTTRACK_POSTGRES_USER", "TALENTTRACK_POSTGRES_DB")) {
+        if ([string]$values[$name] -notmatch '^[A-Za-z][A-Za-z0-9_]{0,62}$') { throw "The TalentTrack PostgreSQL user or database name is invalid." }
+    }
+    if ([string]$values["TALENTTRACK_POSTGRES_PASSWORD"] -notmatch '^[A-Za-z0-9]{32,128}$') { throw "The TalentTrack PostgreSQL password configuration is invalid." }
     if ([string]$values["TALENTTRACK_POSTGRES_PORT"] -notmatch '^\d{2,5}$') { throw "The TalentTrack PostgreSQL port is invalid." }
+    $port = [int]$values["TALENTTRACK_POSTGRES_PORT"]
+    if ($port -lt 1024 -or $port -gt 65535) { throw "The TalentTrack PostgreSQL port is outside the supported range." }
     return $values
 }
 
