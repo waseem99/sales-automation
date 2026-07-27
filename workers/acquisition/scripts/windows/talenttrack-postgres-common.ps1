@@ -39,14 +39,18 @@ function Read-TalentTrackPostgresEnv {
         $values[$matches[1]] = $matches[2]
     }
     foreach ($name in @("TALENTTRACK_POSTGRES_USER", "TALENTTRACK_POSTGRES_PASSWORD", "TALENTTRACK_POSTGRES_DB", "TALENTTRACK_POSTGRES_PORT")) {
-        if (-not $values.ContainsKey($name) -or -not [string]$values[$name]) { throw "The TalentTrack PostgreSQL configuration is incomplete." }
+        $configuredValue = if ($values.ContainsKey($name)) { [string]$values[$name] } else { "" }
+        if (-not $configuredValue) { throw "The TalentTrack PostgreSQL configuration is incomplete." }
     }
     foreach ($name in @("TALENTTRACK_POSTGRES_USER", "TALENTTRACK_POSTGRES_DB")) {
-        if ([string]$values[$name] -notmatch '^[A-Za-z][A-Za-z0-9_]{0,62}$') { throw "The TalentTrack PostgreSQL user or database name is invalid." }
+        $configuredValue = [string]$values[$name]
+        if ($configuredValue -notmatch '^[A-Za-z][A-Za-z0-9_]{0,62}$') { throw "The TalentTrack PostgreSQL user or database name is invalid." }
     }
-    if ([string]$values["TALENTTRACK_POSTGRES_PASSWORD"] -notmatch '^[A-Za-z0-9]{32,128}$') { throw "The TalentTrack PostgreSQL password configuration is invalid." }
-    if ([string]$values["TALENTTRACK_POSTGRES_PORT"] -notmatch '^\d{2,5}$') { throw "The TalentTrack PostgreSQL port is invalid." }
-    $port = [int]$values["TALENTTRACK_POSTGRES_PORT"]
+    $configuredPassword = [string]$values["TALENTTRACK_POSTGRES_PASSWORD"]
+    if ($configuredPassword -notmatch '^[A-Za-z0-9]{32,128}$') { throw "The TalentTrack PostgreSQL password configuration is invalid." }
+    $configuredPort = [string]$values["TALENTTRACK_POSTGRES_PORT"]
+    if ($configuredPort -notmatch '^\d{2,5}$') { throw "The TalentTrack PostgreSQL port is invalid." }
+    $port = [int]$configuredPort
     if ($port -lt 1024 -or $port -gt 65535) { throw "The TalentTrack PostgreSQL port is outside the supported range." }
     return $values
 }
@@ -72,15 +76,17 @@ function Protect-TalentTrackSecretFile {
     $icacls = Get-Command icacls.exe -ErrorAction SilentlyContinue
     if (-not $icacls) { throw "Windows ACL tooling is unavailable; the PostgreSQL secret file was not accepted." }
     $principal = if ($env:USERDOMAIN) { "$env:USERDOMAIN\$env:USERNAME" } else { $env:USERNAME }
-    & $icacls.Source $Path /inheritance:r /grant:r "${principal}:(F)" | Out-Null
+    $icaclsPath = [string]$icacls.Source
+    & $icaclsPath $Path /inheritance:r /grant:r "${principal}:(F)" | Out-Null
     if ($LASTEXITCODE -ne 0) { throw "The PostgreSQL secret file could not be restricted to the current Windows user." }
 }
 
 function Require-TalentTrackDocker {
     param($Context)
 
-    if (-not $Context.DockerPath) { throw "Docker Desktop with Docker Compose is required for local PostgreSQL." }
-    & $Context.DockerPath compose version | Out-Null
+    $dockerPath = [string]$Context.DockerPath
+    if (-not $dockerPath) { throw "Docker Desktop with Docker Compose is required for local PostgreSQL." }
+    & $dockerPath compose version | Out-Null
     if ($LASTEXITCODE -ne 0) { throw "Docker Compose is unavailable. Start or update Docker Desktop and retry." }
     if (-not (Test-Path $Context.ComposePath)) { throw "The TalentTrack PostgreSQL Compose file is missing." }
 }
@@ -93,7 +99,8 @@ function Invoke-TalentTrackCompose {
     )
 
     Require-TalentTrackDocker $Context
-    $output = & $Context.DockerPath compose --project-name $Context.ProjectName --env-file $Context.EnvPath -f $Context.ComposePath @Arguments 2>&1
+    $dockerPath = [string]$Context.DockerPath
+    $output = & $dockerPath compose --project-name $Context.ProjectName --env-file $Context.EnvPath -f $Context.ComposePath @Arguments 2>&1
     $code = $LASTEXITCODE
     foreach ($line in $output) { Write-Host ([string]$line) }
     if ($code -ne 0 -and -not $AllowFailure) { throw "The TalentTrack PostgreSQL Docker command failed with exit code $code." }
@@ -103,11 +110,14 @@ function Invoke-TalentTrackCompose {
 function Get-TalentTrackLocalDatabaseUrl {
     param([hashtable]$Values)
 
-    $user = [uri]::EscapeDataString([string]$Values["TALENTTRACK_POSTGRES_USER"])
-    $password = [uri]::EscapeDataString([string]$Values["TALENTTRACK_POSTGRES_PASSWORD"])
-    $database = [uri]::EscapeDataString([string]$Values["TALENTTRACK_POSTGRES_DB"])
-    $port = [string]$Values["TALENTTRACK_POSTGRES_PORT"]
-    return "postgresql://${user}:${password}@127.0.0.1:${port}/${database}"
+    $configuredUser = [string]$Values["TALENTTRACK_POSTGRES_USER"]
+    $configuredPassword = [string]$Values["TALENTTRACK_POSTGRES_PASSWORD"]
+    $configuredDatabase = [string]$Values["TALENTTRACK_POSTGRES_DB"]
+    $configuredPort = [string]$Values["TALENTTRACK_POSTGRES_PORT"]
+    $user = [uri]::EscapeDataString($configuredUser)
+    $password = [uri]::EscapeDataString($configuredPassword)
+    $database = [uri]::EscapeDataString($configuredDatabase)
+    return "postgresql://${user}:${password}@127.0.0.1:${configuredPort}/${database}"
 }
 
 function Stop-TalentTrackRuntime {
