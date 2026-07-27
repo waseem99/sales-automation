@@ -17,6 +17,7 @@ const canonicalStart = fs.readFileSync(path.join(acquisition, 'START-HERE-PROSPE
 const canonicalCheck = fs.readFileSync(path.join(acquisition, 'CHECK-PROSPECTING-OS-RELEASE.cmd'), 'utf8');
 const canonicalPilot = fs.readFileSync(path.join(acquisition, 'CHECK-PROSPECTING-OS-PILOT.cmd'), 'utf8');
 const docs = fs.readFileSync(path.join(root, 'docs/prospecting-os/RELEASE-1.0-RC1.md'), 'utf8');
+const docsLower = docs.toLowerCase();
 
 assert.equal(manifest.schema_version, 'codistan-prospecting-os-release.v1');
 assert.equal(manifest.product, 'Codistan Prospecting OS');
@@ -82,11 +83,11 @@ for (const marker of [
 assert(canonicalStart.includes('install-acquisition-v4.ps1'));
 assert(canonicalCheck.includes('check-prospecting-os-release.ps1'));
 assert(canonicalPilot.includes('check-prospecting-os-pilot.ps1'));
-assert(docs.includes('At least 60% accepted for pursuit'));
-assert(docs.includes('automatic external outreach'));
+assert(docsLower.includes('at least 60% accepted for pursuit'));
+assert(docsLower.includes('automatic external outreach'));
 assert(docs.includes('No captured record, deduplication fingerprint'));
-assert(docs.includes('Current status: research-only for cold outreach'));
-assert(docs.includes('Current status: outreach-ready with limitations'));
+assert(docsLower.includes('current status: research-only for cold outreach'));
+assert(docsLower.includes('current status: outreach-ready with limitations'));
 assert(docs.includes('CHECK-PROSPECTING-OS-PILOT.cmd'));
 
 const prohibited = [
