@@ -28,7 +28,7 @@ jobs:
   runtime:
     name: Validate consolidated runtime, extensions and release contract
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 25
     defaults:
       run:
         working-directory: workers/acquisition
@@ -50,6 +50,7 @@ jobs:
           python -m unittest discover -s tests -p 'test_sync.py' -v
           python -m unittest discover -s tests -p 'test_windows_bundle.py' -v
           python -m unittest discover -s tests -p 'test_sales_navigator_acceptance.py' -v
+          python -m unittest discover -s tests -p 'test_prospecting_os_acceptance.py' -v
       - name: Validate Upwork extension contract
         run: node tests/upwork_extension_contract.mjs
       - name: Validate LinkedIn extension contract
@@ -60,7 +61,7 @@ jobs:
         run: node tests/prospect_desk_bridge_contract.mjs
       - name: Validate Sales Navigator bridge contract
         run: node tests/sales_navigator_bridge_contract.mjs
-      - name: Validate outreach workbench contract
+      - name: Validate outreach and commercial readiness contract
         run: node tests/outreach_workbench_contract.mjs
       - name: Validate consolidated release contract
         run: node tests/prospecting_os_release_contract.mjs
@@ -69,7 +70,8 @@ jobs:
         run: |
           $files = @(
             'scripts/windows/install-acquisition-v4.ps1',
-            'scripts/windows/check-prospecting-os-release.ps1'
+            'scripts/windows/check-prospecting-os-release.ps1',
+            'scripts/windows/check-prospecting-os-pilot.ps1'
           )
           foreach ($file in $files) {
             $tokens = $null
@@ -111,6 +113,8 @@ jobs:
         run: pnpm install --no-frozen-lockfile
       - name: Build production workspace
         run: pnpm build:vercel
+      - name: Test commercial readiness
+        run: pnpm --filter @sales-automation/commercial-readiness test
       - name: Re-run outreach behavior
         run: pnpm --filter @sales-automation/outreach-workbench test
       - name: Re-run release contracts from acquisition workspace
