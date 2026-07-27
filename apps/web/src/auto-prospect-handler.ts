@@ -1,5 +1,9 @@
 import { auditMissingFirstOutreachGuidance } from './engagement-automation.js';
 import {
+  handleOutreachWorkbenchRequest,
+  isOutreachWorkbenchPath,
+} from './outreach-workbench-handler.js';
+import {
   handleProspectDashboardRequest as handleSecureProspectDashboardRequest,
   type ProspectDashboardContext,
   type ProspectDashboardRequest,
@@ -33,6 +37,11 @@ const NON_AUDIT_PATHS = new Set([
  * It silently backfills engagement intelligence for records already loaded in
  * the caller's authorized scope. The caller is responsible for persisting any
  * resulting record changes.
+ *
+ * Outreach workbench mutations intentionally run only after the secure handler
+ * has authenticated the request and authorized access to the selected record.
+ * The base handler returns 404 for these additive routes, then this wrapper
+ * executes the internal-only mutation. No external action is performed.
  */
 export async function handleProspectDashboardRequest(
   request: ProspectDashboardRequest,
@@ -41,6 +50,21 @@ export async function handleProspectDashboardRequest(
   const response = await handleSecureProspectDashboardRequest(request, context);
   const method = request.method.toUpperCase();
   const pathname = trimTrailingSlash(new URL(request.url, 'http://localhost').pathname) || '/';
+
+  if (response.status === 404 && method === 'POST' && isOutreachWorkbenchPath(pathname)) {
+    const access = context.access;
+    return handleOutreachWorkbenchRequest({
+      method,
+      url: request.url,
+      body: request.body,
+    }, {
+      repository: context.repository,
+      portfolioItems: context.portfolioItems,
+      actor: access?.identifier ?? context.actor ?? 'admin',
+      canManagerApprove: access ? access.canAssignOwners || access.canRunGlobalOperations : true,
+      now: context.now,
+    });
+  }
 
   if (response.status >= 400 || NON_AUDIT_PATHS.has(pathname)) return response;
 
