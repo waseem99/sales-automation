@@ -87,10 +87,11 @@ function Invoke-TalentTrackCompose {
     )
 
     Require-TalentTrackDocker $Context
-    & $Context.DockerPath compose --project-name $Context.ProjectName --env-file $Context.EnvPath -f $Context.ComposePath @Arguments
+    $output = & $Context.DockerPath compose --project-name $Context.ProjectName --env-file $Context.EnvPath -f $Context.ComposePath @Arguments 2>&1
     $code = $LASTEXITCODE
+    foreach ($line in $output) { Write-Host ([string]$line) }
     if ($code -ne 0 -and -not $AllowFailure) { throw "The TalentTrack PostgreSQL Docker command failed with exit code $code." }
-    return $code
+    return [int]$code
 }
 
 function Get-TalentTrackLocalDatabaseUrl {
