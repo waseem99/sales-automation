@@ -6,8 +6,12 @@ param(
 $ErrorActionPreference = "Stop"
 $sourceRoot = Join-Path $InstallRoot "workers\acquisition"
 if (-not (Test-Path (Join-Path $sourceRoot "acquisition_v4\supervisor.py"))) {
-    throw "The Acquisition source package was not found."
+    throw "The Prospecting OS source package was not found."
 }
+if (-not (Test-Path (Join-Path $sourceRoot "release-manifest.json"))) {
+    throw "The Prospecting OS release manifest was not found."
+}
+$release = Get-Content (Join-Path $sourceRoot "release-manifest.json") -Raw | ConvertFrom-Json
 
 function Find-Python312 {
     $py = Get-Command py.exe -ErrorAction SilentlyContinue
@@ -32,7 +36,7 @@ if (-not $pythonCommand) {
     if ($LASTEXITCODE -ne 0) { throw "Python 3.12 installation failed." }
     $env:Path = [Environment]::GetEnvironmentVariable("Path", "User") + ";" + [Environment]::GetEnvironmentVariable("Path", "Machine")
     $pythonCommand = Find-Python312
-    if (-not $pythonCommand) { throw "Python 3.12 was installed but is not available yet. Sign out and rerun START-HERE." }
+    if (-not $pythonCommand) { throw "Python 3.12 was installed but is not available yet. Sign out and rerun START-HERE-PROSPECTING-OS." }
 }
 
 New-Item -ItemType Directory -Force -Path $StateRoot | Out-Null
@@ -115,20 +119,24 @@ $commands = Join-Path $appCurrent "workers\acquisition"
 $desktop = [Environment]::GetFolderPath("Desktop")
 $startup = [Environment]::GetFolderPath("Startup")
 $shortcutMap = @{
-    "Start Acquisition V5.lnk" = "START-ACQUISITION-V4.cmd"
-    "Check Acquisition V5.lnk" = "CHECK-ACQUISITION-V4.cmd"
-    "Check Sales Navigator Pilot.lnk" = "CHECK-SALES-NAVIGATOR-PILOT.cmd"
+    "Start Prospecting OS.lnk" = "START-ACQUISITION-V4.cmd"
+    "Check Prospecting OS Release.lnk" = "CHECK-PROSPECTING-OS-RELEASE.cmd"
+    "Diagnose Prospecting OS.lnk" = "DIAGNOSE-ACQUISITION-V4.cmd"
+    "Rollback Prospecting OS.lnk" = "ROLLBACK-ACQUISITION-V4.cmd"
     "Configure Prospect Desk Sync.lnk" = "CONFIGURE-PROSPECT-DESK-SYNC.cmd"
     "Open Upwork Searches.lnk" = "OPEN-UPWORK-SEARCHES.cmd"
     "Open LinkedIn Lead Searches.lnk" = "OPEN-LINKEDIN-LEAD-SEARCHES.cmd"
     "Open Acquisition Review.lnk" = "OPEN-ACQUISITION-REVIEW.cmd"
+    "Check Sales Navigator Pilot.lnk" = "CHECK-SALES-NAVIGATOR-PILOT.cmd"
+    "Start Acquisition V5.lnk" = "START-ACQUISITION-V4.cmd"
+    "Check Acquisition V5.lnk" = "CHECK-ACQUISITION-V4.cmd"
     "Diagnose Acquisition V5.lnk" = "DIAGNOSE-ACQUISITION-V4.cmd"
     "Rollback Acquisition V5.lnk" = "ROLLBACK-ACQUISITION-V4.cmd"
 }
 foreach ($entry in $shortcutMap.GetEnumerator()) {
     New-Shortcut (Join-Path $desktop $entry.Key) (Join-Path $commands $entry.Value) $commands
 }
-New-Shortcut (Join-Path $startup "Codistan Acquisition V5.lnk") (Join-Path $commands "START-ACQUISITION-V4.cmd") $commands
+New-Shortcut (Join-Path $startup "Codistan Prospecting OS.lnk") (Join-Path $commands "START-ACQUISITION-V4.cmd") $commands
 
 Start-Process -FilePath (Join-Path $commands "START-ACQUISITION-V4.cmd") -WindowStyle Minimized
 $healthy = $false
@@ -138,7 +146,9 @@ for ($attempt = 0; $attempt -lt 25; $attempt++) {
         $upwork = Invoke-RestMethod -Uri "http://127.0.0.1:8765/health" -TimeoutSec 2
         $linkedin = Invoke-RestMethod -Uri "http://127.0.0.1:8775/health" -TimeoutSec 2
         $salesNavigator = Invoke-RestMethod -Uri "http://127.0.0.1:8785/health" -TimeoutSec 2
-        if ($upwork.ready -and $linkedin.ready -and $salesNavigator.ready) { $healthy = $true; break }
+        $versionMatches = ([string]$upwork.runtime_version -eq [string]$release.components.local_runtime) -and ([string]$linkedin.runtime_version -eq [string]$release.components.local_runtime) -and ([string]$salesNavigator.runtime_version -eq [string]$release.components.local_runtime)
+        $safe = ($upwork.external_actions_enabled -eq $false) -and ($linkedin.external_actions_enabled -eq $false) -and ($salesNavigator.external_actions_enabled -eq $false)
+        if ($upwork.ready -and $linkedin.ready -and $salesNavigator.ready -and $versionMatches -and $safe) { $healthy = $true; break }
     } catch {}
 }
 if (-not $healthy) {
@@ -146,15 +156,18 @@ if (-not $healthy) {
         if (Test-Path $appCurrent) { Remove-Item $appCurrent -Recurse -Force }
         Move-Item $appPrevious $appCurrent
     }
-    throw "The installed collectors did not become healthy. The previous application folder was restored where available."
+    throw "The installed collectors did not satisfy the Prospecting OS release contract. The previous application folder was restored where available."
 }
 
 Write-Host ""
-Write-Host "Acquisition V5 installed and healthy."
+Write-Host "$($release.product) $($release.release_version) installed and healthy."
+Write-Host "Runtime: $($release.components.local_runtime)"
+Write-Host "Upwork extension: $($release.components.upwork_extension)"
+Write-Host "LinkedIn/Sales Navigator extension: $($release.components.linkedin_sales_navigator_extension)"
 Write-Host "Extensions: $extensionRoot"
+Write-Host "State preserved at: $StateRoot"
 Write-Host "Prospect Desk sync config: $configPath"
-Write-Host "Sync sources: LinkedIn warm, Upwork and Sales Navigator cold campaigns"
+Write-Host "Sync sources: LinkedIn warm, Upwork warm and Sales Navigator cold campaigns"
+Write-Host "External actions remain disabled."
 Write-Host "Load or reload both unpacked extensions in chrome://extensions/."
-Write-Host "Open the LinkedIn extension popup, then open Sales Navigator campaigns to register an approved lead search."
-Write-Host "Use Check Sales Navigator Pilot after each live run to measure the acceptance gate."
-Write-Host "Use Configure Prospect Desk Sync once the production endpoint and token are ready."
+Write-Host "Run Check Prospecting OS Release before the commercial pilot."
