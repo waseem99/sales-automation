@@ -1,5 +1,5 @@
 {
-  "schema_version": 1,
+  "schema_version": 2,
   "product": "TalentTrack Pilot",
   "product_version": "1.0.0",
   "runtime_version": "0.3.1",
@@ -10,6 +10,7 @@
     "install": "START-HERE-TALENTTRACK.cmd",
     "start": "START-TALENTTRACK.cmd",
     "check": "CHECK-TALENTTRACK.cmd",
+    "check_full_pilot": "CHECK-TALENTTRACK-PILOT.cmd",
     "diagnose": "DIAGNOSE-TALENTTRACK.cmd",
     "rollback": "ROLLBACK-TALENTTRACK.cmd",
     "review": "OPEN-TALENTTRACK-REVIEW.cmd",
@@ -32,7 +33,8 @@
   },
   "legacy_compatibility": {
     "enabled": true,
-    "reason": "Existing installations and desktop shortcuts may still invoke Acquisition V4 command names.",
+    "identifiers": ["Acquisition V4", "Acquisition V5", "Prospecting OS"],
+    "reason": "Existing installations, internal modules and desktop shortcuts may still invoke historical names.",
     "removal_policy": "Retain until one accepted pilot upgrade and rollback drill confirms no remaining dependency."
   },
   "collectors": {
@@ -44,15 +46,49 @@
     "upwork": {"status": "live_validation"},
     "linkedin_combined": {"version": "1.4.1", "status": "live_validation"}
   },
+  "commercial_readiness": {
+    "version": "commercial-readiness.v1",
+    "server_enforced_before_approval": true,
+    "fintech_operations_platform": "research_only",
+    "managed_software_ai_delivery": "outreach_ready_limited",
+    "unknown_or_unmapped_cold_offers": "blocked"
+  },
+  "pilot_acceptance": {
+    "report": "%LOCALAPPDATA%\\Codistan\\Acquisition\\review\\talenttrack-pilot-acceptance.json",
+    "human_review_input": "%LOCALAPPDATA%\\Codistan\\Acquisition\\review\\commercial-review.json",
+    "sources": {
+      "upwork": {"minimum_records": 100, "minimum_priority_a_b": 15},
+      "linkedin_warm": {"minimum_records": 50, "minimum_priority_a_b": 10},
+      "sales_navigator": {"minimum_records": 75, "minimum_priority_a_b": 15}
+    },
+    "minimum_human_reviews": 15,
+    "minimum_reviews_per_source": 3,
+    "minimum_acceptance_ratio": 0.6,
+    "external_action_evidence_allowed": false
+  },
+  "pilot_operations": {
+    "priority_review_queue": true,
+    "pilot_blocker_queue": true,
+    "warm_and_cold_linkedin_separated": true,
+    "required_pursuit_fields": ["owner", "next_action", "due_date", "permitted_channel", "relevant_proof"]
+  },
   "external_action_policy": {
     "automatic_sending": false,
     "upwork_submission": false,
     "linkedin_messaging": false,
     "sales_navigator_actions": false
   },
+  "merge_policy": {
+    "main_requires_live_acceptance": true,
+    "consolidated_pull_request_only": true,
+    "requires_repository_ci": true,
+    "requires_combined_pilot_gate": true,
+    "requires_state_preserving_rollback": true
+  },
   "upgrade_guarantees": [
     "Preserve captured records and deduplication fingerprints.",
     "Preserve review output and Prospect Desk synchronization configuration.",
+    "Preserve outreach revisions, approvals and exact sent-version history.",
     "Preserve the previous application package for rollback.",
     "Preserve the local PostgreSQL volume, secret configuration, backups and JSON rollback shadow.",
     "Do not delete paused or superseded-reference code during installation."
