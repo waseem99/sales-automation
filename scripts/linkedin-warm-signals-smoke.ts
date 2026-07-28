@@ -40,7 +40,8 @@ async function main(): Promise<void> {
   assert.match(cron, /persistNeonAppState/);
   assert.match(cron, /acknowledgeLeadSignalInbox/);
   assert.match(cron, /acknowledgeOnlyAfterPersistence:\s*true/);
-  assert.match(cron, /automatedExternalMessaging:\s*false/);
+  assert.match(cron, /automatedLinkedInMessaging:\s*false/);
+  assert.match(cron, /automatedUpworkApplication:\s*false/);
   assert.match(cron, /sourceIsolatedImapSearches:\s*true/);
   assert.match(cron, /processLinkedInWarmSignalBatch/);
   assert.match(cron, /processUpworkSavedSearchBatch/);
