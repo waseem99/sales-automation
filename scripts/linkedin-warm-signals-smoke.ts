@@ -28,7 +28,7 @@ async function main(): Promise<void> {
   assert.match(inbox, /LINKEDIN_SIGNAL_MAILBOX_PASSWORD/);
   assert.match(inbox, /configured:\s*Boolean\(mailboxEmail && mailboxPassword\)/);
   assert.match(inbox, /internalSenderPattern/);
-  assert.match(inbox, /acknowledgeLeadSignalInbox/);
+  assert.match(inbox, /acknowledgeLinkedInSignalInbox/);
   assert.match(inbox, /messageFlagsAdd/);
   assert.doesNotMatch(inbox, /messageFlagsAdd\(message\.uid/);
 
