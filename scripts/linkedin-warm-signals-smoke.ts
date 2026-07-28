@@ -28,7 +28,7 @@ async function main(): Promise<void> {
   assert.match(inbox, /LINKEDIN_SIGNAL_MAILBOX_PASSWORD/);
   assert.match(inbox, /configured:\s*Boolean\(mailboxEmail && mailboxPassword\)/);
   assert.match(inbox, /internalSenderPattern/);
-  assert.match(inbox, /acknowledgeLinkedInSignalInbox/);
+  assert.match(inbox, /acknowledgeLeadSignalInbox/);
   assert.match(inbox, /messageFlagsAdd/);
   assert.doesNotMatch(inbox, /messageFlagsAdd\(message\.uid/);
 
@@ -36,13 +36,14 @@ async function main(): Promise<void> {
   assert.match(runtime, /externalActionAutomated:\s*false/);
   assert.match(runtime, /No logged-in LinkedIn crawling/);
   assert.match(cron, /collectPublicLinkedInIndexSignals/);
-  assert.match(cron, /pollLinkedInSignalInbox/);
+  assert.match(cron, /pollLeadSignalInbox/);
   assert.match(cron, /persistNeonAppState/);
-  assert.match(cron, /acknowledgeLinkedInSignalInbox/);
+  assert.match(cron, /acknowledgeLeadSignalInbox/);
   assert.match(cron, /acknowledgeOnlyAfterPersistence:\s*true/);
   assert.match(cron, /automatedExternalMessaging:\s*false/);
-  assert.match(cron, /dedicatedMailboxOnly:\s*true/);
+  assert.match(cron, /sourceIsolatedImapSearches:\s*true/);
   assert.match(cron, /processLinkedInWarmSignalBatch/);
+  assert.match(cron, /processUpworkSavedSearchBatch/);
 
   assert.match(controls, /linkedin_signal_inbox/);
   assert.match(controls, /linkedin_public_index/);
@@ -51,7 +52,7 @@ async function main(): Promise<void> {
   assert.ok(vercel.crons?.some((item) => item.path === '/api/cron/linkedin-signals' && item.schedule === '*/30 * * * *'));
   assert.ok(vercel.rewrites?.some((item) => item.source === '/linkedin-signals' && item.destination === '/api/linkedin-signals'));
 
-  console.log('LinkedIn warm signal quality, compliance, persistence and deployment contract passed');
+  console.log('LinkedIn warm signal quality, unified inbox isolation, persistence and deployment contract passed');
 }
 
 main().catch((error: unknown) => {
