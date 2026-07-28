@@ -1,0 +1,119 @@
+name: TalentTrack Consolidated Release CI
+
+on:
+  pull_request:
+    branches:
+      - main
+    paths:
+      - '.github/workflows/talenttrack-consolidated-release-ci.yml'
+      - 'docs/TALENTTRACK_*.md'
+      - 'workers/acquisition/**'
+      - 'package.json'
+      - 'pnpm-lock.yaml'
+      - 'packages/**'
+      - 'api/**'
+      - 'vercel/**'
+      - 'scripts/**'
+      - 'apps/**'
+      - 'vercel.json'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: talenttrack-consolidated-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  validate:
+    name: Validate consolidated release, pilot safety and production build
+    runs-on: ubuntu-latest
+    timeout-minutes: 55
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: talenttrack_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d talenttrack_test"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 20
+
+    env:
+      TEST_POSTGRES_URL: postgresql://postgres:postgres@127.0.0.1:5432/talenttrack_test
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install standalone pnpm
+        run: npm install --global --force @pnpm/exe@9.15.9
+
+      - name: Install workspace dependencies
+        run: pnpm install --no-frozen-lockfile
+
+      - name: Install pinned TalentTrack Python dependencies
+        working-directory: workers/acquisition
+        run: python -m pip install --disable-pip-version-check --requirement requirements.txt
+
+      - name: Run repository deployment gate
+        run: pnpm deploy:check
+
+      - name: Validate commercial readiness enforcement
+        run: pnpm --filter @sales-automation/commercial-readiness test
+
+      - name: Validate commercial analytics
+        run: pnpm --filter @sales-automation/commercial-analytics test
+
+      - name: Run complete acquisition runtime suite
+        working-directory: workers/acquisition
+        run: python -m unittest discover -s tests -v
+
+      - name: Validate consolidated pilot acceptance explicitly
+        working-directory: workers/acquisition
+        run: python -m unittest tests.test_prospecting_os_acceptance -v
+
+      - name: Parse every Windows PowerShell workflow
+        shell: pwsh
+        run: |
+          $errors = @()
+          Get-ChildItem workers/acquisition/scripts/windows -Filter *.ps1 | ForEach-Object {
+            $tokens = $null
+            $parseErrors = $null
+            [System.Management.Automation.Language.Parser]::ParseFile($_.FullName, [ref]$tokens, [ref]$parseErrors) | Out-Null
+            if ($parseErrors.Count -gt 0) {
+              $errors += $parseErrors | ForEach-Object { "$($_.Extent.File):$($_.Extent.StartLineNumber): $($_.Message)" }
+            }
+          }
+          if ($errors.Count -gt 0) { throw ($errors -join "`n") }
+
+      - name: Validate source, Prospect Desk, outreach and storage contracts
+        working-directory: workers/acquisition
+        run: |
+          node tests/upwork_extension_contract.mjs
+          node tests/linkedin_extension_contract.mjs
+          node tests/sales_navigator_extension_contract.mjs
+          node tests/prospect_desk_bridge_contract.mjs
+          node tests/sales_navigator_bridge_contract.mjs
+          node tests/commercial_analytics_bridge_contract.mjs
+          node tests/local_postgres_contract.mjs
+          node tests/talenttrack_release_baseline_contract.mjs
+
+      - name: Verify production build again after full runtime suite
+        run: pnpm build:vercel
