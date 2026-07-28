@@ -45,9 +45,12 @@ interface SourcePerformance {
 
 type OperationalMetricId =
   | 'qualified'
+  | 'priority-review'
+  | 'pilot-blockers'
   | 'due-next-24h'
   | 'overdue'
   | 'linkedin'
+  | 'sales-navigator'
   | 'upwork'
   | 'procurement-deadlines'
   | 'unassigned'
@@ -69,9 +72,19 @@ interface WeeklyOutcomeCounts {
   lost: number;
 }
 
+interface PilotLaneSummary {
+  id: 'upwork' | 'linkedin' | 'sales-navigator';
+  label: string;
+  total: number;
+  priority: number;
+  totalTarget: number;
+  priorityTarget: number;
+}
+
 const finalStatuses = new Set<PipelineStatus>(['won', 'lost', 'rejected', 'archived']);
 const contactReadyStatuses = new Set<PipelineStatus>(['approved_to_contact', 'draft_ready', 'sent_manually', 'replied', 'meeting_booked', 'proposal_sent', 'won']);
 const weeklyOutcomeStatuses = new Set<PipelineStatus>(['replied', 'meeting_booked', 'proposal_sent', 'won', 'lost']);
+const reviewStatuses = new Set<PipelineStatus>(['new', 'scored', 'needs_research', 'needs_human_review']);
 const DAY_MS = 24 * 60 * 60 * 1000;
 
 export async function handleOperationsRuntime(input: OperationsRuntimeInput): Promise<Response> {
@@ -84,12 +97,12 @@ export async function handleOperationsRuntime(input: OperationsRuntimeInput): Pr
   if (input.request.method === 'POST' && input.pathname === '/api/source-controls') {
     if (!input.canManage) return json({ error: 'Forbidden: source controls are restricted to Admin and Waseem.' }, 403);
     const payload = asObject(await parseBody(input.request));
-    const sourceKey = requiredString(payload.sourceKey, 'sourceKey');
-    if (!sourceControls.isDiscoverySourceKey(sourceKey)) return json({ error: 'sourceKey is invalid.' }, 400);
+    const sourceKeyValue = requiredString(payload.sourceKey, 'sourceKey');
+    if (!sourceControls.isDiscoverySourceKey(sourceKeyValue)) return json({ error: 'sourceKey is invalid.' }, 400);
     const enabled = booleanValue(payload.enabled, 'enabled');
     const reason = requiredString(payload.reason, 'reason');
     const control = await sourceControls.updateDiscoverySourceControl(input.databaseUrl, {
-      sourceKey,
+      sourceKey: sourceKeyValue,
       enabled,
       reason,
       actor: input.actor,
@@ -132,7 +145,7 @@ export async function handleOperationsRuntime(input: OperationsRuntimeInput): Pr
       commit: process.env.VERCEL_GIT_COMMIT_SHA ?? 'unavailable',
       region: process.env.VERCEL_REGION ?? 'unavailable',
       environment: process.env.VERCEL_ENV ?? process.env.NODE_ENV ?? 'unknown',
-      actionsSignal: 'Best effort. Production Vercel deployment and protected route checks remain the release gate.',
+      actionsSignal: 'Repository deployment check and dedicated TalentTrack release checks must both pass before pilot use.',
     },
     outreach: {
       sendingEnabled: process.env.OUTREACH_SENDING_ENABLED === 'true',
@@ -152,12 +165,27 @@ export function buildOperationalMetrics(records: StoredLeadRecord[], generatedAt
   const weekStart = now - 7 * DAY_MS;
   const weeklyRecords = records.filter((record) => weeklyOutcomeEvents(record, weekStart).length > 0);
   const weeklyCounts = weeklyOutcomeCounts(records, weekStart);
+  const priorityReview = active.filter((record) => isPriorityRecord(record) && reviewStatuses.has(record.lead.pipelineStatus));
+  const pilotBlockers = active.filter((record) => isPriorityRecord(record) && contactReadyStatuses.has(record.lead.pipelineStatus) && pilotReadinessGaps(record).length > 0);
+
   return [
     {
       id: 'qualified',
       label: 'Qualified active leads',
       description: 'Active records already approved, drafted, contacted or progressing commercially.',
       records: active.filter((record) => contactReadyStatuses.has(record.lead.pipelineStatus)).sort(updatedSort),
+    },
+    {
+      id: 'priority-review',
+      label: 'Priority A/B review queue',
+      description: 'High-priority records that still require a human qualification decision before pursuit.',
+      records: priorityReview.sort(updatedSort),
+    },
+    {
+      id: 'pilot-blockers',
+      label: 'Pilot readiness blockers',
+      description: 'Priority pursuit records missing an owner, next action, due date, permitted channel or relevant proof.',
+      records: pilotBlockers.sort(updatedSort),
     },
     {
       id: 'due-next-24h',
@@ -173,9 +201,15 @@ export function buildOperationalMetrics(records: StoredLeadRecord[], generatedAt
     },
     {
       id: 'linkedin',
-      label: 'LinkedIn opportunities',
-      description: 'Active records sourced through LinkedIn, Sales Navigator or LinkedIn signal intake.',
-      records: active.filter((record) => isLinkedInRecord(record.lead)).sort(updatedSort),
+      label: 'LinkedIn opportunities (warm)',
+      description: 'Buyer-authored LinkedIn opportunities, separated from Sales Navigator cold prospects.',
+      records: active.filter((record) => isLinkedInWarmRecord(record.lead)).sort(updatedSort),
+    },
+    {
+      id: 'sales-navigator',
+      label: 'Sales Navigator prospects',
+      description: 'Cold direct-buyer and partner prospects that must retain explicit no-confirmed-intent warnings.',
+      records: active.filter((record) => isSalesNavigatorRecord(record.lead)).sort(updatedSort),
     },
     {
       id: 'upwork',
@@ -214,10 +248,10 @@ export function buildSourcePerformance(records: StoredLeadRecord[]): SourcePerfo
   const totalActive = records.filter((record) => !finalStatuses.has(record.lead.pipelineStatus)).length;
   return [...groups.entries()].map(([key, sourceRecords]) => {
     const active = sourceRecords.filter((record) => !finalStatuses.has(record.lead.pipelineStatus)).length;
-    const feedback = sourceRecords.map((record) => record.lead.feedback).filter(Boolean);
-    const relevance = feedback.map((item) => item?.relevanceRating).filter((value): value is number => typeof value === 'number');
+    const feedback = sourceRecords.flatMap((record) => record.lead.feedback ? [record.lead.feedback] : []);
+    const relevance = feedback.flatMap((item) => typeof item.relevanceRating === 'number' ? [item.relevanceRating] : []);
     const repeatRecommendations: Record<RepeatRecommendation, number> = { increase: 0, keep: 0, reduce: 0, stop: 0 };
-    for (const item of feedback) if (item?.repeatRecommendation) repeatRecommendations[item.repeatRecommendation] += 1;
+    for (const item of feedback) if (item.repeatRecommendation) repeatRecommendations[item.repeatRecommendation] += 1;
     const performance: SourcePerformance = {
       sourceKey: key,
       label: sourceLabel(key),
@@ -234,7 +268,7 @@ export function buildSourcePerformance(records: StoredLeadRecord[]): SourcePerfo
       priorityA: sourceRecords.filter((record) => record.latestEvaluation?.closeability?.band === 'priority_a').length,
       priorityB: sourceRecords.filter((record) => record.latestEvaluation?.closeability?.band === 'priority_b').length,
       averageRelevance: relevance.length ? relevance.reduce((sum, value) => sum + value, 0) / relevance.length : undefined,
-      accurateContacts: feedback.filter((item) => item?.contactAccuracy === 'accurate').length,
+      accurateContacts: feedback.filter((item) => item.contactAccuracy === 'accurate').length,
       feedbackCount: feedback.length,
       repeatRecommendations,
       recommendation: 'keep',
@@ -254,6 +288,7 @@ function buildAlerts(performance: SourcePerformance[], runs: ProspectDiscoveryRu
     if (latest.sourceStats?.some((source) => source.error)) alerts.push('At least one source failed in the latest run; this is distinct from a valid zero-opportunity result.');
   }
   if (controls.find((control) => control.sourceKey === 'remoteok')?.enabled) alerts.push('RemoteOK is enabled even though employee vacancies are not direct sales opportunities.');
+  if (process.env.OUTREACH_SENDING_ENABLED === 'true') alerts.push('Automatic outreach must remain disabled during the TalentTrack pilot.');
   if (process.env.OUTREACH_SENDING_ENABLED === 'true' && process.env.OUTREACH_DNS_READY !== 'true') alerts.push('Outbound sending is enabled while DNS readiness is not confirmed.');
   return [...new Set(alerts)];
 }
@@ -275,7 +310,8 @@ function sourceWarning(source: SourcePerformance): string | undefined {
 function sourceKey(lead: Lead): string {
   const source = `${lead.discoverySource ?? ''} ${lead.tender?.portal ?? ''} ${lead.source}`.toLowerCase();
   if (source.includes('upwork saved-search') || source.includes('upwork saved search')) return 'upwork_saved_search_inbox';
-  if (source.includes('linkedin signal') || source.includes('sales navigator')) return 'linkedin_signal_inbox';
+  if (source.includes('sales navigator') || lead.source === 'sales_navigator') return 'sales_navigator';
+  if (source.includes('linkedin signal')) return 'linkedin_signal_inbox';
   if (source.includes('linkedin public index')) return 'linkedin_public_index';
   if (source.includes('bing') || source.includes('public search result')) return 'bing_rss';
   if (source.includes('remoteok')) return 'remoteok';
@@ -286,7 +322,7 @@ function sourceKey(lead: Lead): string {
   if (source.includes('ungm')) return 'ungm';
   if (source.includes('manual') || lead.source === 'manual') return 'manual_intake';
   if (lead.source === 'upwork') return 'upwork_manual';
-  if (lead.source === 'linkedin' || lead.source === 'sales_navigator') return 'linkedin_manual';
+  if (lead.source === 'linkedin') return 'linkedin_manual';
   if (lead.source === 'public_procurement') return 'other_procurement';
   if (lead.source === 'partner_research' || lead.source === 'solution_campaign') return 'partnership_research';
   if (source.includes('rss')) return 'generic_rss';
@@ -309,7 +345,8 @@ function renderOperationsPage(input: {
   outreach: Record<string, boolean>;
 }): string {
   return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Sales Operations Dashboard</title><style>${styles()}</style></head><body><main class="shell">
-  <header><div><p class="eyebrow">${escapeHtml(input.scopeLabel)}</p><h1>Sales Operations Dashboard</h1><p>Owner-scoped action metrics, weekly outcomes, source quality and release health. Signed in as ${escapeHtml(input.actor)}.</p></div><div class="actions"><a class="button ghost" href="/prospects">Prospects</a><a class="button ghost" href="/priorities">Priorities</a><a class="button ghost" href="/portfolio">Proof catalog</a></div></header>
+  <header><div><p class="eyebrow">${escapeHtml(input.scopeLabel)}</p><h1>Sales Operations Dashboard</h1><p>Owner-scoped action metrics, pilot readiness, weekly outcomes, source quality and release health. Signed in as ${escapeHtml(input.actor)}.</p></div><div class="actions"><a class="button ghost" href="/prospects">Prospects</a><a class="button ghost" href="/priorities">Priorities</a><a class="button ghost" href="/portfolio">Proof catalog</a><a class="button ghost" href="/commercial-analytics">Commercial analytics</a></div></header>
+  ${renderPilotSummary(input.records)}
   <section class="operational-metrics" aria-label="Exact operational metrics">${input.metrics.map((metric) => renderOperationalMetric(metric, input.selectedMetric.id)).join('')}</section>
   <section class="panel exact-records" data-operational-metric="${escapeAttribute(input.selectedMetric.id)}"><div class="panel-title"><div><p class="eyebrow">Exact owner-scoped record set</p><h2>${escapeHtml(input.selectedMetric.label)}</h2><p>${escapeHtml(input.selectedMetric.description)}</p>${input.selectedMetric.summary ? `<p class="metric-summary">${escapeHtml(input.selectedMetric.summary)}</p>` : ''}</div><span>${input.selectedMetric.records.length} record${input.selectedMetric.records.length === 1 ? '' : 's'}</span></div>${input.selectedMetric.records.length ? `<div class="table-wrap"><table><thead><tr><th>Opportunity</th><th>Source</th><th>Owner</th><th>Status</th><th>Next action</th><th>Follow-up / deadline</th><th>Updated</th></tr></thead><tbody>${input.selectedMetric.records.map((record) => renderOperationalRecord(record, input.selectedMetric.id, input.generatedAt)).join('')}</tbody></table></div>` : `<div class="empty">No records currently match this exact metric.</div>`}</section>
   ${input.alerts.length ? `<section class="alerts"><h2>Needs attention</h2>${input.alerts.map((alert) => `<div>${escapeHtml(alert)}</div>`).join('')}</section>` : '<section class="ok">No current source concentration or configuration warnings.</section>'}
@@ -317,6 +354,20 @@ function renderOperationsPage(input: {
   <section class="grid"><article class="panel"><div class="panel-title"><div><p class="eyebrow">Audited controls</p><h2>Discovery sources</h2></div><span>${input.canManage ? 'Admin controls enabled' : 'Read-only'}</span></div>${input.controls.map((control) => renderControl(control, input.canManage)).join('')}</article><article class="panel"><div class="panel-title"><div><p class="eyebrow">Release health</p><h2>Deployment and outreach</h2></div></div><dl><dt>Commit</dt><dd><code>${escapeHtml(input.deployment.commit)}</code></dd><dt>Region</dt><dd>${escapeHtml(input.deployment.region)}</dd><dt>Environment</dt><dd>${escapeHtml(input.deployment.environment)}</dd><dt>Release gate</dt><dd>${escapeHtml(input.deployment.actionsSignal)}</dd>${Object.entries(input.outreach).map(([key,value]) => `<dt>${escapeHtml(label(key))}</dt><dd><span class="state ${value?'on':'off'}">${value?'Yes':'No'}</span></dd>`).join('')}</dl></article></section>
   <section class="panel"><div class="panel-title"><div><p class="eyebrow">Latest automation</p><h2>Discovery runs and source checks</h2></div><span>${input.runs.length} runs</span></div>${input.runs.length ? input.runs.slice(0,10).map(renderRun).join('') : '<div class="empty">No run history yet.</div>'}</section>
   </main>${input.canManage ? `<script>document.querySelectorAll('[data-source-control]').forEach(form=>form.addEventListener('submit',async event=>{event.preventDefault();const status=form.querySelector('[data-status]');status.textContent='Saving…';const response=await fetch('/api/source-controls',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(Object.fromEntries(new FormData(form)))});const body=await response.json();status.textContent=response.ok?'Saved':body.error||'Failed';if(response.ok)setTimeout(()=>location.reload(),350);}));</script>` : ''}</body></html>`;
+}
+
+function renderPilotSummary(records: StoredLeadRecord[]): string {
+  const lanes: PilotLaneSummary[] = [
+    pilotLane('upwork', 'Upwork', records.filter((record) => isUpworkRecord(record.lead)), 100, 15),
+    pilotLane('linkedin', 'LinkedIn warm', records.filter((record) => isLinkedInWarmRecord(record.lead)), 50, 10),
+    pilotLane('sales-navigator', 'Sales Navigator', records.filter((record) => isSalesNavigatorRecord(record.lead)), 75, 15),
+  ];
+  const blockers = records.filter((record) => isPriorityRecord(record) && !finalStatuses.has(record.lead.pipelineStatus) && contactReadyStatuses.has(record.lead.pipelineStatus) && pilotReadinessGaps(record).length > 0).length;
+  return `<section class="panel pilot"><div class="panel-title"><div><p class="eyebrow">Full commercial pilot target</p><h2>Source sample and Priority A/B progress</h2><p>Technical checks are not release approval. Human commercial review and zero external-action evidence remain mandatory.</p></div><a class="button ghost" href="/operations?metric=pilot-blockers">${blockers} blockers</a></div><div class="pilot-grid">${lanes.map((lane) => `<article><strong>${escapeHtml(lane.label)}</strong><span>${lane.total}/${lane.totalTarget} records</span><span>${lane.priority}/${lane.priorityTarget} Priority A/B</span><progress max="${lane.totalTarget}" value="${Math.min(lane.total, lane.totalTarget)}"></progress></article>`).join('')}</div></section>`;
+}
+
+function pilotLane(id: PilotLaneSummary['id'], labelValue: string, records: StoredLeadRecord[], totalTarget: number, priorityTarget: number): PilotLaneSummary {
+  return { id, label: labelValue, total: records.length, priority: records.filter(isPriorityRecord).length, totalTarget, priorityTarget };
 }
 
 function renderOperationalMetric(metric: OperationalMetricDefinition, selected: OperationalMetricId): string {
@@ -333,12 +384,13 @@ function renderOperationalRecord(record: StoredLeadRecord, metricId: Operational
   const outcomeEvents = metricId === 'weekly-outcomes'
     ? weeklyOutcomeEvents(record, Date.parse(generatedAt) - 7 * DAY_MS).map(label).join(' · ')
     : '';
-  const nextAction = outcomeEvents || lead.recommendedNextAction || record.latestEvaluation?.recommendedNextAction || 'Review evidence and define the next human-owned action.';
+  const blockerGuidance = metricId === 'pilot-blockers' ? `Resolve: ${pilotReadinessGaps(record).join('; ')}` : '';
+  const nextAction = blockerGuidance || outcomeEvents || lead.recommendedNextAction || record.latestEvaluation?.recommendedNextAction || 'Review evidence and define the next human-owned action.';
   return `<tr><td><strong><a href="/prospects?leadId=${encodeURIComponent(lead.id)}">${escapeHtml(lead.companyName ?? lead.title)}</a></strong><small>${escapeHtml(lead.title)}</small></td><td>${escapeHtml(sourceLabel(sourceKey(lead)))}</td><td>${escapeHtml(lead.owner ?? 'Unassigned')}</td><td><span class="pipeline-status">${escapeHtml(label(lead.pipelineStatus))}</span></td><td>${escapeHtml(nextAction)}</td><td>${escapeHtml(followUpOrDeadline)}</td><td>${escapeHtml(formatDate(lead.updatedAt))}</td></tr>`;
 }
 
 function renderPerformanceRow(source: SourcePerformance): string {
-  return `<tr><td><strong>${escapeHtml(source.label)}</strong>${source.warning ? `<small class="warning">${escapeHtml(source.warning)}</small>` : ''}</td><td>${source.active} / ${percent(source.activeShare)}</td><td>${source.contactReady}</td><td>${source.replied}</td><td>${source.meetings}</td><td>${source.proposals}</td><td>${source.won}</td><td>${source.averageRelevance ? source.averageRelevance.toFixed(1) : '—'}</td><td>${source.accurateContacts}/${source.feedbackCount}</td><td>${source.priorityA}/${source.priorityB}</td><td><span class="recommend ${source.recommendation}">${source.recommendation}</span></td></tr>`;
+  return `<tr><td><strong>${escapeHtml(source.label)}</strong>${source.warning ? `<small class="warning">${escapeHtml(source.warning)}</small>` : ''}</td><td>${source.active} / ${percent(source.activeShare)}</td><td>${source.contactReady}</td><td>${source.replied}</td><td>${source.meetings}</td><td>${source.proposals}</td><td>${source.won}</td><td>${source.averageRelevance !== undefined ? source.averageRelevance.toFixed(1) : '—'}</td><td>${source.accurateContacts}/${source.feedbackCount}</td><td>${source.priorityA}/${source.priorityB}</td><td><span class="recommend ${source.recommendation}">${source.recommendation}</span></td></tr>`;
 }
 
 function renderControl(control: DiscoverySourceControl, canManage: boolean): string {
@@ -374,14 +426,29 @@ function weeklyOutcomeEvents(record: StoredLeadRecord, weekStart: number): Pipel
   });
 }
 
+function pilotReadinessGaps(record: StoredLeadRecord): string[] {
+  const lead = record.lead;
+  const gaps: string[] = [];
+  if (!lead.owner?.trim()) gaps.push('assign an owner');
+  if (!(lead.recommendedNextAction ?? record.latestEvaluation?.recommendedNextAction)?.trim()) gaps.push('define the next action');
+  if (!lead.nextFollowUpAt) gaps.push('set a due date');
+  if (!lead.reachMethod?.trim()) gaps.push('confirm the permitted channel');
+  if (!(lead.recommendedPortfolioItemIds?.length || lead.materialsToShare?.trim())) gaps.push('attach relevant proof');
+  return gaps;
+}
+
+function isPriorityRecord(record: StoredLeadRecord): boolean {
+  const band = record.latestEvaluation?.closeability?.band;
+  return band === 'priority_a' || band === 'priority_b';
+}
+
 function isPipelineStatus(value: string): value is PipelineStatus {
-  return ['new', 'needs_research', 'approved_to_contact', 'draft_ready', 'sent_manually', 'replied', 'meeting_booked', 'proposal_sent', 'won', 'lost', 'rejected', 'archived'].includes(value);
+  return ['new', 'scored', 'needs_research', 'hot_alert_sent', 'needs_human_review', 'approved_to_contact', 'draft_ready', 'sent_manually', 'replied', 'meeting_booked', 'proposal_sent', 'won', 'lost', 'rejected', 'archived'].includes(value);
 }
 
 function operationalMetricValue(value: string | null): OperationalMetricId {
-  return ['qualified', 'due-next-24h', 'overdue', 'linkedin', 'upwork', 'procurement-deadlines', 'unassigned', 'weekly-outcomes'].includes(value ?? '')
-    ? value as OperationalMetricId
-    : 'qualified';
+  const allowed: OperationalMetricId[] = ['qualified', 'priority-review', 'pilot-blockers', 'due-next-24h', 'overdue', 'linkedin', 'sales-navigator', 'upwork', 'procurement-deadlines', 'unassigned', 'weekly-outcomes'];
+  return allowed.includes(value as OperationalMetricId) ? value as OperationalMetricId : 'qualified';
 }
 
 function operationalMetricUrl(metric: OperationalMetricId): string {
@@ -389,7 +456,17 @@ function operationalMetricUrl(metric: OperationalMetricId): string {
 }
 
 function isLinkedInRecord(lead: Lead): boolean {
-  return sourceKey(lead).startsWith('linkedin') || lead.source === 'linkedin' || lead.source === 'sales_navigator';
+  return isLinkedInWarmRecord(lead) || isSalesNavigatorRecord(lead);
+}
+
+function isLinkedInWarmRecord(lead: Lead): boolean {
+  if (isSalesNavigatorRecord(lead)) return false;
+  return sourceKey(lead).startsWith('linkedin') || lead.source === 'linkedin' || lead.leadType === 'linkedin_warm_post';
+}
+
+function isSalesNavigatorRecord(lead: Lead): boolean {
+  const source = `${lead.discoverySource ?? ''} ${lead.source} ${lead.leadType}`.toLowerCase();
+  return lead.source === 'sales_navigator' || source.includes('sales navigator') || lead.leadType === 'linkedin_sales_nav_alert' || lead.leadType === 'sales_navigator_cold_prospect';
 }
 
 function isUpworkRecord(lead: Lead): boolean {
@@ -442,5 +519,5 @@ function escapeHtml(value: unknown): string { return String(value ?? '').replace
 function escapeAttribute(value: unknown): string { return escapeHtml(value); }
 
 function styles(): string {
-  return `:root{font-family:Inter,ui-sans-serif,system-ui;color:#172033;background:#f4f6fb;line-height:1.4}*{box-sizing:border-box}body{margin:0}.shell{max-width:1440px;margin:auto;padding:28px}header{display:flex;justify-content:space-between;gap:20px;align-items:flex-start}header h1{margin:3px 0 8px}header p{margin:0;color:#667085}.eyebrow{text-transform:uppercase;letter-spacing:.08em;font-size:11px;font-weight:800;color:#667085}.actions{display:flex;gap:9px;flex-wrap:wrap}.button,button{font:inherit;border:0;border-radius:9px;padding:9px 12px;min-height:44px;font-weight:750;cursor:pointer}.ghost{background:#fff;border:1px solid #d0d5dd;color:#344054;text-decoration:none}.operational-metrics{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;margin:20px 0}.operational-metric{display:grid;grid-template-columns:1fr auto;gap:7px 12px;min-height:126px;padding:16px;border:1px solid #e4e7ec;border-radius:16px;background:#fff;color:#172033;text-decoration:none}.operational-metric:hover{border-color:#98a2b3}.operational-metric.active{border-color:#3157d5;box-shadow:0 0 0 2px rgba(49,87,213,.12)}.operational-metric span{font-size:12px;font-weight:800}.operational-metric strong{font-size:29px}.operational-metric small{grid-column:1/-1;color:#667085;line-height:1.45}.alerts,.ok,.panel{background:#fff;border:1px solid #e4e7ec;border-radius:16px}.alerts{padding:18px;margin:16px 0;border-color:#fecdca}.alerts h2{margin-top:0}.alerts div{padding:8px 10px;background:#fef3f2;color:#b42318;border-radius:8px;margin-top:7px}.ok{padding:14px;margin:16px 0;color:#027a48;background:#ecfdf3}.panel{padding:18px;margin-bottom:16px}.panel-title{display:flex;justify-content:space-between;align-items:flex-end;gap:16px;margin-bottom:13px}.panel-title h2{margin:2px 0}.panel-title p{margin:4px 0 0;color:#667085}.panel-title>span{color:#667085;font-size:12px}.metric-summary{font-weight:750;color:#344054!important}.grid{display:grid;grid-template-columns:1.2fr .8fr;gap:16px}.table-wrap{overflow:auto}table{width:100%;border-collapse:collapse;font-size:12px}th,td{text-align:left;padding:9px;border-bottom:1px solid #eaecf0;vertical-align:top}th{color:#667085;font-size:10px;text-transform:uppercase;white-space:nowrap}td small{display:block;color:#667085;margin-top:4px}.exact-records td:nth-child(1){min-width:230px}.exact-records td:nth-child(5){min-width:250px}.pipeline-status,.recommend,.state{display:inline-block;padding:4px 8px;border-radius:999px;font-size:10px;font-weight:850;text-transform:uppercase;background:#f2f4f7;color:#344054}.warning{display:block;color:#b54708;margin-top:4px}.increase,.on,.good{background:#ecfdf3;color:#027a48}.keep{background:#eff8ff;color:#175cd3}.reduce{background:#fff6ed;color:#b54708}.stop,.off,.bad{background:#fef3f2;color:#b42318}.control{display:grid;grid-template-columns:minmax(220px,1fr) 110px minmax(180px,1fr) auto;gap:8px;align-items:center;padding:11px 0;border-bottom:1px solid #eaecf0}.control small{display:block;color:#667085;margin-top:4px}.control select,.control input{border:1px solid #d0d5dd;border-radius:8px;padding:8px;min-height:44px;font:inherit}.control button{background:#3157d5;color:#fff}.control [data-status]{font-size:11px;color:#667085}dl{display:grid;grid-template-columns:160px 1fr;gap:9px;margin:0}dt{font-weight:750;color:#667085}dd{margin:0;overflow-wrap:anywhere}.run{border-top:1px solid #eaecf0;padding:10px 0}.run summary{display:grid;grid-template-columns:200px 1fr auto;gap:12px;min-height:44px;align-items:center;cursor:pointer}.run-body{padding:10px 0 0}.empty{text-align:center;padding:26px;color:#667085}@media(max-width:1100px){.operational-metrics{grid-template-columns:repeat(2,minmax(0,1fr))}.grid{grid-template-columns:1fr}.control{grid-template-columns:1fr}}@media(max-width:700px){.shell{padding:16px}header{display:grid}.operational-metrics{grid-template-columns:1fr}.panel-title{align-items:flex-start;flex-direction:column}.run summary{grid-template-columns:1fr}}`;
+  return `:root{font-family:Inter,ui-sans-serif,system-ui;color:#172033;background:#f4f6fb;line-height:1.4}*{box-sizing:border-box}body{margin:0}.shell{max-width:1440px;margin:auto;padding:28px}header{display:flex;justify-content:space-between;gap:20px;align-items:flex-start}header h1{margin:3px 0 8px}header p{margin:0;color:#667085}.eyebrow{text-transform:uppercase;letter-spacing:.08em;font-size:11px;font-weight:800;color:#667085}.actions{display:flex;gap:9px;flex-wrap:wrap}.button,button{font:inherit;border:0;border-radius:9px;padding:9px 12px;min-height:44px;font-weight:750;cursor:pointer}.ghost{background:#fff;border:1px solid #d0d5dd;color:#344054;text-decoration:none}.operational-metrics{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;margin:20px 0}.operational-metric{display:grid;grid-template-columns:1fr auto;gap:7px 12px;min-height:126px;padding:16px;border:1px solid #e4e7ec;border-radius:16px;background:#fff;color:#172033;text-decoration:none}.operational-metric:hover{border-color:#98a2b3}.operational-metric.active{border-color:#3157d5;box-shadow:0 0 0 2px rgba(49,87,213,.12)}.operational-metric span{font-size:12px;font-weight:800}.operational-metric strong{font-size:29px}.operational-metric small{grid-column:1/-1;color:#667085;line-height:1.45}.alerts,.ok,.panel{background:#fff;border:1px solid #e4e7ec;border-radius:16px}.alerts{padding:18px;margin:16px 0;border-color:#fecdca}.alerts h2{margin-top:0}.alerts div{padding:8px 10px;background:#fef3f2;color:#b42318;border-radius:8px;margin-top:7px}.ok{padding:14px;margin:16px 0;color:#027a48;background:#ecfdf3}.panel{padding:18px;margin-bottom:16px}.panel-title{display:flex;justify-content:space-between;align-items:flex-end;gap:16px;margin-bottom:13px}.panel-title h2{margin:2px 0}.panel-title p{margin:4px 0 0;color:#667085}.panel-title>span{color:#667085;font-size:12px}.metric-summary{font-weight:750;color:#344054!important}.pilot{margin-top:20px}.pilot-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}.pilot-grid article{display:grid;gap:8px;padding:14px;border:1px solid #eaecf0;border-radius:12px}.pilot-grid span{font-size:12px;color:#667085}.pilot-grid progress{width:100%}.grid{display:grid;grid-template-columns:1.2fr .8fr;gap:16px}.table-wrap{overflow:auto}table{width:100%;border-collapse:collapse;font-size:12px}th,td{text-align:left;padding:9px;border-bottom:1px solid #eaecf0;vertical-align:top}th{color:#667085;font-size:10px;text-transform:uppercase;white-space:nowrap}td small{display:block;color:#667085;margin-top:4px}.exact-records td:nth-child(1){min-width:230px}.exact-records td:nth-child(5){min-width:250px}.pipeline-status,.recommend,.state{display:inline-block;padding:4px 8px;border-radius:999px;font-size:10px;font-weight:850;text-transform:uppercase;background:#f2f4f7;color:#344054}.warning{display:block;color:#b54708;margin-top:4px}.increase,.on,.good{background:#ecfdf3;color:#027a48}.keep{background:#eff8ff;color:#175cd3}.reduce{background:#fff6ed;color:#b54708}.stop,.off,.bad{background:#fef3f2;color:#b42318}.control{display:grid;grid-template-columns:minmax(220px,1fr) 110px minmax(180px,1fr) auto;gap:8px;align-items:center;padding:11px 0;border-bottom:1px solid #eaecf0}.control small{display:block;color:#667085;margin-top:4px}.control select,.control input{border:1px solid #d0d5dd;border-radius:8px;padding:8px;min-height:44px;font:inherit}.control button{background:#3157d5;color:#fff}.control [data-status]{font-size:11px;color:#667085}dl{display:grid;grid-template-columns:160px 1fr;gap:9px;margin:0}dt{font-weight:750;color:#667085}dd{margin:0;overflow-wrap:anywhere}.run{border-top:1px solid #eaecf0;padding:10px 0}.run summary{display:grid;grid-template-columns:200px 1fr auto;gap:12px;min-height:44px;align-items:center;cursor:pointer}.run-body{padding:10px 0 0}.empty{text-align:center;padding:26px;color:#667085}@media(max-width:1100px){.operational-metrics{grid-template-columns:repeat(2,minmax(0,1fr))}.grid{grid-template-columns:1fr}.control{grid-template-columns:1fr}.pilot-grid{grid-template-columns:1fr}}@media(max-width:700px){.shell{padding:16px}header{display:grid}.operational-metrics{grid-template-columns:1fr}.panel-title{align-items:flex-start;flex-direction:column}.run summary{grid-template-columns:1fr}}`;
 }
