@@ -1,9 +1,10 @@
 {
-  "schema_version": "codistan-prospecting-os-release.v1",
-  "product": "Codistan Prospecting OS",
+  "schema_version": "codistan-sales-automation-release.v1",
+  "product": "Codistan Sales Automation",
+  "application": "Prospect Desk",
   "release_version": "1.0.0-rc.1",
   "release_status": "live_validation",
-  "built_from": "agent/outreach-workbench-foundation-233",
+  "built_from": "issue-226-consolidated-release",
   "components": {
     "local_runtime": "0.3.0",
     "upwork_extension": "1.1.0",
@@ -11,7 +12,7 @@
     "bd_workflow": "bd-workflow.v1",
     "outreach_workbench": "outreach-workbench.v1",
     "commercial_readiness": "commercial-readiness.v1",
-    "combined_pilot_acceptance": "codistan-prospecting-os-acceptance.v1"
+    "combined_pilot_acceptance": "codistan-sales-automation-acceptance.v1"
   },
   "collectors": [
     {"source": "upwork", "port": 8765, "workspace": "/leads/upwork"},
@@ -44,6 +45,14 @@
     "human review of commercial quality and outreach usefulness",
     "combined pilot report reaches commercial_gate_passed"
   ],
+  "compatibility_aliases": {
+    "legacy_operator_commands": [
+      "START-HERE-PROSPECTING-OS.cmd",
+      "CHECK-PROSPECTING-OS-RELEASE.cmd",
+      "CHECK-PROSPECTING-OS-PILOT.cmd"
+    ],
+    "policy": "Legacy aliases only; all new documentation, shortcuts and release evidence must use the canonical Sales Automation commands."
+  },
   "on_hold": [
     {
       "capability": "automatic external outreach",
