@@ -5,6 +5,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+const identityGuardPath = 'scripts/repository-identity-smoke.ts';
 const trackedFiles = execFileSync('git', ['ls-files'], { cwd: root, encoding: 'utf8' })
   .split(/\r?\n/)
   .map((item) => item.trim())
@@ -30,6 +31,7 @@ for (const relativePath of trackedFiles) {
   if (/talenttrack|content-automation/i.test(normalized)) {
     violations.push(`${normalized}: forbidden repository identity in path`);
   }
+  if (normalized === identityGuardPath) continue;
 
   const absolutePath = path.join(root, relativePath);
   if (!existsSync(absolutePath) || statSync(absolutePath).size > 2_000_000) continue;
