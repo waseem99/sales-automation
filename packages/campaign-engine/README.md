@@ -1,6 +1,6 @@
 # Offer and Campaign Engine
 
-This package is the shared commercial definition for Unified Prospecting OS campaigns.
+This package is the shared commercial definition for Codistan Sales Automation campaigns managed through Prospect Desk.
 
 ## Current active offers
 
