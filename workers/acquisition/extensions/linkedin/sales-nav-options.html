@@ -1,0 +1,118 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Sales Navigator Campaigns · Codistan</title>
+  <link rel="stylesheet" href="sales-nav-options.css">
+</head>
+<body>
+  <main>
+    <header>
+      <div>
+        <p class="eyebrow">Codistan Sales Automation</p>
+        <h1>Sales Navigator Campaigns</h1>
+        <p>Manage route-specific direct-buyer, channel-partner and delivery-partner searches without mixing cold ICP fit with confirmed buyer demand.</p>
+      </div>
+      <span class="badge">No automatic outreach</span>
+    </header>
+
+    <section class="panel">
+      <div class="section-title">
+        <div><h2>Campaign portfolio</h2><p>Select an existing lane or create another product/service campaign. Paused campaigns retain searches and history but do not run.</p></div>
+      </div>
+      <div class="grid two">
+        <label>Campaign
+          <select id="campaignSelect"></select>
+        </label>
+        <label>Campaign ID for new campaign
+          <input id="newCampaignId" type="text" placeholder="e.g. cybersecurity_agency_partners">
+        </label>
+      </div>
+      <div class="register-row">
+        <button id="newCampaign" type="button">Create campaign</button>
+        <button id="duplicateCampaign" type="button">Duplicate selected campaign</button>
+      </div>
+    </section>
+
+    <section class="panel">
+      <div class="section-title">
+        <div><h2>Offer and ICP</h2><p>Every generated angle is tied to this campaign, its route, offer and evidence.</p></div>
+        <label class="toggle"><input id="campaignEnabled" type="checkbox"><span>Campaign active</span></label>
+      </div>
+      <div class="grid three">
+        <label>Campaign name<input id="campaignName" type="text"></label>
+        <label>Offer ID<input id="offerId" type="text"></label>
+        <label>Offer name<input id="offerName" type="text"></label>
+      </div>
+      <div class="grid three">
+        <label>Campaign route
+          <select id="campaignRoute">
+            <option value="direct_buyer">Direct buyer</option>
+            <option value="channel_partner">Channel / implementation partner</option>
+            <option value="delivery_partner">Overflow / delivery partner</option>
+            <option value="referral_partner">Referral partner</option>
+            <option value="research_only">Research only</option>
+          </select>
+        </label>
+        <label>Offer type
+          <select id="offerType">
+            <option value="product">Product</option>
+            <option value="service">Service</option>
+            <option value="hybrid">Hybrid</option>
+          </select>
+        </label>
+        <label>Primary service route
+          <select id="serviceRoute">
+            <option value="software_product">Software product delivery</option>
+            <option value="ai_automation">AI and automation</option>
+            <option value="delivery_partner">Outsourcing / delivery partner</option>
+            <option value="cybersecurity">Cybersecurity</option>
+            <option value="digital_growth">Digital growth</option>
+            <option value="creative_animation">Creative and animation</option>
+          </select>
+        </label>
+      </div>
+      <label>Offer summary<textarea id="offerSummary" rows="4"></textarea></label>
+      <label>First-touch hypothesis / angle<textarea id="firstTouchAngle" rows="3"></textarea></label>
+      <label>Cold-prospect warning<textarea id="intentWarning" rows="2"></textarea></label>
+      <label>Service lanes, comma separated<input id="serviceLanes" type="text"></label>
+      <div class="grid three">
+        <label>Target industries<textarea id="industries" rows="8"></textarea></label>
+        <label>Target company types<textarea id="companyTypes" rows="8"></textarea></label>
+        <label>Target personas<textarea id="personas" rows="8"></textarea></label>
+      </div>
+      <div class="grid three">
+        <label>Target seniority<textarea id="seniority" rows="6"></textarea></label>
+        <label>Target geographies<textarea id="geographies" rows="6" placeholder="Leave blank for global"></textarea></label>
+        <label>Positive campaign terms<textarea id="positiveTerms" rows="6"></textarea></label>
+      </div>
+      <button id="saveCampaign" class="primary" type="button">Save campaign definition</button>
+    </section>
+
+    <section class="panel">
+      <div class="section-title">
+        <div><h2>Approved searches for selected campaign</h2><p>Create and refine the lead search in Sales Navigator, then register its current URL under the correct route.</p></div>
+      </div>
+      <div class="register-row">
+        <input id="searchUrl" type="url" placeholder="Paste a Sales Navigator lead-search URL, or leave blank to use the most recent open Sales Navigator tab">
+        <button id="registerSearch" type="button">Register search</button>
+      </div>
+      <div id="searchList" class="search-list"></div>
+    </section>
+
+    <section class="panel">
+      <div class="section-title">
+        <div><h2>Automation and diagnostics</h2><p>Run each campaign manually and review extraction plus commercial quality before enabling scheduled capture.</p></div>
+        <label class="toggle"><input id="automationEnabled" type="checkbox"><span>Scheduled capture enabled</span></label>
+      </div>
+      <button id="runNow" class="secondary" type="button">Run selected campaign now</button>
+      <pre id="status" role="status" aria-live="polite">Loading campaign status…</pre>
+    </section>
+
+    <p class="safety">The extension reads visible professional evidence only. It never saves a lead, connects, follows, sends InMail, messages, emails, reacts, comments, bypasses LinkedIn controls, or claims that a cold prospect has expressed buying intent.</p>
+  </main>
+  <script src="sales-nav-options-persist.js"></script>
+  <script src="sales-nav-options.js"></script>
+</body>
+</html>

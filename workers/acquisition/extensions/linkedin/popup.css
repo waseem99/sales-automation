@@ -1,0 +1,23 @@
+body {
+  margin: 0;
+  width: 360px;
+  font-family: "Segoe UI", Arial, sans-serif;
+  background: #f7f8fa;
+  color: #182230;
+}
+main { padding: 18px; }
+h1 { margin: 0 0 8px; font-size: 21px; }
+.hint, .safety { margin: 0 0 14px; color: #596579; font-size: 13px; line-height: 1.45; }
+button, a.automation { width: 100%; box-sizing: border-box; border-radius: 8px; font-size: 14px; padding: 11px 12px; border: 0; cursor: pointer; font-weight: 650; margin-top: 8px; }
+button:disabled { opacity: 0.55; cursor: progress; }
+a.automation { display: block; text-align: center; text-decoration: none; }
+.primary { background: #0a66c2; color: white; }
+.secondary { background: #e8f3ff; color: #07579f; border: 1px solid #b8d9f7; }
+.automation { background: #167442; color: white; }
+.automation-card { margin: 14px 0; padding: 12px; border: 1px solid #cbd8cf; border-radius: 10px; background: #f4fbf6; }
+.automation-card strong { display: block; margin-bottom: 7px; font-size: 13px; }
+.automation-toggle { display: flex; gap: 9px; align-items: flex-start; font-size: 13px; line-height: 1.4; font-weight: 650; }
+.automation-toggle input { margin: 3px 0 0; }
+.automation-status { margin-top: 10px; color: #425466; font-size: 12px; line-height: 1.4; }
+#status { margin-top: 14px; min-height: 38px; padding: 10px; border-radius: 8px; background: white; border: 1px solid #dfe3e8; font-size: 13px; line-height: 1.4; }
+.safety { margin: 12px 0 0; font-size: 11px; }

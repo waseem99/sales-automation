@@ -214,10 +214,10 @@ export function buildSourcePerformance(records: StoredLeadRecord[]): SourcePerfo
   const totalActive = records.filter((record) => !finalStatuses.has(record.lead.pipelineStatus)).length;
   return [...groups.entries()].map(([key, sourceRecords]) => {
     const active = sourceRecords.filter((record) => !finalStatuses.has(record.lead.pipelineStatus)).length;
-    const feedback = sourceRecords.map((record) => record.lead.feedback).filter(Boolean);
-    const relevance = feedback.map((item) => item?.relevanceRating).filter((value): value is number => typeof value === 'number');
+    const feedback = sourceRecords.flatMap((record) => record.lead.feedback ? [record.lead.feedback] : []);
+    const relevance = feedback.flatMap((item) => typeof item.relevanceRating === 'number' ? [item.relevanceRating] : []);
     const repeatRecommendations: Record<RepeatRecommendation, number> = { increase: 0, keep: 0, reduce: 0, stop: 0 };
-    for (const item of feedback) if (item?.repeatRecommendation) repeatRecommendations[item.repeatRecommendation] += 1;
+    for (const item of feedback) if (item.repeatRecommendation) repeatRecommendations[item.repeatRecommendation] += 1;
     const performance: SourcePerformance = {
       sourceKey: key,
       label: sourceLabel(key),
@@ -234,7 +234,7 @@ export function buildSourcePerformance(records: StoredLeadRecord[]): SourcePerfo
       priorityA: sourceRecords.filter((record) => record.latestEvaluation?.closeability?.band === 'priority_a').length,
       priorityB: sourceRecords.filter((record) => record.latestEvaluation?.closeability?.band === 'priority_b').length,
       averageRelevance: relevance.length ? relevance.reduce((sum, value) => sum + value, 0) / relevance.length : undefined,
-      accurateContacts: feedback.filter((item) => item?.contactAccuracy === 'accurate').length,
+      accurateContacts: feedback.filter((item) => item.contactAccuracy === 'accurate').length,
       feedbackCount: feedback.length,
       repeatRecommendations,
       recommendation: 'keep',
@@ -389,23 +389,23 @@ function operationalMetricUrl(metric: OperationalMetricId): string {
 }
 
 function isLinkedInRecord(lead: Lead): boolean {
-  return sourceKey(lead).startsWith('linkedin') || lead.source === 'linkedin' || lead.source === 'sales_navigator';
+  return lead.source === 'linkedin' || lead.source === 'sales_navigator' || sourceKey(lead).startsWith('linkedin_');
 }
 
 function isUpworkRecord(lead: Lead): boolean {
-  return sourceKey(lead).startsWith('upwork') || lead.source === 'upwork';
+  return lead.source === 'upwork' || sourceKey(lead).startsWith('upwork_');
 }
 
-function dateBetween(value: string | undefined, afterExclusive: number, beforeInclusive: number): boolean {
+function dateBetween(value: string | undefined, start: number, end: number): boolean {
   if (!value) return false;
   const parsed = Date.parse(value);
-  return Number.isFinite(parsed) && parsed > afterExclusive && parsed <= beforeInclusive;
+  return Number.isFinite(parsed) && parsed >= start && parsed <= end;
 }
 
 function dateBefore(value: string | undefined, before: number): boolean {
   if (!value) return false;
   const parsed = Date.parse(value);
-  return Number.isFinite(parsed) && parsed <= before;
+  return Number.isFinite(parsed) && parsed < before;
 }
 
 function updatedSort(left: StoredLeadRecord, right: StoredLeadRecord): number {
@@ -413,34 +413,75 @@ function updatedSort(left: StoredLeadRecord, right: StoredLeadRecord): number {
 }
 
 function followUpSort(left: StoredLeadRecord, right: StoredLeadRecord): number {
-  return dateValue(left.lead.nextFollowUpAt, Number.MAX_SAFE_INTEGER) - dateValue(right.lead.nextFollowUpAt, Number.MAX_SAFE_INTEGER) || updatedSort(left, right);
+  return Date.parse(left.lead.nextFollowUpAt ?? left.lead.updatedAt) - Date.parse(right.lead.nextFollowUpAt ?? right.lead.updatedAt);
 }
 
 function deadlineSort(left: StoredLeadRecord, right: StoredLeadRecord): number {
-  return dateValue(left.lead.tender?.deadline, Number.MAX_SAFE_INTEGER) - dateValue(right.lead.tender?.deadline, Number.MAX_SAFE_INTEGER) || updatedSort(left, right);
+  return Date.parse(left.lead.tender?.deadline ?? left.lead.updatedAt) - Date.parse(right.lead.tender?.deadline ?? right.lead.updatedAt);
 }
 
-function dateValue(value: string | undefined, fallback: number): number {
-  if (!value) return fallback;
-  const parsed = Date.parse(value);
-  return Number.isFinite(parsed) ? parsed : fallback;
+function countStatus(records: StoredLeadRecord[], statuses: Set<PipelineStatus>): number {
+  return records.filter((record) => statuses.has(record.lead.pipelineStatus)).length;
 }
 
-function sourceLabel(key: string): string { return key.replace(/_/g, ' ').replace(/\b\w/g, (letter) => letter.toUpperCase()); }
-function countStatus(records: StoredLeadRecord[], statuses: Set<PipelineStatus>): number { return records.filter((record) => statuses.has(record.lead.pipelineStatus)).length; }
-function countStatuses(records: StoredLeadRecord[], statuses: PipelineStatus[]): number { const statusSet = new Set(statuses); return records.filter((record) => statusSet.has(record.lead.pipelineStatus)).length; }
-function percent(value: number): string { return `${Math.round(value * 100)}%`; }
-function formatDate(value: string): string { const date = new Date(value); return Number.isNaN(date.getTime()) ? value : new Intl.DateTimeFormat('en', { dateStyle: 'medium', timeStyle: 'short' }).format(date); }
-function label(value: string): string { return value.replace(/_/g, ' ').replace(/([a-z])([A-Z])/g, '$1 $2').replace(/\b\w/g, (letter) => letter.toUpperCase()); }
-async function parseBody(request: Request): Promise<unknown> { const raw = await request.text(); if (!raw) return {}; if (raw.length > 50_000) throw new Error('Source-control payload is too large.'); try { return JSON.parse(raw); } catch { return Object.fromEntries(new URLSearchParams(raw)); } }
-function asObject(value: unknown): Record<string, unknown> { return value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : {}; }
-function requiredString(value: unknown, field: string): string { if (typeof value !== 'string' || !value.trim()) throw new Error(`${field} is required.`); return value.trim(); }
-function booleanValue(value: unknown, field: string): boolean { if (value === true || value === 'true') return true; if (value === false || value === 'false') return false; throw new Error(`${field} must be true or false.`); }
-function json(value: unknown, status = 200): Response { return new Response(JSON.stringify(value), { status, headers: { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store' } }); }
-function html(value: string): Response { return new Response(value, { status: 200, headers: { 'content-type': 'text/html; charset=utf-8', 'cache-control': 'no-store', 'x-content-type-options': 'nosniff', 'x-frame-options': 'DENY' } }); }
-function escapeHtml(value: unknown): string { return String(value ?? '').replace(/[&<>"']/g, (character) => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[character] ?? character)); }
-function escapeAttribute(value: unknown): string { return escapeHtml(value); }
+function countStatuses(records: StoredLeadRecord[], statuses: PipelineStatus[]): number {
+  const accepted = new Set(statuses);
+  return records.filter((record) => accepted.has(record.lead.pipelineStatus)).length;
+}
+
+function sourceLabel(value: string): string {
+  return value.split('_').map((part) => part ? `${part[0]!.toUpperCase()}${part.slice(1)}` : '').join(' ');
+}
+
+function label(value: string): string {
+  return value.replace(/_/g, ' ').replace(/\b\w/g, (character) => character.toUpperCase());
+}
+
+function percent(value: number): string {
+  return `${Math.round(value * 100)}%`;
+}
+
+function formatDate(value: string): string {
+  const parsed = new Date(value);
+  return Number.isNaN(parsed.getTime()) ? value : parsed.toISOString().replace('T', ' ').slice(0, 16);
+}
+
+function requiredString(value: unknown, field: string): string {
+  if (typeof value !== 'string' || !value.trim()) throw new Error(`${field} is required.`);
+  return value.trim();
+}
+
+function booleanValue(value: unknown, field: string): boolean {
+  if (value === true || value === 'true') return true;
+  if (value === false || value === 'false') return false;
+  throw new Error(`${field} must be true or false.`);
+}
+
+function asObject(value: unknown): Record<string, unknown> {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) throw new Error('A JSON object is required.');
+  return value as Record<string, unknown>;
+}
+
+async function parseBody(request: Request): Promise<unknown> {
+  try { return await request.json(); } catch { throw new Error('Request body must be valid JSON.'); }
+}
+
+function json(body: unknown, status = 200): Response {
+  return new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store' } });
+}
+
+function html(body: string, status = 200): Response {
+  return new Response(body, { status, headers: { 'content-type': 'text/html; charset=utf-8', 'cache-control': 'no-store' } });
+}
+
+function escapeHtml(value: string): string {
+  return value.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+}
+
+function escapeAttribute(value: string): string {
+  return escapeHtml(value);
+}
 
 function styles(): string {
-  return `:root{font-family:Inter,ui-sans-serif,system-ui;color:#172033;background:#f4f6fb;line-height:1.4}*{box-sizing:border-box}body{margin:0}.shell{max-width:1440px;margin:auto;padding:28px}header{display:flex;justify-content:space-between;gap:20px;align-items:flex-start}header h1{margin:3px 0 8px}header p{margin:0;color:#667085}.eyebrow{text-transform:uppercase;letter-spacing:.08em;font-size:11px;font-weight:800;color:#667085}.actions{display:flex;gap:9px;flex-wrap:wrap}.button,button{font:inherit;border:0;border-radius:9px;padding:9px 12px;min-height:44px;font-weight:750;cursor:pointer}.ghost{background:#fff;border:1px solid #d0d5dd;color:#344054;text-decoration:none}.operational-metrics{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;margin:20px 0}.operational-metric{display:grid;grid-template-columns:1fr auto;gap:7px 12px;min-height:126px;padding:16px;border:1px solid #e4e7ec;border-radius:16px;background:#fff;color:#172033;text-decoration:none}.operational-metric:hover{border-color:#98a2b3}.operational-metric.active{border-color:#3157d5;box-shadow:0 0 0 2px rgba(49,87,213,.12)}.operational-metric span{font-size:12px;font-weight:800}.operational-metric strong{font-size:29px}.operational-metric small{grid-column:1/-1;color:#667085;line-height:1.45}.alerts,.ok,.panel{background:#fff;border:1px solid #e4e7ec;border-radius:16px}.alerts{padding:18px;margin:16px 0;border-color:#fecdca}.alerts h2{margin-top:0}.alerts div{padding:8px 10px;background:#fef3f2;color:#b42318;border-radius:8px;margin-top:7px}.ok{padding:14px;margin:16px 0;color:#027a48;background:#ecfdf3}.panel{padding:18px;margin-bottom:16px}.panel-title{display:flex;justify-content:space-between;align-items:flex-end;gap:16px;margin-bottom:13px}.panel-title h2{margin:2px 0}.panel-title p{margin:4px 0 0;color:#667085}.panel-title>span{color:#667085;font-size:12px}.metric-summary{font-weight:750;color:#344054!important}.grid{display:grid;grid-template-columns:1.2fr .8fr;gap:16px}.table-wrap{overflow:auto}table{width:100%;border-collapse:collapse;font-size:12px}th,td{text-align:left;padding:9px;border-bottom:1px solid #eaecf0;vertical-align:top}th{color:#667085;font-size:10px;text-transform:uppercase;white-space:nowrap}td small{display:block;color:#667085;margin-top:4px}.exact-records td:nth-child(1){min-width:230px}.exact-records td:nth-child(5){min-width:250px}.pipeline-status,.recommend,.state{display:inline-block;padding:4px 8px;border-radius:999px;font-size:10px;font-weight:850;text-transform:uppercase;background:#f2f4f7;color:#344054}.warning{display:block;color:#b54708;margin-top:4px}.increase,.on,.good{background:#ecfdf3;color:#027a48}.keep{background:#eff8ff;color:#175cd3}.reduce{background:#fff6ed;color:#b54708}.stop,.off,.bad{background:#fef3f2;color:#b42318}.control{display:grid;grid-template-columns:minmax(220px,1fr) 110px minmax(180px,1fr) auto;gap:8px;align-items:center;padding:11px 0;border-bottom:1px solid #eaecf0}.control small{display:block;color:#667085;margin-top:4px}.control select,.control input{border:1px solid #d0d5dd;border-radius:8px;padding:8px;min-height:44px;font:inherit}.control button{background:#3157d5;color:#fff}.control [data-status]{font-size:11px;color:#667085}dl{display:grid;grid-template-columns:160px 1fr;gap:9px;margin:0}dt{font-weight:750;color:#667085}dd{margin:0;overflow-wrap:anywhere}.run{border-top:1px solid #eaecf0;padding:10px 0}.run summary{display:grid;grid-template-columns:200px 1fr auto;gap:12px;min-height:44px;align-items:center;cursor:pointer}.run-body{padding:10px 0 0}.empty{text-align:center;padding:26px;color:#667085}@media(max-width:1100px){.operational-metrics{grid-template-columns:repeat(2,minmax(0,1fr))}.grid{grid-template-columns:1fr}.control{grid-template-columns:1fr}}@media(max-width:700px){.shell{padding:16px}header{display:grid}.operational-metrics{grid-template-columns:1fr}.panel-title{align-items:flex-start;flex-direction:column}.run summary{grid-template-columns:1fr}}`;
+  return `:root{color-scheme:dark;--bg:#08111f;--panel:#111d2e;--border:#2a3d57;--text:#e5eef9;--muted:#91a6be;--accent:#62d3ae;--warn:#ffcc7a;--bad:#ff8f8f}*{box-sizing:border-box}body{margin:0;background:radial-gradient(circle at top left,#152a44 0,#08111f 42%);color:var(--text);font:14px/1.5 Inter,ui-sans-serif,system-ui,sans-serif}.shell{max-width:1500px;margin:auto;padding:30px}header,.panel-title,.run summary,.control{display:flex;justify-content:space-between;gap:18px;align-items:flex-start}header{margin-bottom:22px}.eyebrow{margin:0;color:var(--accent);text-transform:uppercase;letter-spacing:.13em;font-weight:800;font-size:11px}h1,h2{margin:.3rem 0}.actions,.operational-metrics{display:flex;gap:10px;flex-wrap:wrap}.button,.operational-metric{border:1px solid var(--border);background:var(--panel);color:var(--text);text-decoration:none;border-radius:12px;padding:10px 13px;min-height:44px}.operational-metrics{display:grid;grid-template-columns:repeat(auto-fit,minmax(185px,1fr));margin-bottom:16px}.operational-metric{display:grid;gap:3px}.operational-metric strong{font-size:24px}.operational-metric small,.panel-title p,small{color:var(--muted)}.operational-metric.active{border-color:var(--accent);box-shadow:0 0 0 1px rgba(98,211,174,.35)}.panel{background:rgba(17,29,46,.92);border:1px solid var(--border);border-radius:16px;padding:18px;margin-bottom:16px}.grid{display:grid;grid-template-columns:1fr 1fr;gap:16px}.table-wrap{overflow:auto}table{width:100%;border-collapse:collapse;margin-top:12px}th,td{text-align:left;padding:10px;border-bottom:1px solid rgba(145,166,190,.18);vertical-align:top}th{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.08em}td small{display:block;max-width:360px}.exact-records td:nth-child(5){min-width:260px}.alerts,.ok{border:1px solid var(--border);border-radius:12px;padding:13px;margin-bottom:16px}.alerts{border-color:#865f2f;background:#2c2114}.ok{border-color:#276650;background:#102a23}.control{padding:12px 0;border-bottom:1px solid rgba(145,166,190,.18)}.control select,.control input,.control button{background:#091321;color:var(--text);border:1px solid var(--border);padding:8px;border-radius:8px;min-height:44px}.state,.pipeline-status,.recommend{display:inline-block;border-radius:999px;padding:3px 8px;margin-left:7px;background:#24354a}.state.on,.good,.recommend.increase{color:var(--accent)}.state.off,.bad,.warning,.recommend.stop{color:var(--bad)}.recommend.reduce{color:var(--warn)}.run{border-top:1px solid rgba(145,166,190,.18);padding:10px 0}.run summary{cursor:pointer;min-height:44px}.run-body{padding:8px 0 0}.empty{padding:18px;color:var(--muted);text-align:center}.metric-summary{font-weight:700;color:var(--text)!important}@media(max-width:850px){.grid{grid-template-columns:1fr}.shell{padding:18px}header{display:block}.actions{margin-top:12px}}`;
 }

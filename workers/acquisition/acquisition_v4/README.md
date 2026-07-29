@@ -1,0 +1,1 @@
+The `acquisition_v4` package provides the local normalized capture schema, atomic persistence, source-isolated collectors, supervisor, health CLI and fixture submission utility used by issues #200, #201 and #202.

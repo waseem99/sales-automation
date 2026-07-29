@@ -40,7 +40,7 @@ export type OpportunitySignalStatus =
 
 export type ProspectConfidence = 'high' | 'medium' | 'low';
 
-export type ServiceCategory =
+export type OperationalServiceCategory =
   | 'ai_automation'
   | 'rag_document_intelligence'
   | 'ai_saas_mvp'
@@ -52,6 +52,16 @@ export type ServiceCategory =
   | 'website_portal'
   | 'enterprise_systems'
   | 'unknown';
+
+export type CommercialServiceCategory =
+  | 'outsourcing_partnership'
+  | 'cybersecurity'
+  | 'digital_marketing'
+  | 'creative_production';
+
+export type ServiceCategory =
+  | OperationalServiceCategory
+  | (string & { readonly __extensibleServiceCategory?: unique symbol });
 
 export type QualificationStatus = 'hot' | 'qualified' | 'nurture' | 'rejected';
 

@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Codistan LinkedIn Capture</title>
+  <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+  <main>
+    <h1>LinkedIn Capture V4</h1>
+    <p class="hint">Approved buyer-intent searches run in normal logged-in Chrome and feed the local Acquisition collector.</p>
+    <section class="automation-card" aria-label="Scheduled LinkedIn acquisition">
+      <label class="automation-toggle"><input id="automationEnabled" type="checkbox"><span>Run all five approved searches every 15 minutes</span></label>
+      <button id="runScheduled" class="automation" type="button">Run all approved searches now</button>
+      <div id="automationStatus" class="automation-status" role="status" aria-live="polite">Checking scheduled automation…</div>
+    </section>
+    <button id="capture" class="primary" type="button">Capture visible requirements</button>
+    <button id="scanMore" class="secondary" type="button">Scan and load more results</button>
+    <div id="status" role="status" aria-live="polite">Checking the local processor…</div>
+    <section class="automation-card" aria-label="Sales Navigator cold campaigns">
+      <strong>Sales Navigator cold campaigns</strong>
+      <p class="hint">Register product- or service-specific lead searches, score ICP fit, and send cold prospects to Prospect Desk without automated outreach.</p>
+      <a class="automation" href="sales-nav-options.html" target="_blank">Open Sales Navigator campaigns</a>
+    </section>
+    <p class="safety">Scheduled and manual scans are bounded, sequential and evidence-only. They may open inactive search tabs and scroll results, but they never message, connect, follow, react, comment, submit a proposal, email anyone, or bypass LinkedIn controls.</p>
+  </main>
+  <script src="popup.js"></script>
+</body>
+</html>

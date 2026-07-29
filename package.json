@@ -7,6 +7,7 @@
   "scripts": {
     "build": "pnpm -r --filter \"@sales-automation/*\" --sort build",
     "build:vercel": "pnpm build && pnpm test:vercel-runtime",
+    "test:repository-identity": "tsx scripts/repository-identity-smoke.ts",
     "test:protected-routes": "tsx scripts/protected-route-contract-smoke.ts",
     "test:dedicated-shells": "tsx scripts/dedicated-shell-smoke.ts",
     "test:partial-navigation": "tsx scripts/partial-navigation-smoke.ts",
@@ -15,34 +16,41 @@
     "test:delivery-observability": "tsx packages/neon-state/src/operational-telemetry.test.ts && tsx scripts/delivery-telemetry-smoke.ts",
     "dev": "pnpm --filter @sales-automation/web dev",
     "start:web": "pnpm --filter @sales-automation/web start",
-    "deploy:check": "pnpm install --no-frozen-lockfile && pnpm build && pnpm typecheck:vercel && pnpm test:vercel-runtime && pnpm test:delivery-observability && tsx scripts/release-gate-smoke.ts && tsx scripts/linkedin-warm-signals-smoke.ts && tsx scripts/workspace-navigation-smoke.ts",
+    "deploy:check": "pnpm install --no-frozen-lockfile && pnpm test:repository-identity && pnpm build && pnpm typecheck:vercel && pnpm test:vercel-runtime && pnpm test:delivery-observability && tsx scripts/release-gate-smoke.ts && tsx scripts/linkedin-warm-signals-smoke.ts && tsx scripts/workspace-navigation-smoke.ts",
     "typecheck:vercel": "tsc -p tsconfig.vercel.json --noEmit",
     "prospects:run": "pnpm build && pnpm --filter @sales-automation/prospect-discovery run",
     "worker:prospects": "pnpm build && pnpm --filter @sales-automation/prospect-discovery worker",
     "lint": "pnpm build && pnpm -r --filter \"@sales-automation/*\" --sort lint",
-    "test": "pnpm build && pnpm -r --filter \"@sales-automation/*\" --sort test && pnpm test:vercel-runtime && pnpm test:delivery-observability && tsx scripts/release-gate-smoke.ts && tsx scripts/linkedin-warm-signals-smoke.ts && tsx scripts/workspace-navigation-smoke.ts",
+    "test": "pnpm test:repository-identity && pnpm build && pnpm -r --filter \"@sales-automation/*\" --sort test && pnpm test:vercel-runtime && pnpm test:delivery-observability && tsx scripts/release-gate-smoke.ts && tsx scripts/linkedin-warm-signals-smoke.ts && tsx scripts/workspace-navigation-smoke.ts",
     "typecheck": "pnpm build && pnpm -r --filter \"@sales-automation/*\" --sort typecheck && pnpm typecheck:vercel"
   },
   "engines": {
     "node": "22.x"
   },
   "dependencies": {
+    "@sales-automation/bd-workflow": "workspace:*",
+    "@sales-automation/campaign-engine": "workspace:*",
+    "@sales-automation/commercial-readiness": "workspace:*",
+    "@sales-automation/enrichment": "workspace:*",
     "@sales-automation/evaluator": "workspace:*",
     "@sales-automation/fixtures": "workspace:*",
+    "@sales-automation/identity-graph": "workspace:*",
     "@sales-automation/ingestion": "workspace:*",
     "@sales-automation/neon-state": "workspace:*",
     "@sales-automation/outreach-email": "workspace:*",
+    "@sales-automation/outreach-workbench": "workspace:*",
     "@sales-automation/parsers": "workspace:*",
     "@sales-automation/prospect-discovery": "workspace:*",
     "@sales-automation/shared": "workspace:*",
     "@sales-automation/storage": "workspace:*",
+    "@sales-automation/upwork-account-intelligence": "workspace:*",
     "@sales-automation/web": "workspace:*",
     "nodemailer": "^6.10.1"
   },
   "devDependencies": {
-    "@types/node": "^22.0.0",
-    "@types/nodemailer": "^6.4.17",
-    "tsx": "^4.19.2",
-    "typescript": "^5.7.2"
+    "@types/node": "22.20.1",
+    "@types/nodemailer": "6.4.24",
+    "tsx": "4.23.1",
+    "typescript": "5.9.3"
   }
 }

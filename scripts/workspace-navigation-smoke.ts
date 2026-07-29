@@ -13,6 +13,7 @@ import { isWorkspaceDashboardPath } from '../vercel/workspace-dashboard-runtime.
 const now = '2026-07-15T12:00:00.000Z';
 const records: StoredLeadRecord[] = [
   record(lead('linkedin', 'linkedin', 'linkedin_warm_post', 'website_portal')),
+  record({ ...lead('sales-nav', 'sales_navigator', 'sales_navigator_cold_prospect', 'fullstack_web_app'), prospectStage: 'cold_prospect', opportunityStatus: undefined }),
   record(lead('upwork', 'upwork', 'upwork_job', 'fullstack_web_app')),
   record({ ...lead('rfq', 'public_procurement', 'public_opportunity', 'cybersecurity_compliance'), tender: tender('rfq') }),
   record({ ...lead('rfp', 'public_procurement', 'public_opportunity', 'enterprise_systems'), tender: tender('rfp') }),
@@ -25,15 +26,24 @@ const records: StoredLeadRecord[] = [
 
 assert.equal(new Set(WORKSPACE_PAGES.map((page) => page.route)).size, WORKSPACE_PAGES.length);
 assert.equal(resolveWorkspacePage('/leads/linkedin')?.id, 'linkedin');
+assert.equal(resolveWorkspacePage('/leads/sales-navigator')?.id, 'sales_navigator');
 assert.equal(resolveWorkspacePage('/services/software/')?.id, 'software');
 assert.equal(resolveWorkspacePage('/not-a-workspace'), undefined);
 assert.equal(isWorkspaceDashboardPath('/leads/rfq'), true);
+assert.equal(isWorkspaceDashboardPath('/leads/sales-navigator'), true);
 assert.equal(isWorkspaceDashboardPath('/services/cybersecurity/'), true);
 assert.equal(isWorkspaceDashboardPath('/operations'), false);
 
 const linkedin = buildWorkspacePage(records, { pageSize: 25 }, requiredPage('/leads/linkedin'), undefined, now);
 assert.equal(linkedin.page.visibleTotal, 1);
 assert.equal(linkedin.page.records[0]?.lead.id, 'linkedin');
+assert.ok(!linkedin.page.records.some((item) => item.lead.id === 'sales-nav'));
+
+const salesNavigator = buildWorkspacePage(records, { pageSize: 25 }, requiredPage('/leads/sales-navigator'), undefined, now);
+assert.equal(salesNavigator.page.visibleTotal, 1);
+assert.equal(salesNavigator.page.records[0]?.lead.id, 'sales-nav');
+assert.equal(salesNavigator.page.records[0]?.lead.prospectStage, 'cold_prospect');
+assert.equal(salesNavigator.page.records[0]?.lead.opportunityStatus, undefined);
 
 const procurement = buildWorkspacePage(records, { pageSize: 25 }, requiredPage('/leads/tenders'), undefined, now);
 assert.equal(procurement.page.visibleTotal, 4);
@@ -51,11 +61,11 @@ assert.equal(research.page.visibleTotal, 1);
 assert.equal(research.page.records[0]?.lead.pipelineStatus, 'needs_research');
 
 const sampleHtml = `<!doctype html><html><head><title>Codistan Prospect Desk</title><style></style></head><body><div class="app-shell"><aside class="sidebar">old</aside><main class="main"><header class="topbar"><div><p class="eyebrow">Live internal BD workspace</p><h1>Prospect Discovery & Management</h1><p>Old description.</p></div><div class="top-actions"></div></header><div class="prospect-list"><div class="section-heading"><div><h2>Prospects</h2><p>Old list copy.</p></div></div><a href="/prospects?leadId=1">Lead</a><form action="/prospects"></form><table><tbody><tr><td colspan="7" class="empty">No prospects.</td></tr></tbody></table></div><section class="lower-grid">old</section><section class="panel runs-panel">runs</section></main></div><script></script></body></html>`;
-const transformed = applyWorkspacePageChrome(sampleHtml, requiredPage('/leads/rfq'), buildWorkspacePage(records, {}, requiredPage('/leads/rfq'), undefined, now).page.summary);
-assert.match(transformed, /Request for Quotation Leads/);
-assert.match(transformed, /class="nav-item active" href="\/leads\/rfq"/);
-assert.match(transformed, /href="\/leads\/rfq\?leadId=1"/);
-assert.match(transformed, /action="\/leads\/rfq"/);
+const transformed = applyWorkspacePageChrome(sampleHtml, requiredPage('/leads/sales-navigator'), buildWorkspacePage(records, {}, requiredPage('/leads/sales-navigator'), undefined, now).page.summary);
+assert.match(transformed, /Sales Navigator Cold Prospects/);
+assert.match(transformed, /class="nav-item active" href="\/leads\/sales-navigator"/);
+assert.match(transformed, /href="\/leads\/sales-navigator\?leadId=1"/);
+assert.match(transformed, /action="\/leads\/sales-navigator"/);
 assert.doesNotMatch(transformed, /section class="lower-grid"/);
 assert.match(transformed, /sidebar-toggle/);
 
@@ -93,7 +103,7 @@ function lead(
     leadType,
     prospectStage: source === 'linkedin' || source === 'upwork' ? 'warm_lead' : 'unknown',
     title: `${id} opportunity`,
-    description: `A verified ${id} opportunity requiring external delivery support.`,
+    description: `A verified ${id} record requiring external delivery support.`,
     serviceCategory,
     opportunityStatus: 'live_opportunity',
     capturedAt: now,

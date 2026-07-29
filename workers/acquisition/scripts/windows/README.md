@@ -1,0 +1,1 @@
+Windows operator commands are intentionally limited to starting the local collectors and checking their health. Installation, migration, reboot startup and rollback are completed under issue #221 after the source runtime passes issue #200.

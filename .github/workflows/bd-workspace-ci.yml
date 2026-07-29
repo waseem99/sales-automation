@@ -1,0 +1,219 @@
+name: Operational BD Workspace CI
+
+on:
+  pull_request:
+    branches:
+      - agent/upwork-account-intelligence-231
+    paths:
+      - '.github/workflows/bd-workspace-ci.yml'
+      - 'packages/bd-workflow/**'
+      - 'apps/web/**'
+      - 'api/dashboard-runtime.ts'
+      - 'api/acquisition-ingest.ts'
+      - 'vercel/bd-workflow-intake-runtime.ts'
+      - 'vercel/bd-workspace-ui.ts'
+      - 'vercel/workspace-dashboard-runtime.js'
+      - 'workers/acquisition/tests/bd_workspace_bridge_contract.mjs'
+      - 'tsconfig.bd-workspace.json'
+      - 'package.json'
+      - 'pnpm-lock.yaml'
+      - 'packages/**'
+      - 'vercel/**'
+      - 'scripts/**'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: bd-workspace-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  behavior:
+    name: Test BD workflow, authenticated mutations and production UI
+    runs-on: ubuntu-latest
+    timeout-minutes: 32
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Install standalone pnpm
+        run: npm install --global --force @pnpm/exe@9.15.9
+
+      - name: Install workspace dependencies
+        run: pnpm install --no-frozen-lockfile
+
+      - name: Build workspace packages for behavior tests
+        id: package_build
+        continue-on-error: true
+        shell: bash
+        run: pnpm build > bd-workspace-package-build.log 2>&1
+
+      - name: Test BD workflow behavior
+        id: workflow_tests
+        if: steps.package_build.outcome == 'success'
+        continue-on-error: true
+        shell: bash
+        run: pnpm --filter @sales-automation/bd-workflow test > bd-workspace-behavior.log 2>&1
+
+      - name: Test authenticated Prospect Desk mutations
+        id: handler_tests
+        if: steps.workflow_tests.outcome == 'success'
+        continue-on-error: true
+        shell: bash
+        run: pnpm --filter @sales-automation/web test > bd-workspace-handler.log 2>&1
+
+      - name: Validate BD workspace safety bridge
+        id: bridge_contract
+        if: steps.handler_tests.outcome == 'success'
+        continue-on-error: true
+        working-directory: workers/acquisition
+        shell: bash
+        run: node tests/bd_workspace_bridge_contract.mjs > ../../bd-workspace-bridge.log 2>&1
+
+      - name: Preserve acquisition source regressions
+        id: source_regressions
+        if: steps.bridge_contract.outcome == 'success'
+        continue-on-error: true
+        working-directory: workers/acquisition
+        shell: bash
+        run: |
+          {
+            node tests/upwork_extension_contract.mjs
+            node tests/linkedin_extension_contract.mjs
+            node tests/sales_navigator_extension_contract.mjs
+          } > ../../bd-workspace-source-regressions.log 2>&1
+
+      - name: Build full production workspace
+        id: production_build
+        if: steps.source_regressions.outcome == 'success'
+        continue-on-error: true
+        shell: bash
+        run: pnpm build:vercel > bd-workspace-production-build.log 2>&1
+
+      - name: Preserve behavior diagnostics
+        if: always()
+        shell: bash
+        run: |
+          for file in bd-workspace-package-build.log bd-workspace-behavior.log bd-workspace-handler.log bd-workspace-bridge.log bd-workspace-source-regressions.log bd-workspace-production-build.log; do
+            test -f "$file" || touch "$file"
+          done
+
+      - name: Upload behavior diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: bd-workspace-behavior
+          path: |
+            bd-workspace-package-build.log
+            bd-workspace-behavior.log
+            bd-workspace-handler.log
+            bd-workspace-bridge.log
+            bd-workspace-source-regressions.log
+            bd-workspace-production-build.log
+          if-no-files-found: error
+          retention-days: 3
+
+      - name: Enforce package build
+        if: steps.package_build.outcome != 'success'
+        run: |
+          cat bd-workspace-package-build.log
+          exit 1
+
+      - name: Enforce workflow behavior
+        if: steps.package_build.outcome == 'success' && steps.workflow_tests.outcome != 'success'
+        run: |
+          cat bd-workspace-behavior.log
+          exit 1
+
+      - name: Enforce authenticated mutations
+        if: steps.workflow_tests.outcome == 'success' && steps.handler_tests.outcome != 'success'
+        run: |
+          cat bd-workspace-handler.log
+          exit 1
+
+      - name: Enforce safety bridge
+        if: steps.handler_tests.outcome == 'success' && steps.bridge_contract.outcome != 'success'
+        run: |
+          cat bd-workspace-bridge.log
+          exit 1
+
+      - name: Enforce source regressions
+        if: steps.bridge_contract.outcome == 'success' && steps.source_regressions.outcome != 'success'
+        run: |
+          cat bd-workspace-source-regressions.log
+          exit 1
+
+      - name: Enforce production build
+        if: steps.source_regressions.outcome == 'success' && steps.production_build.outcome != 'success'
+        run: |
+          tail -n 400 bd-workspace-production-build.log
+          exit 1
+
+  typecheck:
+    name: Type-check BD workspace integration
+    runs-on: ubuntu-latest
+    timeout-minutes: 24
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Install standalone pnpm
+        run: npm install --global --force @pnpm/exe@9.15.9
+
+      - name: Install workspace dependencies
+        run: pnpm install --no-frozen-lockfile
+
+      - name: Build all workspace packages
+        id: workspace_build
+        continue-on-error: true
+        shell: bash
+        run: pnpm build > bd-workspace-full-build.log 2>&1
+
+      - name: Type-check BD workspace runtime
+        id: focused_typecheck
+        if: steps.workspace_build.outcome == 'success'
+        continue-on-error: true
+        shell: bash
+        run: pnpm exec tsc -p tsconfig.bd-workspace.json --noEmit > bd-workspace-typecheck.log 2>&1
+
+      - name: Preserve typecheck diagnostics
+        if: always()
+        shell: bash
+        run: |
+          test -f bd-workspace-full-build.log || touch bd-workspace-full-build.log
+          test -f bd-workspace-typecheck.log || touch bd-workspace-typecheck.log
+
+      - name: Upload typecheck diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: bd-workspace-typecheck
+          path: |
+            bd-workspace-full-build.log
+            bd-workspace-typecheck.log
+          if-no-files-found: error
+          retention-days: 3
+
+      - name: Enforce workspace build
+        if: steps.workspace_build.outcome != 'success'
+        run: |
+          cat bd-workspace-full-build.log
+          exit 1
+
+      - name: Enforce focused typecheck
+        if: steps.workspace_build.outcome == 'success' && steps.focused_typecheck.outcome != 'success'
+        run: |
+          cat bd-workspace-typecheck.log
+          exit 1

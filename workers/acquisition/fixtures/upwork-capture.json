@@ -1,0 +1,27 @@
+{
+  "source": "upwork",
+  "source_subtype": "saved_search_card",
+  "parser_version": "upwork-fixture-1",
+  "page_url": "https://www.upwork.com/nx/find-work/9652811",
+  "page_identity": "AI + Fullstack AI 16 July 2026",
+  "external_action_performed": false,
+  "records": [
+    {
+      "source_url": "https://www.upwork.com/jobs/~0123456789abcdef",
+      "source_native_id": "~0123456789abcdef",
+      "title": "Build a private RAG workflow",
+      "body": "We need an experienced team to build a secure private RAG workflow and admin portal.",
+      "posted_age": "2 hours ago",
+      "commercial_evidence": {
+        "fixed_budget_usd": 12000,
+        "payment_verified": true,
+        "client_spend_usd": 50000,
+        "hire_rate_percent": 75,
+        "proposals": "Less than 5 proposals"
+      },
+      "raw_evidence": {
+        "skills": ["Python", "RAG", "SaaS"]
+      }
+    }
+  ]
+}

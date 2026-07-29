@@ -1,0 +1,11 @@
+{
+  "extends": "./tsconfig.base.json",
+  "compilerOptions": {
+    "noEmit": true,
+    "rootDir": "."
+  },
+  "include": [
+    "api/outreach-workbench.ts",
+    "vercel/outreach-workbench-ui.ts"
+  ]
+}

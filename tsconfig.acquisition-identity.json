@@ -1,0 +1,13 @@
+{
+  "extends": "./tsconfig.base.json",
+  "compilerOptions": {
+    "noEmit": true,
+    "rootDir": "."
+  },
+  "include": [
+    "api/acquisition-ingest.ts",
+    "vercel/acquisition-identity-runtime.ts",
+    "vercel/acquisition-intake-runtime.ts",
+    "vercel/sales-navigator-intake-runtime.ts"
+  ]
+}

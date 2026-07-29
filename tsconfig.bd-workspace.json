@@ -1,0 +1,15 @@
+{
+  "extends": "./tsconfig.base.json",
+  "compilerOptions": {
+    "noEmit": true,
+    "rootDir": "."
+  },
+  "include": [
+    "packages/bd-workflow/src/**/*.ts",
+    "apps/web/src/prospect-handler.ts",
+    "apps/web/src/bd-workflow-handler.test.ts",
+    "vercel/bd-workflow-intake-runtime.ts",
+    "vercel/bd-workspace-ui.ts",
+    "api/acquisition-ingest.ts"
+  ]
+}

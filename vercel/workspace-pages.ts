@@ -67,6 +67,15 @@ const navigationGroups: NavigationGroup[] = [
     ],
   },
   {
+    id: 'cold-campaigns',
+    label: 'Cold campaigns',
+    links: [
+      { href: '/leads/sales-navigator', text: 'Sales Navigator prospects' },
+      { href: '/leads/partnerships', text: 'Partnership leads' },
+      { href: '/re-engagement', text: 'Re-engagement' },
+    ],
+  },
+  {
     id: 'procurement',
     label: 'Procurement',
     links: [
@@ -91,11 +100,9 @@ const navigationGroups: NavigationGroup[] = [
     ],
   },
   {
-    id: 'growth-system',
+    id: 'system',
     label: 'Growth and system',
     links: [
-      { href: '/leads/partnerships', text: 'Partnership leads' },
-      { href: '/re-engagement', text: 'Re-engagement' },
       { href: '/portfolio', text: 'Portfolio proof' },
       { href: '/operations', text: 'Operations' },
       { href: '/delivery-health', text: 'Delivery health' },

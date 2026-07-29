@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Codistan Upwork Capture</title>
+  <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+  <main>
+    <h1>Upwork Acquisition</h1>
+    <p class="hint">Approved saved searches:</p>
+    <p class="hint"><strong>Waseem:</strong> AI + Fullstack AI<br><strong>Roshana:</strong> 3D Design &amp; Creatives<br><strong>Nadir:</strong> Game &amp; AR/VR</p>
+
+    <button id="capture" class="secondary" type="button">Capture this visible page</button>
+    <button id="run-all" class="primary" type="button">Run all approved searches now</button>
+
+    <label class="automation-toggle" for="automation-enabled">
+      <input id="automation-enabled" type="checkbox">
+      <span>Run all three searches every 15 minutes</span>
+    </label>
+    <p class="manual-first">Scheduling starts disabled after this upgrade. Complete and review one manual all-search run before enabling it.</p>
+
+    <div id="status" role="status" aria-live="polite">Checking the local processor and automation status…</div>
+    <p class="safety">The extension opens only approved saved-search pages in inactive temporary tabs, performs a bounded scan, and closes them. It never opens a job, submits a proposal, changes a profile, handles a challenge, or sends a message.</p>
+  </main>
+  <script src="popup.js"></script>
+</body>
+</html>

@@ -1,0 +1,112 @@
+name: Acquisition Identity Graph CI
+
+on:
+  pull_request:
+    branches:
+      - agent/unified-prospecting-os-235
+    paths:
+      - '.github/workflows/acquisition-identity-ci.yml'
+      - 'packages/identity-graph/**'
+      - 'api/acquisition-ingest.ts'
+      - 'vercel/acquisition-identity-runtime.ts'
+      - 'workers/acquisition/tests/identity_graph_bridge_contract.mjs'
+      - 'tsconfig.acquisition-identity.json'
+      - 'package.json'
+      - 'pnpm-lock.yaml'
+      - 'packages/**'
+      - 'apps/web/**'
+      - 'vercel/**'
+      - 'scripts/**'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: acquisition-identity-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  identity:
+    name: Test deterministic identity and production integration
+    runs-on: ubuntu-latest
+    timeout-minutes: 22
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Install standalone pnpm
+        run: npm install --global --force @pnpm/exe@9.15.9
+
+      - name: Install workspace dependencies
+        run: pnpm install --no-frozen-lockfile
+
+      - name: Test identity graph behavior
+        run: pnpm --filter @sales-automation/identity-graph test
+
+      - name: Validate non-destructive ingestion bridge
+        working-directory: workers/acquisition
+        run: node tests/identity_graph_bridge_contract.mjs
+
+      - name: Build full production workspace
+        shell: bash
+        run: |
+          set +e
+          pnpm build:vercel > acquisition-identity-production-build.log 2>&1
+          status=$?
+          tail -n 300 acquisition-identity-production-build.log
+          exit $status
+
+  typecheck:
+    name: Type-check identity Vercel integration
+    runs-on: ubuntu-latest
+    timeout-minutes: 18
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Install standalone pnpm
+        run: npm install --global --force @pnpm/exe@9.15.9
+
+      - name: Install workspace dependencies
+        run: pnpm install --no-frozen-lockfile
+
+      - name: Build workspace dependencies
+        shell: bash
+        run: |
+          set +e
+          pnpm build > acquisition-identity-build.log 2>&1
+          status=$?
+          tail -n 120 acquisition-identity-build.log
+          exit $status
+
+      - name: Type-check acquisition identity runtime
+        id: acquisition_identity_typecheck
+        continue-on-error: true
+        shell: bash
+        run: pnpm exec tsc -p tsconfig.acquisition-identity.json --noEmit > acquisition-identity-typecheck.log 2>&1
+
+      - name: Upload type-check diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: acquisition-identity-typecheck
+          path: acquisition-identity-typecheck.log
+          if-no-files-found: error
+          retention-days: 3
+
+      - name: Enforce acquisition identity type-check
+        if: steps.acquisition_identity_typecheck.outcome != 'success'
+        run: |
+          cat acquisition-identity-typecheck.log
+          exit 1

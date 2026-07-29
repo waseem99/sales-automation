@@ -1,0 +1,45 @@
+{
+  "source": "sales_navigator",
+  "source_subtype": "campaign_lead_search",
+  "parser_version": "sales-navigator-extension-1.0.0",
+  "page_url": "https://www.linkedin.com/sales/search/people?query=SANITIZED",
+  "page_identity": "fintech_backend_operations — FinTech Backend Operations Platform",
+  "external_action_performed": false,
+  "records": [
+    {
+      "source_url": "https://www.linkedin.com/sales/lead/ACwAASanitizedLead",
+      "source_native_id": "ACwAASanitizedLead",
+      "title": "Ayesha Khan — Chief Technology Officer at PayFlow",
+      "body": "Prospect: Ayesha Khan | Role: Chief Technology Officer at PayFlow | Company: PayFlow fintech payments infrastructure | Location: Dubai, UAE | Relationship: 2nd",
+      "author": {
+        "name": "Ayesha Khan",
+        "profile_url": "https://www.linkedin.com/sales/lead/ACwAASanitizedLead",
+        "headline": "Chief Technology Officer at PayFlow",
+        "company": "PayFlow"
+      },
+      "commercial_evidence": {
+        "campaign_id": "fintech_backend_operations",
+        "campaign_name": "FinTech Backend Operations Platform",
+        "offer_type": "hybrid",
+        "offer_name": "FinTech Backend Operations Platform + Managed Delivery",
+        "offer_summary": "Backend operations platform and managed product-delivery partnership for fintech companies.",
+        "service_route": "software_product",
+        "service_lanes": ["software_product", "delivery_partner", "ai_automation"],
+        "target_industry_terms": ["fintech", "payments", "digital banking"],
+        "target_personas": ["CTO", "COO", "Founder", "Head of Operations"],
+        "target_geographies": ["UAE"],
+        "industry_match": true,
+        "geography_match": true
+      },
+      "raw_evidence": {
+        "location": "Dubai, UAE",
+        "relationship": "2nd",
+        "mutual_connections": 3,
+        "posted_on_linkedin": true,
+        "recent_activity": true,
+        "registered_search_url": "https://www.linkedin.com/sales/search/people?query=SANITIZED",
+        "external_action_performed": false
+      }
+    }
+  ]
+}
