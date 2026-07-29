@@ -6,12 +6,15 @@ param(
 $ErrorActionPreference = "Stop"
 $sourceRoot = Join-Path $InstallRoot "workers\acquisition"
 if (-not (Test-Path (Join-Path $sourceRoot "acquisition_v4\supervisor.py"))) {
-    throw "The Prospecting OS source package was not found."
+    throw "The Sales Automation source package was not found."
 }
 if (-not (Test-Path (Join-Path $sourceRoot "release-manifest.json"))) {
-    throw "The Prospecting OS release manifest was not found."
+    throw "The Sales Automation release manifest was not found."
 }
 $release = Get-Content (Join-Path $sourceRoot "release-manifest.json") -Raw | ConvertFrom-Json
+if ([string]$release.product -ne "Codistan Sales Automation" -or [string]$release.application -ne "Prospect Desk") {
+    throw "The release manifest does not identify Codistan Sales Automation and Prospect Desk."
+}
 
 function Find-Python312 {
     $py = Get-Command py.exe -ErrorAction SilentlyContinue
@@ -36,7 +39,7 @@ if (-not $pythonCommand) {
     if ($LASTEXITCODE -ne 0) { throw "Python 3.12 installation failed." }
     $env:Path = [Environment]::GetEnvironmentVariable("Path", "User") + ";" + [Environment]::GetEnvironmentVariable("Path", "Machine")
     $pythonCommand = Find-Python312
-    if (-not $pythonCommand) { throw "Python 3.12 was installed but is not available yet. Sign out and rerun START-HERE-PROSPECTING-OS." }
+    if (-not $pythonCommand) { throw "Python 3.12 was installed but is not available yet. Sign out and rerun START-HERE-SALES-AUTOMATION.cmd." }
 }
 
 New-Item -ItemType Directory -Force -Path $StateRoot | Out-Null
@@ -119,11 +122,11 @@ $commands = Join-Path $appCurrent "workers\acquisition"
 $desktop = [Environment]::GetFolderPath("Desktop")
 $startup = [Environment]::GetFolderPath("Startup")
 $shortcutMap = @{
-    "Start Prospecting OS.lnk" = "START-ACQUISITION-V4.cmd"
-    "Check Prospecting OS Release.lnk" = "CHECK-PROSPECTING-OS-RELEASE.cmd"
-    "Check Prospecting OS Pilot.lnk" = "CHECK-PROSPECTING-OS-PILOT.cmd"
-    "Diagnose Prospecting OS.lnk" = "DIAGNOSE-ACQUISITION-V4.cmd"
-    "Rollback Prospecting OS.lnk" = "ROLLBACK-ACQUISITION-V4.cmd"
+    "Start Sales Automation.lnk" = "START-SALES-AUTOMATION.cmd"
+    "Check Sales Automation Release.lnk" = "CHECK-SALES-AUTOMATION-RELEASE.cmd"
+    "Check Sales Automation Pilot.lnk" = "CHECK-SALES-AUTOMATION-PILOT.cmd"
+    "Diagnose Sales Automation.lnk" = "DIAGNOSE-SALES-AUTOMATION.cmd"
+    "Rollback Sales Automation.lnk" = "ROLLBACK-SALES-AUTOMATION.cmd"
     "Configure Prospect Desk Sync.lnk" = "CONFIGURE-PROSPECT-DESK-SYNC.cmd"
     "Open Upwork Searches.lnk" = "OPEN-UPWORK-SEARCHES.cmd"
     "Open LinkedIn Lead Searches.lnk" = "OPEN-LINKEDIN-LEAD-SEARCHES.cmd"
@@ -137,9 +140,9 @@ $shortcutMap = @{
 foreach ($entry in $shortcutMap.GetEnumerator()) {
     New-Shortcut (Join-Path $desktop $entry.Key) (Join-Path $commands $entry.Value) $commands
 }
-New-Shortcut (Join-Path $startup "Codistan Prospecting OS.lnk") (Join-Path $commands "START-ACQUISITION-V4.cmd") $commands
+New-Shortcut (Join-Path $startup "Codistan Sales Automation.lnk") (Join-Path $commands "START-SALES-AUTOMATION.cmd") $commands
 
-Start-Process -FilePath (Join-Path $commands "START-ACQUISITION-V4.cmd") -WindowStyle Minimized
+Start-Process -FilePath (Join-Path $commands "START-SALES-AUTOMATION.cmd") -WindowStyle Minimized
 $healthy = $false
 for ($attempt = 0; $attempt -lt 25; $attempt++) {
     Start-Sleep -Seconds 1
@@ -157,11 +160,11 @@ if (-not $healthy) {
         if (Test-Path $appCurrent) { Remove-Item $appCurrent -Recurse -Force }
         Move-Item $appPrevious $appCurrent
     }
-    throw "The installed collectors did not satisfy the Prospecting OS release contract. The previous application folder was restored where available."
+    throw "The installed collectors did not satisfy the Sales Automation release contract. The previous application folder was restored where available."
 }
 
 Write-Host ""
-Write-Host "$($release.product) $($release.release_version) installed and healthy."
+Write-Host "$($release.product) / $($release.application) $($release.release_version) installed and healthy."
 Write-Host "Runtime: $($release.components.local_runtime)"
 Write-Host "Upwork extension: $($release.components.upwork_extension)"
 Write-Host "LinkedIn/Sales Navigator extension: $($release.components.linkedin_sales_navigator_extension)"
@@ -172,4 +175,4 @@ Write-Host "Prospect Desk sync config: $configPath"
 Write-Host "Sync sources: LinkedIn warm, Upwork warm and Sales Navigator cold campaigns"
 Write-Host "External actions remain disabled."
 Write-Host "Load or reload both unpacked extensions in chrome://extensions/."
-Write-Host "Run Check Prospecting OS Release before capture and Check Prospecting OS Pilot before any release merge."
+Write-Host "Run Check Sales Automation Release before capture and Check Sales Automation Pilot before any release merge."
