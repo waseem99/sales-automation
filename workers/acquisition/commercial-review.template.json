@@ -1,5 +1,5 @@
 {
-  "schema_version": "codistan-prospecting-os-commercial-review.v1",
+  "schema_version": "codistan-sales-automation-commercial-review.v1",
   "reviews": [
     {
       "dedupe_key": "replace-with-priority-a-or-b-dedupe-key",
