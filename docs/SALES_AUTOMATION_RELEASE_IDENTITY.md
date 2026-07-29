@@ -10,22 +10,26 @@ The Windows acquisition runtime, Upwork collector, LinkedIn warm-demand collecto
 
 ## Compatibility vocabulary
 
-Historical Acquisition V4/V5 names and older hyphenated prospecting command filenames may remain only where changing them would break an existing installation or link.
+Historical Acquisition V4/V5 names and older hyphenated prospecting command filenames remain only where changing them would break an existing installation or link.
 
-They must not be presented as the canonical product name in release manifests, installer shortcuts, authoritative documentation, pull-request titles, production dashboard identity or release tags.
+They are not presented as the canonical product name in release manifests, installer shortcuts, authoritative documentation, pull-request titles, production dashboard identity or release tags.
 
-Every retained historical command must be an explicitly labelled compatibility alias that delegates to a canonical Sales Automation command.
+Every retained historical command is an explicitly labelled compatibility alias that delegates to a canonical Sales Automation command.
 
-## Merge gate
+## Enforced repository contract
 
-Before the acquisition release candidate may merge into `main`:
+The exact-head repository identity test verifies:
 
-1. the release manifest must identify **Codistan Sales Automation** and **Prospect Desk**;
-2. canonical Windows commands and shortcuts must use Sales Automation vocabulary;
-3. historical command aliases must delegate to canonical commands;
-4. authoritative release documentation must use Sales Automation / Prospect Desk identity;
-5. CI workflow display names must use the canonical identity;
-6. the repository identity guard and all technical checks must pass on the exact head;
-7. Windows, source, synchronization and human-commercial gates must pass.
+1. the release manifest identifies **Codistan Sales Automation** and **Prospect Desk**;
+2. canonical Windows commands, reports and shortcuts use Sales Automation vocabulary;
+3. retained historical aliases delegate to canonical commands;
+4. authoritative release documentation lives under `docs/sales-automation`;
+5. CI workflow display names use the canonical identity;
+6. unrelated product or repository identities are absent from tracked files;
+7. the identity guard runs within the normal repository deployment check.
 
-This document records the product boundary only. It does not authorize automatic external actions or bypass any live-pilot requirement.
+## Remaining merge gates
+
+Identity normalization is complete. The release candidate must still remain draft until Windows installation/upgrade/rollback, live source pilots, Prospect Desk synchronization and the human commercial-review gate pass.
+
+This document does not authorize automatic external actions or bypass any live-pilot requirement.
