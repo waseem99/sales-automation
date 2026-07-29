@@ -2,7 +2,7 @@
 
 ## Purpose
 
-Use this runbook during the first live Upwork, LinkedIn warm-demand and Sales Navigator pilots. The objective is to identify real operator friction without expanding the release scope or weakening the human-control boundary.
+Use this runbook during the first live Upwork, LinkedIn warm-demand and Sales Navigator pilots for Codistan Sales Automation and Prospect Desk. The objective is to identify real operator friction without expanding the release scope or weakening the human-control boundary.
 
 ## Before each pilot session
 
@@ -18,81 +18,119 @@ Do not start a live capture when the release check exits `1`. An exit `2` is acc
 
 For each captured Priority A/B record, the operator should be able to complete this sequence without using a spreadsheet or private notes:
 
-1. Open the record from My Queue or Manager Review.
-2. Confirm source, canonical URL, identity and visible evidence.
-3. Confirm whether the record represents warm buyer demand or a cold campaign prospect.
-4. Review closeability, missing evidence, risks and prohibited claims.
-5. Assign an owner, stage, next action, due date and permitted channel.
-6. Select relevant proof or record that proof is missing.
-7. Create or import an outreach draft only when commercially permitted.
-8. Submit, request changes, approve or reject the exact draft revision.
-9. Copy the approved revision and perform the external action manually.
-10. Mark the exact approved revision as manually sent only after the external action has occurred.
+1. verify source identity and evidence;
+2. confirm or assign the owner;
+3. review qualification, missing evidence and risks;
+4. select the permitted human-controlled channel;
+5. identify approved proof relevant to the record;
+6. create or review a draft;
+7. submit the exact revision for review;
+8. approve or request changes;
+9. copy the exact approved revision;
+10. complete the external action manually;
+11. confirm the exact sent version and time;
+12. create the next follow-up task.
 
-## Usability observations to record
+The system must never perform step 10.
 
-Create one finding for each distinct problem. Do not combine unrelated issues.
+## Required fields before pursuit
 
-Required fields:
+A record accepted for pursuit must retain:
 
-- source: Upwork, LinkedIn warm demand or Sales Navigator;
-- record ID and canonical URL;
-- operator;
-- time observed;
-- exact screen or action;
-- expected result;
-- actual result;
-- whether work could continue safely;
-- screenshot or diagnostic file when available;
-- severity and suggested next step.
+- source and canonical identity;
+- Priority A/B disposition and reasons;
+- owner;
+- stage;
+- next action;
+- due date;
+- permitted channel;
+- relevant approved proof;
+- unresolved evidence and risk warnings;
+- exact approved outreach revision when contact is planned;
+- exact sent-version record only after manual external action.
 
-### Severity
+## Severity model
 
-- **P0 — safety or state integrity:** external action occurred automatically, approval was bypassed, sent history changed, records were lost, or cross-owner data was exposed. Stop the pilot immediately.
-- **P1 — release blocker:** capture, synchronization, authentication, owner scoping, deduplication or the main review workflow cannot be completed. Stop the affected source pilot.
-- **P2 — material operator friction:** the task can be completed, but the operator is likely to make an error or needs an undocumented workaround. Fix before broad team rollout.
-- **P3 — minor clarity:** wording, ordering or visual presentation causes avoidable hesitation but does not change the decision or data. Batch after the pilot gate.
+### P0 — safety or data-loss blocker
 
-## Allowed release-candidate changes
+Examples:
 
-Changes during the pilot are limited to documented findings in these categories:
+- any automatic external platform action;
+- credentials, cookies or tokens written to reports;
+- source records or durable BD history deleted;
+- approval bypass;
+- wrong revision recorded as sent;
+- rollback destroys operational state.
 
-- incorrect or missing queue membership;
-- broken filters or links;
-- misleading source, intent or commercial-readiness labels;
-- unclear empty, error or blocked states;
-- missing diagnostics required to identify a failed source or sync step;
-- next-best-action guidance contradicted by verified workflow state;
-- duplicate records or state-loss defects;
-- approval, revision or manually-sent history defects;
-- accessibility or layout defects that prevent normal operation.
+Stop the affected pilot immediately. Preserve evidence and do not work around the issue.
 
-Do not add a new acquisition source, automated sending, autonomous campaign expansion, paid enrichment provider or predictive scoring model during this release candidate.
+### P1 — release blocker
 
-## Daily pilot review
+Examples:
+
+- duplicate Prospect Desk records from unchanged captures;
+- owner, task, stage or outreach history overwritten;
+- cold prospects shown as confirmed buyer demand;
+- wrong source, campaign or canonical identity;
+- research-only or on-hold offers approved for cold outreach;
+- synchronization silently loses accepted records.
+
+Pause the affected source until a reproducible fix and regression test exist.
+
+### P2 — material operator friction
+
+Examples:
+
+- queue, filter or action labels are unclear;
+- required evidence is present but difficult to find;
+- error messages do not explain a recoverable failure;
+- diagnostics do not distinguish zero results from source failure;
+- operator requires repeated unnecessary navigation.
+
+Fix during RC1 only when supported by a reproducible pilot example.
+
+### P3 — non-blocking improvement
+
+Examples:
+
+- cosmetic spacing or copy;
+- optional convenience filters;
+- minor ordering preferences.
+
+Record for a later release unless the change is exceptionally small and low risk.
+
+## Daily reconciliation
 
 At the end of each pilot day:
 
-1. Export or preserve collector status, review output and relevant diagnostics.
-2. Reconcile captured counts against Prospect Desk counts by source.
-3. Review duplicate and failed-sync records.
-4. Review all P0/P1 findings before continuing.
-5. Confirm no automatic external-action evidence exists.
-6. Confirm every pursued record has an owner, stage, next action, due date, permitted channel and proof.
-7. Update `commercial-review.json` only for records actually reviewed by a named person.
-8. Run `CHECK-PROSPECTING-OS-PILOT.cmd` and preserve the result.
+1. compare local unique-record counts with Prospect Desk;
+2. review duplicate and identity-conflict warnings;
+3. confirm failed sync items remain queued for retry;
+4. verify enrichment did not erase owner or workflow history;
+5. review overdue tasks and missing pursuit fields;
+6. verify manually contacted records have exact approved and sent-version history;
+7. log each defect with source, record ID, expected result, observed result and severity;
+8. confirm no automatic external action occurred.
+
+## Allowed RC1 changes
+
+During the pilot, changes are limited to:
+
+- confirmed P0–P2 defect fixes;
+- clearer diagnostics and error text;
+- directly evidenced queue, filter or field-location improvements;
+- installer, synchronization and rollback corrections;
+- regression tests for confirmed pilot failures.
+
+Do not add new sources, automatic sending, paid enrichment, speculative scoring redesigns or unrelated features.
 
 ## Release decision
 
-The release remains draft when any of the following is true:
+The release can advance only when:
 
-- a P0 or unresolved P1 finding exists;
-- installer rollback has not been proven on the real workstation;
-- Prospect Desk synchronization is incomplete or duplicates/state loss are unexplained;
-- any source has not met its technical gate;
-- fewer than 15 valid Priority A/B human reviews exist;
-- fewer than three valid reviews exist for any source;
-- fewer than 60% of counted reviews are accepted for pursuit;
-- automatic external-action evidence exists.
-
-A P2 may be accepted temporarily only when the workaround is documented, safe, reversible and approved by the release owner. P3 findings do not block the release unless several indicate a common decision-quality problem.
+- source and human-review thresholds pass;
+- no P0 or P1 defect remains open;
+- installation, synchronization and rollback evidence is retained;
+- any accepted P2 workaround is documented;
+- management records source and campaign keep/change/stop decisions;
+- automatic external action remains disabled.
