@@ -7,8 +7,5 @@
   "include": [
     "api/**/*.ts",
     "vercel/**/*.ts"
-  ],
-  "exclude": [
-    "vercel/operations-runtime.ts"
   ]
 }
