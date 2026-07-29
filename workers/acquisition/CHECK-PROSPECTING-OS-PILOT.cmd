@@ -1,12 +1,5 @@
 @echo off
-setlocal
-cd /d "%~dp0\..\.."
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File "%~dp0scripts\windows\check-prospecting-os-pilot.ps1" -InstallRoot "%CD%"
-set EXIT_CODE=%ERRORLEVEL%
-echo.
-if "%EXIT_CODE%"=="0" echo Prospecting OS technical and human commercial gates passed.
-if "%EXIT_CODE%"=="2" echo Prospecting OS still needs pilot records or human commercial review.
-if not "%EXIT_CODE%"=="0" if not "%EXIT_CODE%"=="2" echo Prospecting OS pilot is blocked by a safety or runtime failure.
-echo.
-pause
-exit /b %EXIT_CODE%
+rem Legacy compatibility alias for the historical Prospecting OS command name.
+rem Use CHECK-SALES-AUTOMATION-PILOT.cmd for all new pilot checks.
+call "%~dp0CHECK-SALES-AUTOMATION-PILOT.cmd"
+exit /b %ERRORLEVEL%
