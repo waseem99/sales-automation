@@ -1,11 +1,5 @@
 @echo off
-setlocal
-cd /d "%~dp0\..\.."
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File "%~dp0scripts\windows\install-acquisition-v4.ps1" -InstallRoot "%CD%"
-if errorlevel 1 (
-  echo.
-  echo Installation did not complete. Use the visible error above; do not share passwords, tokens or browser data.
-)
-echo.
-pause
+rem Legacy compatibility alias for the historical Prospecting OS command name.
+rem Use START-HERE-SALES-AUTOMATION.cmd for all new installations and documentation.
+call "%~dp0START-HERE-SALES-AUTOMATION.cmd"
 exit /b %ERRORLEVEL%
