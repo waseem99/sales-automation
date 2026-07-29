@@ -1,6 +1,6 @@
 # Legacy compatibility alias
 
-This historical Prospecting OS runbook path is retained only for existing links.
+This historical pilot-runbook path is retained only for existing links.
 
 Use the canonical runbook at [`../sales-automation/PILOT-USABILITY-RUNBOOK.md`](../sales-automation/PILOT-USABILITY-RUNBOOK.md).
 
