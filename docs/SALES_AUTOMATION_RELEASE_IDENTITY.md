@@ -6,38 +6,26 @@ This repository is **Codistan Sales Automation**.
 
 The production business-development application is **Prospect Desk**.
 
-The Windows acquisition runtime, Upwork collector, LinkedIn warm-demand collector, Sales Navigator collector, identity/enrichment pipeline, BD workflow and outreach workbench are components of Codistan Sales Automation. They are not TalentTrack and do not rename the product.
-
-## Repository ownership boundary
-
-- `waseem99/sales-automation`: Codistan Sales Automation / Prospect Desk.
-- `waseem99/content-automation`: separate content-automation system.
-
-No TalentTrack product identity, command vocabulary, release document or workflow may be introduced into this repository.
+The Windows acquisition runtime, Upwork collector, LinkedIn warm-demand collector, Sales Navigator collector, identity/enrichment pipeline, BD workflow and outreach workbench are components of Codistan Sales Automation. They do not rename the product.
 
 ## Compatibility vocabulary
 
-Historical names such as Acquisition V4/V5, `acquisition_v4`, and Prospecting OS may remain temporarily in internal module names, branch names, report schemas or compatibility wrappers where renaming would create migration risk.
+Historical Acquisition V4/V5 names and older hyphenated prospecting command filenames may remain only where changing them would break an existing installation or link.
 
-They must not be presented as the canonical product name in:
+They must not be presented as the canonical product name in release manifests, installer shortcuts, authoritative documentation, pull-request titles, production dashboard identity or release tags.
 
-- release manifests;
-- primary installer shortcuts;
-- authoritative release documentation;
-- pull-request titles;
-- production dashboard identity;
-- release tags.
+Every retained historical command must be an explicitly labelled compatibility alias that delegates to a canonical Sales Automation command.
 
 ## Merge gate
 
 Before the acquisition release candidate may merge into `main`:
 
-1. the release manifest must identify the product as Codistan Sales Automation;
-2. canonical Windows commands and shortcuts must use Sales Automation or Acquisition Runtime vocabulary;
-3. old Prospecting OS commands, when retained, must be marked compatibility aliases;
+1. the release manifest must identify **Codistan Sales Automation** and **Prospect Desk**;
+2. canonical Windows commands and shortcuts must use Sales Automation vocabulary;
+3. historical command aliases must delegate to canonical commands;
 4. authoritative release documentation must use Sales Automation / Prospect Desk identity;
-5. CI workflow display names must not identify the repository as TalentTrack;
-6. a repository search and PR diff review must confirm no TalentTrack product artifacts are included;
-7. all normal technical, Windows, source, synchronization and human-commercial gates must pass.
+5. CI workflow display names must use the canonical identity;
+6. the repository identity guard and all technical checks must pass on the exact head;
+7. Windows, source, synchronization and human-commercial gates must pass.
 
 This document records the product boundary only. It does not authorize automatic external actions or bypass any live-pilot requirement.
