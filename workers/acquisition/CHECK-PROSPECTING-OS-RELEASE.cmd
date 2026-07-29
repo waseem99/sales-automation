@@ -1,11 +1,5 @@
 @echo off
-setlocal
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File "%~dp0scripts\windows\check-prospecting-os-release.ps1"
-set EXITCODE=%ERRORLEVEL%
-echo.
-if "%EXITCODE%"=="0" echo Prospecting OS is ready for the full commercial pilot.
-if "%EXITCODE%"=="2" echo Local capture is ready, but Prospect Desk sync still needs configuration.
-if not "%EXITCODE%"=="0" if not "%EXITCODE%"=="2" echo Prospecting OS has blocking readiness failures.
-echo.
-pause
-exit /b %EXITCODE%
+rem Legacy compatibility alias for the historical Prospecting OS command name.
+rem Use CHECK-SALES-AUTOMATION-RELEASE.cmd for all new release checks.
+call "%~dp0CHECK-SALES-AUTOMATION-RELEASE.cmd"
+exit /b %ERRORLEVEL%
