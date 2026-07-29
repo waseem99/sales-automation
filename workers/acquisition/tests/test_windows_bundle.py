@@ -13,20 +13,24 @@ class WindowsBundleTests(unittest.TestCase):
         rollback = (root / "scripts/windows/rollback-acquisition-v4.ps1").read_text(encoding="utf-8")
         configure = (root / "scripts/windows/configure-prospect-desk-sync.ps1").read_text(encoding="utf-8")
         sales_nav_pilot = (root / "scripts/windows/check-sales-navigator-pilot.ps1").read_text(encoding="utf-8")
-        combined_pilot = (root / "scripts/windows/check-prospecting-os-pilot.ps1").read_text(encoding="utf-8")
-        readiness = (root / "scripts/windows/check-prospecting-os-release.ps1").read_text(encoding="utf-8")
+        combined_pilot = (root / "scripts/windows/check-sales-automation-pilot.ps1").read_text(encoding="utf-8")
+        readiness = (root / "scripts/windows/check-sales-automation-release.ps1").read_text(encoding="utf-8")
         release_manifest = (root / "release-manifest.json").read_text(encoding="utf-8")
-        canonical_start = (root / "START-HERE-PROSPECTING-OS.cmd").read_text(encoding="utf-8")
-        canonical_check = (root / "CHECK-PROSPECTING-OS-RELEASE.cmd").read_text(encoding="utf-8")
-        canonical_pilot = (root / "CHECK-PROSPECTING-OS-PILOT.cmd").read_text(encoding="utf-8")
+        canonical_install = (root / "START-HERE-SALES-AUTOMATION.cmd").read_text(encoding="utf-8")
+        canonical_start = (root / "START-SALES-AUTOMATION.cmd").read_text(encoding="utf-8")
+        canonical_check = (root / "CHECK-SALES-AUTOMATION-RELEASE.cmd").read_text(encoding="utf-8")
+        canonical_pilot = (root / "CHECK-SALES-AUTOMATION-PILOT.cmd").read_text(encoding="utf-8")
+        legacy_install = (root / "START-HERE-PROSPECTING-OS.cmd").read_text(encoding="utf-8")
+        legacy_check = (root / "CHECK-PROSPECTING-OS-RELEASE.cmd").read_text(encoding="utf-8")
+        legacy_pilot = (root / "CHECK-PROSPECTING-OS-PILOT.cmd").read_text(encoding="utf-8")
         supervisor = (root / "acquisition_v4/supervisor.py").read_text(encoding="utf-8")
 
         for marker in [
             "app-current", "app-previous", "$extensionRoot", '@("upwork", "linkedin")',
-            "Start Prospecting OS.lnk", "Check Prospecting OS Release.lnk", "Check Prospecting OS Pilot.lnk",
-            "Diagnose Prospecting OS.lnk", "Rollback Prospecting OS.lnk",
+            "Start Sales Automation.lnk", "Check Sales Automation Release.lnk", "Check Sales Automation Pilot.lnk",
+            "Diagnose Sales Automation.lnk", "Rollback Sales Automation.lnk",
             "Open Upwork Searches.lnk", "Open LinkedIn Lead Searches.lnk", "Open Acquisition Review.lnk",
-            "Check Sales Navigator Pilot.lnk", "Configure Prospect Desk Sync.lnk", "Codistan Prospecting OS.lnk",
+            "Check Sales Navigator Pilot.lnk", "Configure Prospect Desk Sync.lnk", "Codistan Sales Automation.lnk",
             "Start Acquisition V5.lnk", "Check Acquisition V5.lnk",
             "127.0.0.1:8765", "127.0.0.1:8775", "127.0.0.1:8785", "watchdog.pid",
             '$enabledSources = @("linkedin", "upwork", "sales_navigator")',
@@ -64,29 +68,33 @@ class WindowsBundleTests(unittest.TestCase):
             self.assertIn(marker, sales_nav_pilot)
 
         for marker in [
-            "acquisition_v4.prospecting_os_acceptance",
+            "acquisition_v4.sales_automation_acceptance",
             "commercial-review.json",
-            "prospecting-os-pilot-acceptance.json",
+            "sales-automation-pilot-acceptance.json",
             "Automatic external actions remain disabled",
             "http://127.0.0.1:$($entry.Value)/health",
         ]:
             self.assertIn(marker, combined_pilot)
 
         for marker in [
-            "codistan-prospecting-os-readiness.v1",
+            "codistan-sales-automation-readiness.v1",
             "ready_for_local_capture",
             "ready_for_commercial_pilot",
-            "prospecting-os-release-readiness.json",
+            "sales-automation-release-readiness.json",
             "external_actions_enabled = $false",
         ]:
             self.assertIn(marker, readiness)
 
-        self.assertIn('"product": "Codistan Prospecting OS"', release_manifest)
+        self.assertIn('"product": "Codistan Sales Automation"', release_manifest)
+        self.assertIn('"application": "Prospect Desk"', release_manifest)
         self.assertIn('"release_version": "1.0.0-rc.1"', release_manifest)
         self.assertIn('"commercial_readiness": "commercial-readiness.v1"', release_manifest)
-        self.assertIn("install-acquisition-v4.ps1", canonical_start)
-        self.assertIn("check-prospecting-os-release.ps1", canonical_check)
-        self.assertIn("check-prospecting-os-pilot.ps1", canonical_pilot)
+        self.assertIn("install-acquisition-v4.ps1", canonical_install)
+        self.assertIn("START-ACQUISITION-V4.cmd", canonical_start)
+        self.assertIn("check-sales-automation-release.ps1", canonical_check)
+        self.assertIn("check-sales-automation-pilot.ps1", canonical_pilot)
+        for legacy in [legacy_install, legacy_check, legacy_pilot]:
+            self.assertIn("Legacy compatibility alias", legacy)
         self.assertIn('"sales_navigator": 8785', supervisor)
         self.assertIn("runtime.pid", supervisor)
         self.assertIn("watchdog_pid_present", diagnostics)
@@ -96,7 +104,7 @@ class WindowsBundleTests(unittest.TestCase):
 
         combined = "\n".join([
             installer, starter, diagnostics, rollback, sales_nav_pilot,
-            combined_pilot, readiness, canonical_start, canonical_check, canonical_pilot,
+            combined_pilot, readiness, canonical_install, canonical_start, canonical_check, canonical_pilot,
         ]).lower()
         for prohibited in ["database_url", "password=", "linkedin message", "upwork proposal"]:
             self.assertNotIn(prohibited, combined)
