@@ -119,7 +119,8 @@ export function deriveSellerQueueMembership(record: StoredLeadRecord, generatedA
   const now = Date.parse(validIso(generatedAt, 'generatedAt'));
   const lead = record.lead;
   const raw = asRecord(lead.rawPayload);
-  const diagnostics = Object.fromEntries(QUEUE_IDS.map((id) => [id, []])) as Record<SellerQueueId, string[]>;
+  const diagnostics = {} as Record<SellerQueueId, string[]>;
+  for (const queueId of QUEUE_IDS) diagnostics[queueId] = [];
   const queues: SellerQueueId[] = ['all'];
   diagnostics.all.push('Record is visible within the authenticated seller scope.');
 
