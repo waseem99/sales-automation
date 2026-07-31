@@ -6,7 +6,7 @@ $ErrorActionPreference = "Stop"
 
 # This command removes only known Sales Automation/Acquisition launch registrations.
 # It never deletes or recreates the operational state root.
-$knownNamePattern = '(?i)^(Codistan Sales Automation|Codistan Acquisition|Sales Automation|Acquisition V4|Acquisition V5|Prospecting OS)$'
+$knownNamePattern = '(?i)^(Codistan Sales Automation|Codistan Acquisition|Sales Automation|Acquisition V4|Acquisition V5|Prospecting OS)(?:\.lnk)?$'
 $knownValuePattern = '(?i)(START-SALES-AUTOMATION\.cmd|START-ACQUISITION-V4\.cmd|acquisition_v4\.supervisor|Codistan\\Acquisition)'
 $removed = New-Object System.Collections.Generic.List[string]
 $warnings = New-Object System.Collections.Generic.List[string]
