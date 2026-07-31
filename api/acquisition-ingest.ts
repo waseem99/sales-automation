@@ -1,5 +1,6 @@
 import { createHash, timingSafeEqual } from 'node:crypto';
 import { applyCampaignEngineAfterIntake } from '../vercel/acquisition-campaign-runtime.js';
+import { applyCampaignGovernanceAfterIntake } from '../vercel/acquisition-campaign-governance-runtime.js';
 import { applyCommercialCatalogueAfterIntake } from '../vercel/acquisition-commercial-catalogue-runtime.js';
 import { applyEnrichmentAfterIntake } from '../vercel/acquisition-enrichment-runtime.js';
 import { applyIdentityGraphAfterIntake } from '../vercel/acquisition-identity-runtime.js';
@@ -54,7 +55,8 @@ export default {
       const intentResponse = await applyIntentProvenanceAfterIntake({ response: identityResponse, databaseUrl });
       const enrichmentResponse = await applyEnrichmentAfterIntake({ response: intentResponse, databaseUrl });
       const campaignResponse = await applyCampaignEngineAfterIntake({ response: enrichmentResponse, databaseUrl });
-      const catalogueResponse = await applyCommercialCatalogueAfterIntake({ response: campaignResponse, databaseUrl });
+      const governanceResponse = await applyCampaignGovernanceAfterIntake({ response: campaignResponse, databaseUrl });
+      const catalogueResponse = await applyCommercialCatalogueAfterIntake({ response: governanceResponse, databaseUrl });
       const accountResponse = await applyUpworkAccountIntelligenceAfterIntake({ response: catalogueResponse, databaseUrl });
       const workflowResponse = await applyBdWorkflowAfterIntake({ response: accountResponse, databaseUrl });
       return attachAcquisitionReconciliation(workflowResponse, prepared);
