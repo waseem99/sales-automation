@@ -1,7 +1,9 @@
 import type { ProspectDiscoveryRun } from '@sales-automation/prospect-discovery';
 import type { Lead, PipelineStatus, ServiceCategory } from '@sales-automation/shared';
+import type { SellerQueueView } from '@sales-automation/seller-queues';
 import type { StoredLeadRecord } from '@sales-automation/storage';
 import { renderDecisionScorePanel } from './decision-score-view.js';
+import { renderSellerQueueNavigation } from './seller-queue-view.js';
 import {
   getPortfolioLibraryUrl,
   getTeamMembers,
@@ -14,6 +16,8 @@ export interface ProspectDashboardPageInput {
   selected?: StoredLeadRecord;
   runs: ProspectDiscoveryRun[];
   generatedAt: string;
+  sellerQueue: SellerQueueView;
+  sellerUserId: string;
 }
 
 const pipelineStatuses: PipelineStatus[] = [
@@ -52,6 +56,8 @@ export function renderProspectDashboardPage(input: ProspectDashboardPageInput): 
 </aside>
 <main class="main">
   <header class="topbar"><div><p class="eyebrow">Live internal BD workspace</p><h1>Prospect Discovery & Management</h1><p>Assign owners, review routing, manage outreach and record outcomes.</p></div><div class="top-actions">${portfolioUrl ? `<a class="ghost" href="${escapeAttribute(portfolioUrl)}" target="_blank" rel="noopener noreferrer">Open portfolio library</a>` : ''}<button id="import-starter" class="ghost">Load verified prospects</button><button id="run-discovery" class="primary">Run discovery now</button></div></header>
+
+  ${renderSellerQueueNavigation(input.sellerQueue, input.sellerUserId)}
 
   <section class="metrics">
     ${metric('Total prospects', metrics.total)}${metric('Live opportunities', metrics.live)}${metric('Contacted', metrics.contacted)}${metric('Replies', metrics.replied)}${metric('Follow-ups due', metrics.followUpsDue)}${metric('Unassigned', metrics.unassigned)}${metric('Won', metrics.won)}${metric('Feedback pending', metrics.feedbackPending)}
