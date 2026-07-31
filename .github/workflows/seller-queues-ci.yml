@@ -1,6 +1,6 @@
 name: Seller Queues CI
 
-# Exact-head validation after the typed diagnostics initialization fix.
+# Exact-head validation for persistent per-user Prospect Desk queues.
 on:
   pull_request:
     branches:
@@ -13,6 +13,7 @@ on:
       - 'apps/web/src/seller-queue-view.ts'
       - 'apps/web/src/prospects-page.ts'
       - 'apps/web/src/prospect-handler.ts'
+      - 'apps/web/src/secure-prospect-handler.ts'
       - 'workers/acquisition/tests/seller_queue_integration_contract.ts'
   workflow_dispatch:
 
@@ -59,7 +60,12 @@ jobs:
         run: pnpm --filter @sales-automation/seller-queues typecheck
 
       - name: Validate APIs, signed preferences and Prospect Desk integration
-        run: pnpm exec tsx workers/acquisition/tests/seller_queue_integration_contract.ts
+        shell: bash
+        run: |
+          if ! pnpm exec tsx workers/acquisition/tests/seller_queue_integration_contract.ts > /tmp/seller-queue-contract.log 2>&1; then
+            grep -E "AssertionError|ERR_ASSERTION|missing|Error:" /tmp/seller-queue-contract.log | tail -100 || cat /tmp/seller-queue-contract.log
+            exit 1
+          fi
 
       - name: Type-check Vercel and web integration
         run: pnpm typecheck:vercel
@@ -70,10 +76,12 @@ jobs:
           ! grep -R -i "localStorage\|sessionStorage" \
             packages/seller-queues \
             apps/web/src/seller-queue-view.ts \
-            apps/web/src/prospect-handler.ts
+            apps/web/src/prospect-handler.ts \
+            apps/web/src/secure-prospect-handler.ts
           ! grep -R "externalActionAutomated: true\|external_action_performed.*true\|automatic sending enabled" \
             packages/seller-queues \
             apps/web/src/seller-queue-view.ts \
-            apps/web/src/prospect-handler.ts
+            apps/web/src/prospect-handler.ts \
+            apps/web/src/secure-prospect-handler.ts
           ! grep -R "Remove-Item.*Codistan.*Acquisition\|rmdir.*Codistan.*Acquisition" \
             packages/seller-queues apps/web/src
