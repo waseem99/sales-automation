@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import {readFileSync} from 'node:fs';
+import {existsSync, readFileSync} from 'node:fs';
 import {resolve} from 'node:path';
 import {
   DEFAULT_COMMERCIAL_CATALOGUE,
@@ -7,7 +7,8 @@ import {
   selectCommercialEvidence,
 } from '../../../packages/commercial-catalogue/src/index.js';
 
-const root = resolve(process.cwd(), '..', '..');
+const cwd = process.cwd();
+const root = existsSync(resolve(cwd, 'api/acquisition-ingest.ts')) ? cwd : resolve(cwd, '..', '..');
 const api = readFileSync(resolve(root, 'api/acquisition-ingest.ts'), 'utf8');
 const runtime = readFileSync(resolve(root, 'vercel/acquisition-commercial-catalogue-runtime.ts'), 'utf8');
 const catalogue = readFileSync(resolve(root, 'packages/commercial-catalogue/src/index.ts'), 'utf8');
