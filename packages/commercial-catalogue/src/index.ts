@@ -8,7 +8,6 @@ export type PublicationState = 'published' | 'retired';
 export type ProofProvenanceType = 'case_study' | 'contract' | 'client_reference' | 'delivery_artifact' | 'capability_evidence';
 export type CompensationModel = 'paid' | 'unpaid' | 'commission_only' | 'unknown';
 export type EngagementType = 'outsourced_delivery' | 'project' | 'retainer' | 'managed_service' | 'full_time_employment' | 'unknown';
-
 export type CommercialDisqualifierCode =
   | 'below_minimum_value'
   | 'unsupported_geography'
@@ -47,10 +46,26 @@ export interface OfferVersionInput {
   state?: PublicationState;
 }
 
-export interface OfferVersion extends Readonly<Omit<OfferVersionInput, 'state'>> {
-  readonly state: PublicationState;
-  readonly contentHash: string;
-}
+export type OfferVersion = Readonly<{
+  offerId: string;
+  version: number;
+  name: string;
+  owner: string;
+  approvedRoutes: CommercialRoute[];
+  serviceCategories: ServiceCategory[];
+  minimumValueUsd?: number;
+  supportedGeographies: string[];
+  minimumTimelineDays?: number;
+  supportedStacks: string[];
+  prohibitedIndustries: string[];
+  capacityAvailable: boolean;
+  positioning: string[];
+  limitations: string[];
+  publishedAt: string;
+  publishedBy: string;
+  state: PublicationState;
+  contentHash: string;
+}>;
 
 export interface ProofProvenance {
   type: ProofProvenanceType;
@@ -74,9 +89,7 @@ export interface ProofItemVersionInput {
   limitations: string[];
 }
 
-export interface ProofItemVersion extends Readonly<ProofItemVersionInput> {
-  readonly contentHash: string;
-}
+export type ProofItemVersion = Readonly<ProofItemVersionInput & {contentHash: string}>;
 
 export interface ProofPackVersionInput {
   proofPackId: string;
@@ -91,11 +104,19 @@ export interface ProofPackVersionInput {
   proofs: ProofItemVersionInput[];
 }
 
-export interface ProofPackVersion extends Readonly<Omit<ProofPackVersionInput, 'state' | 'proofs'>> {
-  readonly state: PublicationState;
-  readonly proofs: readonly ProofItemVersion[];
-  readonly contentHash: string;
-}
+export type ProofPackVersion = Readonly<{
+  proofPackId: string;
+  version: number;
+  offerId: string;
+  offerVersion: number;
+  state: PublicationState;
+  approvedBy: string;
+  approvedAt: string;
+  expiresAt?: string;
+  routeProofIds: Partial<Record<CommercialRoute, string[]>>;
+  proofs: readonly ProofItemVersion[];
+  contentHash: string;
+}>;
 
 export interface CommercialCatalogue {
   readonly version: typeof COMMERCIAL_CATALOGUE_VERSION;
@@ -173,10 +194,7 @@ const DISQUALIFIER_EXPLANATIONS: Record<CommercialDisqualifierCode, string> = {
   unavailable_capacity: 'Current delivery capacity is not available for this opportunity.',
 };
 
-export function publishOfferVersion(
-  catalogue: CommercialCatalogue,
-  input: OfferVersionInput,
-): CommercialCatalogue {
+export function publishOfferVersion(catalogue: CommercialCatalogue, input: OfferVersionInput): CommercialCatalogue {
   validateCatalogueVersion(catalogue);
   const sameOffer = catalogue.offers.filter((item) => item.offerId === input.offerId);
   const latest = sameOffer.reduce((highest, item) => Math.max(highest, item.version), 0);
@@ -186,18 +204,10 @@ export function publishOfferVersion(
   if (input.version !== latest + 1) {
     throw new Error(`Offer ${input.offerId} must publish version ${latest + 1}; received ${input.version}.`);
   }
-  const offer = createOfferVersion(input);
-  return freezeCatalogue({
-    version: COMMERCIAL_CATALOGUE_VERSION,
-    offers: [...catalogue.offers, offer],
-    proofPacks: catalogue.proofPacks,
-  });
+  return freezeCatalogue({...catalogue, offers: [...catalogue.offers, createOfferVersion(input)]});
 }
 
-export function publishProofPackVersion(
-  catalogue: CommercialCatalogue,
-  input: ProofPackVersionInput,
-): CommercialCatalogue {
+export function publishProofPackVersion(catalogue: CommercialCatalogue, input: ProofPackVersionInput): CommercialCatalogue {
   validateCatalogueVersion(catalogue);
   requirePublishedOffer(catalogue, input.offerId, input.offerVersion);
   const samePack = catalogue.proofPacks.filter((item) => item.proofPackId === input.proofPackId);
@@ -208,12 +218,7 @@ export function publishProofPackVersion(
   if (input.version !== latest + 1) {
     throw new Error(`Proof pack ${input.proofPackId} must publish version ${latest + 1}; received ${input.version}.`);
   }
-  const pack = createProofPackVersion(input);
-  return freezeCatalogue({
-    version: COMMERCIAL_CATALOGUE_VERSION,
-    offers: catalogue.offers,
-    proofPacks: [...catalogue.proofPacks, pack],
-  });
+  return freezeCatalogue({...catalogue, proofPacks: [...catalogue.proofPacks, createProofPackVersion(input)]});
 }
 
 export function selectCommercialEvidence(
@@ -234,28 +239,19 @@ export function selectCommercialEvidence(
     throw new Error(`Route ${input.route} is not approved for offer ${offer.offerId} version ${offer.version}.`);
   }
   const pack = latestPublishedProofPack(catalogue, offer.offerId, offer.version, evaluatedAt);
-  const routeProofIds = pack?.routeProofIds[input.route] ?? [];
   const requestedCategories = new Set(input.serviceCategories ?? []);
   const proof: ProofVersionPin[] = [];
   const excludedProof: Array<{proofId: string; reason: string}> = [];
-
-  if (pack) {
-    for (const proofId of routeProofIds) {
-      const candidates = pack.proofs.filter((item) => item.proofId === proofId).sort((a, b) => b.version - a.version);
-      const item = candidates[0];
-      if (!item) {
-        excludedProof.push({proofId, reason: 'The route mapping references a proof that is absent from this exact proof-pack version.'});
-        continue;
-      }
-      const reason = proofExclusionReason(item, evaluatedAt, requestedCategories);
-      if (reason) {
-        excludedProof.push({proofId, reason});
-        continue;
-      }
-      proof.push(proofPin(item));
+  for (const proofId of pack?.routeProofIds[input.route] ?? []) {
+    const item = pack?.proofs.filter((candidate) => candidate.proofId === proofId).sort((a, b) => b.version - a.version)[0];
+    if (!item) {
+      excludedProof.push({proofId, reason: 'The route mapping references a proof absent from this proof-pack version.'});
+      continue;
     }
+    const reason = proofExclusionReason(item, evaluatedAt, requestedCategories);
+    if (reason) excludedProof.push({proofId, reason});
+    else proof.push(proofPin(item));
   }
-
   const disqualifiers = evaluateCommercialDisqualifiers(offer, input.signals ?? {});
   return deepFreeze({
     catalogueVersion: COMMERCIAL_CATALOGUE_VERSION,
@@ -272,10 +268,7 @@ export function selectCommercialEvidence(
   });
 }
 
-export function pinCommercialSelection(
-  selection: CommercialSelection,
-  pinnedAt = new Date().toISOString(),
-): CommercialSelectionPin {
+export function pinCommercialSelection(selection: CommercialSelection, pinnedAt = new Date().toISOString()): CommercialSelectionPin {
   return deepFreeze({
     catalogueVersion: selection.catalogueVersion,
     offer: selection.offer,
@@ -306,22 +299,18 @@ export function assertCommercialSelectionPinExists(
       && item.contentHash === pin.proofPack?.proofPackContentHash,
     );
     if (!pack) throw new Error('Pinned proof-pack version is missing or its content hash changed.');
-    for (const proofPinValue of pin.proof) {
-      const item = pack.proofs.find((candidate) =>
-        candidate.proofId === proofPinValue.proofId
-        && candidate.version === proofPinValue.proofVersion
-        && candidate.contentHash === proofPinValue.proofContentHash,
-      );
-      if (!item) throw new Error(`Pinned proof ${proofPinValue.proofId} version ${proofPinValue.proofVersion} is missing or changed.`);
+    for (const proofValue of pin.proof) {
+      if (!pack.proofs.some((item) =>
+        item.proofId === proofValue.proofId
+        && item.version === proofValue.proofVersion
+        && item.contentHash === proofValue.proofContentHash,
+      )) throw new Error(`Pinned proof ${proofValue.proofId} version ${proofValue.proofVersion} is missing or changed.`);
     }
   }
   return pin;
 }
 
-export function evaluateCommercialDisqualifiers(
-  offer: OfferVersion,
-  signals: CommercialSignals,
-): CommercialDisqualifier[] {
+export function evaluateCommercialDisqualifiers(offer: OfferVersion, signals: CommercialSignals): CommercialDisqualifier[] {
   const findings: CommercialDisqualifier[] = [];
   if (offer.minimumValueUsd !== undefined && signals.estimatedValueUsd !== undefined && signals.estimatedValueUsd < offer.minimumValueUsd) {
     findings.push(disqualifier('below_minimum_value', [`value_usd=${signals.estimatedValueUsd}`, `minimum_usd=${offer.minimumValueUsd}`]));
@@ -339,32 +328,26 @@ export function evaluateCommercialDisqualifiers(
   if (signals.compensationModel === 'unpaid' || signals.compensationModel === 'commission_only') {
     findings.push(disqualifier('unpaid_or_commission_only', [`compensation=${signals.compensationModel}`]));
   }
-  if (signals.registrationRequirementMet === false) {
-    findings.push(disqualifier('unmet_registration_requirement', ['registration_requirement_met=false']));
-  }
+  if (signals.registrationRequirementMet === false) findings.push(disqualifier('unmet_registration_requirement', ['registration_requirement_met=false']));
   if (signals.industry && includesNormalized(offer.prohibitedIndustries, signals.industry)) {
     findings.push(disqualifier('prohibited_industry', [`industry=${signals.industry}`]));
   }
-  if (signals.engagementType === 'full_time_employment') {
-    findings.push(disqualifier('full_time_hiring', ['engagement_type=full_time_employment']));
-  }
-  if (offer.capacityAvailable === false || signals.capacityAvailable === false) {
-    findings.push(disqualifier('unavailable_capacity', ['capacity_available=false']));
-  }
+  if (signals.engagementType === 'full_time_employment') findings.push(disqualifier('full_time_hiring', ['engagement_type=full_time_employment']));
+  if (!offer.capacityAvailable || signals.capacityAvailable === false) findings.push(disqualifier('unavailable_capacity', ['capacity_available=false']));
   return deepFreeze(findings);
 }
 
 export function commercialSignalsFromLead(lead: Lead): CommercialSignals {
   const raw = asRecord(lead.rawPayload);
   const commercial = asRecord(raw.commercial_evidence);
-  const text = `${lead.title} ${lead.description}`.toLowerCase();
+  const text = `${lead.title} ${lead.description} ${lead.budgetSignal ?? ''} ${lead.timelineSignal ?? ''}`.toLowerCase();
   const estimatedValueUsd = firstNumber(
     commercial.fixed_budget_usd,
     commercial.estimated_value_usd,
     raw.fixed_budget_usd,
     raw.estimated_value_usd,
-    lead.budgetMax,
-    lead.budgetMin,
+    raw.budget_max,
+    raw.budget_min,
   );
   const timelineDays = firstNumber(raw.timeline_days, commercial.timeline_days)
     ?? multiplyNumber(raw.timeline_weeks, 7)
@@ -372,7 +355,8 @@ export function commercialSignalsFromLead(lead: Lead): CommercialSignals {
   const requiredStacks = unique([
     ...stringList(raw.skills),
     ...stringList(commercial.skills),
-    ...lead.technologySignals,
+    ...stringList(raw.technologySignals),
+    ...stringList(raw.technology_signals),
   ]);
   const compensationModel: CompensationModel = /commission[- ]only/.test(text)
     ? 'commission_only'
@@ -387,7 +371,7 @@ export function commercialSignalsFromLead(lead: Lead): CommercialSignals {
       ? 'retainer'
       : /managed service/.test(text)
         ? 'managed_service'
-        : lead.source === 'upwork' || lead.opportunityType === 'project'
+        : lead.source === 'upwork' || textValue(raw.opportunityType) === 'project' || textValue(raw.opportunity_type) === 'project'
           ? 'project'
           : 'unknown';
   return {
@@ -406,7 +390,7 @@ export function commercialSignalsFromLead(lead: Lead): CommercialSignals {
 export function latestOfferVersion(catalogue: CommercialCatalogue, offerId: string): OfferVersion | undefined {
   return catalogue.offers
     .filter((item) => item.offerId === offerId && item.state === 'published')
-    .sort((left, right) => right.version - left.version)[0];
+    .sort((a, b) => b.version - a.version)[0];
 }
 
 function createOfferVersion(input: OfferVersionInput): OfferVersion {
@@ -417,18 +401,23 @@ function createOfferVersion(input: OfferVersionInput): OfferVersion {
   if (input.approvedRoutes.length === 0) throw new Error('Published offer must approve at least one route.');
   if (input.serviceCategories.length === 0) throw new Error('Published offer must include at least one service category.');
   const normalized: Omit<OfferVersion, 'contentHash'> = {
-    ...input,
-    state: input.state ?? 'published',
+    offerId: input.offerId,
+    version: input.version,
+    name: input.name,
+    owner: input.owner,
     approvedRoutes: unique(input.approvedRoutes),
     serviceCategories: unique(input.serviceCategories),
+    minimumValueUsd: input.minimumValueUsd,
     supportedGeographies: unique(input.supportedGeographies ?? []),
+    minimumTimelineDays: input.minimumTimelineDays,
     supportedStacks: unique(input.supportedStacks ?? []),
     prohibitedIndustries: unique(input.prohibitedIndustries ?? []),
+    capacityAvailable: input.capacityAvailable ?? true,
     positioning: unique(input.positioning),
     limitations: unique(input.limitations),
     publishedAt: validIso(input.publishedAt, 'publishedAt'),
     publishedBy: requiredText(input.publishedBy, 'publishedBy'),
-    capacityAvailable: input.capacityAvailable ?? true,
+    state: input.state ?? 'published',
   };
   return deepFreeze({...normalized, contentHash: hashValue(normalized)});
 }
@@ -436,28 +425,27 @@ function createOfferVersion(input: OfferVersionInput): OfferVersion {
 function createProofPackVersion(input: ProofPackVersionInput): ProofPackVersion {
   requiredText(input.proofPackId, 'proofPackId');
   if (!Number.isInteger(input.version) || input.version < 1) throw new Error('Proof-pack version must be a positive integer.');
-  const proofKeys = new Set<string>();
-  const proofs = input.proofs.map((proofInput) => {
-    const key = `${proofInput.proofId}@${proofInput.version}`;
-    if (proofKeys.has(key)) throw new Error(`Duplicate proof version in pack: ${key}.`);
-    proofKeys.add(key);
-    return createProofItemVersion(proofInput);
+  const keys = new Set<string>();
+  const proofs = input.proofs.map((value) => {
+    const key = `${value.proofId}@${value.version}`;
+    if (keys.has(key)) throw new Error(`Duplicate proof version in pack: ${key}.`);
+    keys.add(key);
+    return createProofItemVersion(value);
   });
   const proofIds = new Set(proofs.map((item) => item.proofId));
   for (const [route, ids] of Object.entries(input.routeProofIds)) {
-    for (const proofId of ids ?? []) {
-      if (!proofIds.has(proofId)) throw new Error(`Route ${route} references missing proof ${proofId}.`);
-    }
+    for (const proofId of ids ?? []) if (!proofIds.has(proofId)) throw new Error(`Route ${route} references missing proof ${proofId}.`);
   }
   const normalized: Omit<ProofPackVersion, 'contentHash'> = {
-    ...input,
+    proofPackId: input.proofPackId,
+    version: input.version,
+    offerId: input.offerId,
+    offerVersion: input.offerVersion,
     state: input.state ?? 'published',
-    approvedAt: validIso(input.approvedAt, 'approvedAt'),
     approvedBy: requiredText(input.approvedBy, 'approvedBy'),
+    approvedAt: validIso(input.approvedAt, 'approvedAt'),
     expiresAt: input.expiresAt ? validIso(input.expiresAt, 'expiresAt') : undefined,
-    routeProofIds: deepFreeze(Object.fromEntries(
-      Object.entries(input.routeProofIds).map(([route, ids]) => [route, unique(ids ?? [])]),
-    )) as Partial<Record<CommercialRoute, string[]>>,
+    routeProofIds: Object.fromEntries(Object.entries(input.routeProofIds).map(([route, ids]) => [route, unique(ids ?? [])])),
     proofs,
   };
   return deepFreeze({...normalized, contentHash: hashValue(normalized)});
@@ -485,20 +473,10 @@ function createProofItemVersion(input: ProofItemVersionInput): ProofItemVersion 
   return deepFreeze({...normalized, contentHash: hashValue(normalized)});
 }
 
-function latestPublishedProofPack(
-  catalogue: CommercialCatalogue,
-  offerId: string,
-  offerVersion: number,
-  evaluatedAt: string,
-): ProofPackVersion | undefined {
+function latestPublishedProofPack(catalogue: CommercialCatalogue, offerId: string, offerVersion: number, evaluatedAt: string): ProofPackVersion | undefined {
   return catalogue.proofPacks
-    .filter((item) =>
-      item.offerId === offerId
-      && item.offerVersion === offerVersion
-      && item.state === 'published'
-      && !expired(item.expiresAt, evaluatedAt),
-    )
-    .sort((left, right) => right.version - left.version)[0];
+    .filter((item) => item.offerId === offerId && item.offerVersion === offerVersion && item.state === 'published' && !expired(item.expiresAt, evaluatedAt))
+    .sort((a, b) => b.version - a.version)[0];
 }
 
 function proofExclusionReason(item: ProofItemVersion, evaluatedAt: string, categories: Set<ServiceCategory>): string | undefined {
@@ -547,11 +525,7 @@ function validateCatalogueVersion(catalogue: CommercialCatalogue): void {
 }
 
 function freezeCatalogue(value: CommercialCatalogue): CommercialCatalogue {
-  return deepFreeze({
-    version: COMMERCIAL_CATALOGUE_VERSION,
-    offers: [...value.offers],
-    proofPacks: [...value.proofPacks],
-  });
+  return deepFreeze({version: COMMERCIAL_CATALOGUE_VERSION, offers: [...value.offers], proofPacks: [...value.proofPacks]});
 }
 
 function expired(expiresAt: string | undefined, at: string): boolean {
@@ -567,11 +541,11 @@ function stableJson(value: unknown): string {
   if (value && typeof value === 'object') {
     return `{${Object.entries(value as Record<string, unknown>)
       .filter(([, item]) => item !== undefined)
-      .sort(([left], [right]) => left.localeCompare(right))
+      .sort(([a], [b]) => a.localeCompare(b))
       .map(([key, item]) => `${JSON.stringify(key)}:${stableJson(item)}`)
       .join(',')}}`;
   }
-  return JSON.stringify(value);
+  return JSON.stringify(value) ?? 'null';
 }
 
 function deepFreeze<T>(value: T): T {
@@ -633,17 +607,17 @@ function stringList(value: unknown): string[] {
   return [];
 }
 
+function textValue(value: unknown): string | undefined {
+  return typeof value === 'string' && value.trim() ? value.trim().toLowerCase() : undefined;
+}
+
 function booleanValue(value: unknown): boolean | undefined {
   return typeof value === 'boolean' ? value : undefined;
 }
 
-const BASE_CATALOGUE: CommercialCatalogue = freezeCatalogue({
-  version: COMMERCIAL_CATALOGUE_VERSION,
-  offers: [],
-  proofPacks: [],
-});
+const EMPTY_CATALOGUE: CommercialCatalogue = freezeCatalogue({version: COMMERCIAL_CATALOGUE_VERSION, offers: [], proofPacks: []});
 
-const WITH_FINTECH = publishOfferVersion(BASE_CATALOGUE, {
+const WITH_FINTECH = publishOfferVersion(EMPTY_CATALOGUE, {
   offerId: 'fintech_operations_platform',
   version: 1,
   name: 'FinTech Backend Operations Platform',
@@ -651,11 +625,8 @@ const WITH_FINTECH = publishOfferVersion(BASE_CATALOGUE, {
   approvedRoutes: ['direct_buyer', 'channel_partner', 'referral_partner'],
   serviceCategories: ['ai_automation', 'fullstack_web_app', 'outsourcing_partnership'],
   minimumValueUsd: 5000,
-  supportedGeographies: [],
   minimumTimelineDays: 21,
-  supportedStacks: [],
   prohibitedIndustries: ['illegal gambling', 'sanctions evasion'],
-  capacityAvailable: true,
   positioning: ['Modular backend operations platform plus managed implementation.'],
   limitations: ['No banking deployment, regulatory approval or guaranteed savings claim without verified evidence.'],
   publishedAt: '2026-07-27T00:00:00.000Z',
@@ -670,11 +641,8 @@ const WITH_DELIVERY = publishOfferVersion(WITH_FINTECH, {
   approvedRoutes: ['direct_buyer', 'channel_partner', 'delivery_partner', 'referral_partner'],
   serviceCategories: ['ai_automation', 'fullstack_web_app', 'outsourcing_partnership', 'cybersecurity', 'digital_marketing', 'creative_production'],
   minimumValueUsd: 3000,
-  supportedGeographies: [],
   minimumTimelineDays: 14,
-  supportedStacks: [],
   prohibitedIndustries: ['illegal gambling', 'sanctions evasion'],
-  capacityAvailable: true,
   positioning: ['Managed delivery partner that owns outcomes rather than supplying unowned CVs.'],
   limitations: ['Capacity, mobilisation, commercial terms and white-label boundaries require human confirmation.'],
   publishedAt: '2026-07-27T00:00:00.000Z',
