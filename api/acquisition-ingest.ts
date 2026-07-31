@@ -4,6 +4,7 @@ import { applyCampaignGovernanceAfterIntake } from '../vercel/acquisition-campai
 import { applyCommercialCatalogueAfterIntake } from '../vercel/acquisition-commercial-catalogue-runtime.js';
 import { applyDecisionScoringAfterIntake } from '../vercel/acquisition-decision-scoring-runtime.js';
 import { applyEnrichmentAfterIntake } from '../vercel/acquisition-enrichment-runtime.js';
+import { applyFunnelAnalyticsAfterIntake } from '../vercel/acquisition-funnel-runtime.js';
 import { applyIdentityGraphAfterIntake } from '../vercel/acquisition-identity-runtime.js';
 import { handleAcquisitionIntake } from '../vercel/acquisition-intake-runtime.js';
 import { applyIntentProvenanceAfterIntake } from '../vercel/acquisition-intent-provenance-runtime.js';
@@ -59,7 +60,8 @@ export default {
       const governanceResponse = await applyCampaignGovernanceAfterIntake({ response: campaignResponse, databaseUrl });
       const catalogueResponse = await applyCommercialCatalogueAfterIntake({ response: governanceResponse, databaseUrl });
       const decisionScoreResponse = await applyDecisionScoringAfterIntake({ response: catalogueResponse, databaseUrl });
-      const accountResponse = await applyUpworkAccountIntelligenceAfterIntake({ response: decisionScoreResponse, databaseUrl });
+      const funnelResponse = await applyFunnelAnalyticsAfterIntake({ response: decisionScoreResponse, databaseUrl });
+      const accountResponse = await applyUpworkAccountIntelligenceAfterIntake({ response: funnelResponse, databaseUrl });
       const workflowResponse = await applyBdWorkflowAfterIntake({ response: accountResponse, databaseUrl });
       return attachAcquisitionReconciliation(workflowResponse, prepared);
     } catch (error) {
