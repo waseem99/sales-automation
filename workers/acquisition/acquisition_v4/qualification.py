@@ -3,7 +3,9 @@ from __future__ import annotations
 import re
 from typing import Any
 
-CONFIGURATION_VERSION = "acquisition-v4-closeability-1.1.0"
+from .linkedin_intent import classify_linkedin_intent
+
+CONFIGURATION_VERSION = "acquisition-v4-closeability-1.2.0"
 
 SERVICE_PATTERNS: dict[str, re.Pattern[str]] = {
     "software_product": re.compile(
@@ -61,10 +63,6 @@ PROHIBITED = re.compile(
     re.I,
 )
 EXPLOITATIVE = re.compile(r"\b(?:unpaid test|free trial work|work for exposure|commission only|equity only)\b", re.I)
-EXPLICIT_INTENT = re.compile(
-    r"\b(?:looking for|seeking|need(?:ing)?|requir(?:e|ed|ing|ement)|request for proposal|rfp|expression of interest|eoi|inviting (?:agencies|vendors|consultants|partners)|submit (?:a )?(?:proposal|quotation|quote|portfolio)|partner with)\b",
-    re.I,
-)
 
 UNSUPPORTED_ROLE_TITLE = re.compile(
     r"\b(?:appointment setter|high[- ]ticket closer|sales closer|virtual assistant|executive assistant|content writer|copywriter|beta tester|data entry|bookkeeper|architectural cad technician|draftsperson|quantity surveyor|stone quantity estimate)\b",
@@ -338,14 +336,11 @@ def _upwork_decision(record: dict[str, Any], lanes: list[str]) -> dict[str, Any]
 
 def _linkedin_decision(record: dict[str, Any], lanes: list[str]) -> dict[str, Any]:
     commercial = _commercial(record)
-    positives: list[str] = []
+    intent_classification = classify_linkedin_intent(record)
+    positives = list(intent_classification["positive_reasons"])
+    risks = list(intent_classification["negative_reasons"])
     missing: list[str] = []
-    risks: list[str] = []
     primary = _primary_lane(record, lanes)
-
-    intent_phrases = commercial.get("intent_phrases") if isinstance(commercial.get("intent_phrases"), list) else []
-    explicit = bool(intent_phrases) or bool(EXPLICIT_INTENT.search(_text(record)))
-    signal_type = str(commercial.get("signal_type", ""))
     contact_routes = commercial.get("contact_routes") if isinstance(commercial.get("contact_routes"), list) else []
 
     fit = 28 if primary else 0
@@ -354,15 +349,16 @@ def _linkedin_decision(record: dict[str, Any], lanes: list[str]) -> dict[str, An
     else:
         risks.append("no supported service lane")
 
-    if signal_type == "procurement_request":
-        intent = 30
-        positives.append("formal procurement or proposal request")
-    elif explicit:
-        intent = 25
-        positives.append("explicit buyer requirement")
-    else:
-        intent = 0
-        risks.append("no explicit buyer intent")
+    category = str(intent_classification["category"])
+    intent_by_category = {
+        "explicit_project_vendor_request": 30,
+        "looking_for_agency_partner": 28,
+        "implementation_problem": 25,
+        "capacity_overflow_need": 25,
+        "referral_request": 22,
+        "recommendation_request": 22,
+    }
+    intent = intent_by_category.get(category, 0) if intent_classification["buyer_intent_confirmed"] else 0
 
     if "proposal" in contact_routes or "email" in contact_routes:
         access = 20
@@ -392,16 +388,18 @@ def _linkedin_decision(record: dict[str, Any], lanes: list[str]) -> dict[str, An
     else:
         missing.append("author role or company context")
 
-    freshness, freshness_missing = _freshness_score(record.get("posted_age"))
-    if freshness >= 6:
-        positives.append("fresh LinkedIn requirement")
-    if freshness_missing:
-        missing.append(freshness_missing)
-    total = min(100, fit + intent + access + buyer + min(10, freshness))
+    freshness_status = str(intent_classification["freshness_status"])
+    freshness = 8 if freshness_status == "current" else 3 if freshness_status == "unknown" else 0
+    total = min(100, fit + intent + access + buyer + freshness)
 
-    if not primary or not explicit:
+    classifier_disposition = str(intent_classification["disposition"])
+    if not primary or classifier_disposition == "reject":
         disposition = "reject"
-    elif total >= 75 and record.get("author_name") and (contact_routes or signal_type == "procurement_request"):
+    elif classifier_disposition == "research" or not intent_classification["buyer_intent_confirmed"]:
+        disposition = "research"
+    elif total >= 75 and record.get("author_name") and (
+        contact_routes or category == "explicit_project_vendor_request"
+    ):
         disposition = "priority_a"
     elif total >= 55:
         disposition = "priority_b"
@@ -409,10 +407,10 @@ def _linkedin_decision(record: dict[str, Any], lanes: list[str]) -> dict[str, An
         disposition = "research"
 
     next_action = {
-        "priority_a": "Open the canonical post, verify the buyer and send a concise manual response today.",
-        "priority_b": "Verify author authority and response route before manual outreach.",
-        "research": "Research the original author/company and confirm an actionable buying route.",
-        "reject": "Do not contact; retain the rejection reason for source calibration.",
+        "priority_a": "Open the retained canonical post, verify the buyer and prepare a concise human-approved response today.",
+        "priority_b": "Verify author authority and the permitted response route before any manual outreach.",
+        "research": "Keep research-only; verify the original author, canonical post, freshness and concrete buying requirement.",
+        "reject": "Do not contact; retain the structured category, evidence and rejection reasons for calibration.",
     }[disposition]
 
     return {
@@ -425,15 +423,35 @@ def _linkedin_decision(record: dict[str, Any], lanes: list[str]) -> dict[str, An
             "buyer_intent": intent,
             "access_route": access,
             "buyer_identity": buyer,
-            "freshness": min(10, freshness),
+            "freshness": freshness,
         },
         "service_lanes": lanes,
         "service_route": primary,
-        "positive_reasons": positives,
+        "positive_reasons": sorted(set(positives)),
         "missing_evidence": sorted(set(missing)),
         "risk_reasons": sorted(set(risks)),
         "recommended_next_action": next_action,
+        "linkedin_intent": intent_classification,
+        "intent_category": category,
+        "buyer_intent_confirmed": bool(intent_classification["buyer_intent_confirmed"]),
+        "canonical_url": intent_classification["evidence"]["canonical_url"],
+        "original_post_evidence": intent_classification["evidence"],
+        "human_review_required": True,
+        "external_action_automated": False,
         "configuration_version": CONFIGURATION_VERSION,
+    }
+
+
+def _force_linkedin_rejection(decision: dict[str, Any], reason: str) -> dict[str, Any]:
+    risks = list(decision.get("risk_reasons") or [])
+    risks.append(reason)
+    return {
+        **decision,
+        "disposition": "reject",
+        "risk_reasons": sorted(set(risks)),
+        "recommended_next_action": "Do not contact; retain the structured category and rejection evidence for calibration.",
+        "human_review_required": True,
+        "external_action_automated": False,
     }
 
 
@@ -463,6 +481,16 @@ def qualify_record(record: dict[str, Any]) -> dict[str, Any]:
     source = str(record.get("source", "")).lower()
     content = _text(record)
     lanes = _service_lanes(record)
+
+    if source == "linkedin":
+        decision = _linkedin_decision(record, lanes)
+        if PROHIBITED.search(content):
+            return _force_linkedin_rejection(decision, "prohibited or deceptive work")
+        early_reason = _early_rejection_reason(record)
+        if early_reason:
+            return _force_linkedin_rejection(decision, early_reason)
+        return decision
+
     if PROHIBITED.search(content):
         return _rejection(source, lanes, "prohibited or deceptive work")
     if EXPLOITATIVE.search(content):
@@ -472,6 +500,4 @@ def qualify_record(record: dict[str, Any]) -> dict[str, Any]:
         return _rejection(source, lanes, early_reason, 10)
     if source == "upwork":
         return _upwork_decision(record, lanes)
-    if source == "linkedin":
-        return _linkedin_decision(record, lanes)
     raise ValueError("Unsupported qualification source.")
