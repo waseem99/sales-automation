@@ -6,7 +6,7 @@ $ErrorActionPreference = "Stop"
 
 # This command removes only known Sales Automation/Acquisition launch registrations.
 # It never deletes or recreates the operational state root.
-$knownNamePattern = '(?i)^(Codistan Sales Automation|Codistan Acquisition|Sales Automation|Acquisition V4|Acquisition V5|Prospecting OS)(?:\.lnk)?$'
+$knownNamePattern = '(?i)^(Codistan Sales Automation|Codistan Acquisition|Sales Automation|Acquisition V4|Acquisition V5|Prospecting\s+OS)(?:\.lnk)?$'
 $knownValuePattern = '(?i)(START-SALES-AUTOMATION\.cmd|START-ACQUISITION-V4\.cmd|acquisition_v4\.supervisor|Codistan\\Acquisition)'
 $removed = New-Object System.Collections.Generic.List[string]
 $warnings = New-Object System.Collections.Generic.List[string]
@@ -93,7 +93,7 @@ function Remove-ScheduledTasks {
         $actionText = (($task.Actions | ForEach-Object { "{0} {1}" -f [string]$_.Execute, [string]$_.Arguments }) -join " ")
         $taskName = [string]$task.TaskName
         $taskPathAndName = "{0}{1}" -f [string]$task.TaskPath, $taskName
-        if ((Test-KnownLaunch $taskName $actionText) -or ($taskPathAndName -match '(?i)(Codistan.*(Sales Automation|Acquisition)|Prospecting OS)')) {
+        if ((Test-KnownLaunch $taskName $actionText) -or ($taskPathAndName -match '(?i)(Codistan.*(Sales Automation|Acquisition)|Prospecting\s+OS)')) {
             try {
                 Unregister-ScheduledTask -TaskName $task.TaskName -TaskPath $task.TaskPath -Confirm:$false -ErrorAction Stop
                 Add-Removal "Scheduled Task: $taskPathAndName"
