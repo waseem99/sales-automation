@@ -72,11 +72,11 @@ jobs:
           pnpm exec tsx workers/acquisition/tests/sync_health_visibility_contract.ts
           pnpm exec tsx workers/acquisition/tests/extension_privacy_contract.mjs
       - name: Validate offer, cold-intent and extension boundaries
+        working-directory: workers/acquisition
         shell: bash
         run: |
-          node workers/acquisition/tests/offer_readiness_api_contract.mjs
-          node workers/acquisition/tests/cold_intent_provenance_contract.mjs
-          cd workers/acquisition
+          node tests/offer_readiness_api_contract.mjs
+          node tests/cold_intent_provenance_contract.mjs
           node tests/linkedin_parser_hardening_contract.mjs
           node tests/linkedin_extension_contract.mjs
           node tests/sales_navigator_extension_contract.mjs
