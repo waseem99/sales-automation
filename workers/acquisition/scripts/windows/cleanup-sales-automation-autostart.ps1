@@ -72,7 +72,7 @@ function Remove-RunEntries {
                 if ($property.Name -like "PS*") { continue }
                 if (Test-KnownLaunch $property.Name ([string]$property.Value)) {
                     Remove-ItemProperty -Path $key -Name $property.Name -Force -ErrorAction Stop
-                    Add-Removal "Registry startup entry: $key::$($property.Name)"
+                    Add-Removal "Registry startup entry: ${key}::$($property.Name)"
                 }
             }
         } catch {
@@ -122,7 +122,7 @@ function Remove-StartupApprovedEntries {
                 if ($property.Name -like "PS*") { continue }
                 if ($property.Name -match $knownNamePattern) {
                     Remove-ItemProperty -Path $key -Name $property.Name -Force -ErrorAction Stop
-                    Add-Removal "StartupApproved entry: $key::$($property.Name)"
+                    Add-Removal "StartupApproved entry: ${key}::$($property.Name)"
                 }
             }
         } catch {
