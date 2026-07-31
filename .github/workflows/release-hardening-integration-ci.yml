@@ -1,0 +1,198 @@
+name: Release Hardening Integration CI
+
+on:
+  pull_request:
+    branches:
+      - agent/prospecting-os-release-candidate-226
+    paths:
+      - '.github/workflows/release-hardening-integration-ci.yml'
+      - 'api/**'
+      - 'apps/web/**'
+      - 'packages/**'
+      - 'vercel/**'
+      - 'workers/acquisition/**'
+      - 'docs/sales-automation/**'
+      - 'package.json'
+      - 'pnpm-lock.yaml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-hardening-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  integrated-linux:
+    name: Validate complete acquisition and commercial stack
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install standalone pnpm
+        run: npm install --global --force @pnpm/exe@9.15.9
+      - name: Install workspace dependencies
+        run: pnpm install --no-frozen-lockfile
+      - name: Validate canonical repository identity
+        run: pnpm test:repository-identity
+      - name: Build production workspace
+        run: pnpm build
+      - name: Test versioned commercial and seller packages
+        shell: bash
+        run: |
+          for package in \
+            commercial-readiness \
+            commercial-catalogue \
+            campaign-governance \
+            decision-scoring \
+            seller-queues \
+            funnel-analytics \
+            sync-health \
+            privacy-governance
+          do
+            pnpm --filter "@sales-automation/$package" test
+            pnpm --filter "@sales-automation/$package" typecheck
+          done
+      - name: Validate integrated TypeScript contracts
+        shell: bash
+        run: |
+          pnpm exec tsx workers/acquisition/tests/sync_reconciliation_contract.ts
+          pnpm exec tsx workers/acquisition/tests/commercial_catalogue_integration_contract.ts
+          pnpm exec tsx workers/acquisition/tests/campaign_governance_integration_contract.ts
+          pnpm exec tsx workers/acquisition/tests/decision_scoring_integration_contract.ts
+          pnpm exec tsx workers/acquisition/tests/seller_queue_integration_contract.ts
+          pnpm exec tsx workers/acquisition/tests/funnel_analytics_integration_contract.ts
+          pnpm exec tsx workers/acquisition/tests/sync_health_visibility_contract.ts
+          pnpm exec tsx workers/acquisition/tests/extension_privacy_contract.mjs
+      - name: Validate offer, cold-intent and extension boundaries
+        shell: bash
+        run: |
+          node workers/acquisition/tests/offer_readiness_api_contract.mjs
+          node workers/acquisition/tests/cold_intent_provenance_contract.mjs
+          cd workers/acquisition
+          node tests/linkedin_parser_hardening_contract.mjs
+          node tests/linkedin_extension_contract.mjs
+          node tests/sales_navigator_extension_contract.mjs
+          node tests/upwork_extension_contract.mjs
+      - name: Compile and test acquisition runtime
+        working-directory: workers/acquisition
+        env:
+          PYTHONPATH: .:tests
+        shell: bash
+        run: |
+          python -m compileall -q acquisition_v4 tests
+          python -m unittest tests.test_sync -v
+          python -m unittest test_linkedin_intent -v
+          python -m unittest test_qualification -v
+          python -m unittest test_review -v
+          python -m unittest tests.test_sync_health -v
+          python -m unittest tests.test_release_acceptance -v
+      - name: Type-check Vercel and web integration
+        run: pnpm typecheck:vercel
+      - name: Validate RC.2 release identity and pipeline order
+        shell: bash
+        run: |
+          node - <<'NODE'
+          const fs = require('node:fs');
+          const release = JSON.parse(fs.readFileSync('workers/acquisition/release-manifest.json', 'utf8'));
+          const linkedin = JSON.parse(fs.readFileSync('workers/acquisition/extensions/linkedin/manifest.json', 'utf8'));
+          const upwork = JSON.parse(fs.readFileSync('workers/acquisition/extensions/upwork/manifest.json', 'utf8'));
+          const intake = fs.readFileSync('api/acquisition-ingest.ts', 'utf8');
+          if (release.release_version !== '1.0.0-rc.2') throw new Error('Release version must be RC.2.');
+          if (release.components.linkedin_sales_navigator_extension !== linkedin.version) throw new Error('LinkedIn/Sales Navigator version drift.');
+          if (release.components.upwork_extension !== upwork.version) throw new Error('Upwork version drift.');
+          if (release.state_contract.external_actions_enabled !== false) throw new Error('External actions must remain disabled.');
+          const stages = [
+            'prepareAcquisitionSyncPayload',
+            'applyIdentityGraphAfterIntake',
+            'applyIntentProvenanceAfterIntake',
+            'applyEnrichmentAfterIntake',
+            'applyCampaignEngineAfterIntake',
+            'applyCampaignGovernanceAfterIntake',
+            'applyCommercialCatalogueAfterIntake',
+            'applyDecisionScoringAfterIntake',
+            'applyFunnelAnalyticsAfterIntake',
+            'applyUpworkAccountIntelligenceAfterIntake',
+            'applyBdWorkflowAfterIntake',
+            'attachAcquisitionReconciliation',
+            'applySyncHealthAfterReconciliation',
+          ];
+          let previous = -1;
+          for (const stage of stages) {
+            const index = intake.indexOf(stage, previous + 1);
+            if (index < 0) throw new Error(`Missing or misordered pipeline stage ${stage}.`);
+            previous = index;
+          }
+          NODE
+      - name: Enforce state and human-action boundaries
+        shell: bash
+        run: |
+          ! grep -R "externalActionAutomated: true\|external_action_automated.*True\|external_action_performed.*true\|automatic sending enabled" \
+            api packages vercel workers/acquisition/acquisition_v4 workers/acquisition/extensions
+          ! grep -R "sendLinkedInMessage\|submitUpworkProposal\|sendEmailAutomatically\|createConnectionRequest" \
+            packages/funnel-analytics packages/sync-health packages/privacy-governance \
+            api/funnel-feedback.ts api/funnel-analytics.ts api/sync-health.ts api/privacy-review.ts
+          ! grep -R "Remove-Item.*Codistan.*Acquisition\|rmdir.*Codistan.*Acquisition\|shutil.rmtree" \
+            packages/funnel-analytics packages/sync-health packages/privacy-governance \
+            api/funnel-feedback.ts api/funnel-analytics.ts api/sync-health.ts api/privacy-review.ts \
+            workers/acquisition/acquisition_v4/release_acceptance.py
+
+  windows-lifecycle:
+    name: Validate Windows lifecycle and evidence tooling
+    runs-on: windows-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Parse Windows lifecycle and acceptance scripts
+        shell: pwsh
+        run: |
+          $files = @(
+            'workers/acquisition/scripts/windows/cleanup-sales-automation-autostart.ps1',
+            'workers/acquisition/scripts/windows/install-acquisition-v4.ps1',
+            'workers/acquisition/scripts/windows/rollback-acquisition-v4.ps1',
+            'workers/acquisition/scripts/windows/stop-sales-automation.ps1',
+            'workers/acquisition/scripts/windows/check-sales-automation-release.ps1',
+            'workers/acquisition/scripts/windows/check-sales-automation-pilot.ps1',
+            'workers/acquisition/scripts/windows/capture-release-acceptance-evidence.ps1'
+          )
+          foreach ($file in $files) {
+            $tokens = $null
+            $errors = $null
+            [System.Management.Automation.Language.Parser]::ParseFile((Resolve-Path $file), [ref]$tokens, [ref]$errors) | Out-Null
+            if ($errors.Count -gt 0) {
+              $errors | ForEach-Object { Write-Error "$file`: $($_.Message)" }
+              exit 1
+            }
+          }
+      - name: Compile lifecycle and acceptance tests
+        shell: pwsh
+        run: python -m compileall -q workers/acquisition/acquisition_v4 workers/acquisition/tests
+      - name: Run Windows lifecycle regression tests
+        shell: pwsh
+        env:
+          PYTHONPATH: workers/acquisition
+        run: |
+          python -m unittest workers/acquisition/tests/test_windows_bundle.py -v
+          python -m unittest workers/acquisition/tests/test_windows_manual_start.py -v
+          python -m unittest workers/acquisition/tests/test_release_acceptance.py -v
+      - name: Enforce manual-start and state-preservation contract
+        shell: pwsh
+        run: |
+          $installer = Get-Content workers/acquisition/scripts/windows/install-acquisition-v4.ps1 -Raw
+          $capture = Get-Content workers/acquisition/scripts/windows/capture-release-acceptance-evidence.ps1 -Raw
+          $checker = Get-Content workers/acquisition/acquisition_v4/release_acceptance.py -Raw
+          if ($installer -notmatch 'EnableAutoStart') { throw 'Installer is missing explicit autostart opt-in.' }
+          if ($installer -match 'Remove-Item.+Codistan.+Acquisition') { throw 'Installer may not remove the Acquisition state root.' }
+          if ($capture -match 'Remove-Item|rmdir|shutil.rmtree') { throw 'Evidence capture must be read-only.' }
+          if ($checker -notmatch 'automatic_merge_performed.+False') { throw 'Release checker must never merge automatically.' }
+          if ($checker -notmatch 'automatic_external_actions_allowed.+False') { throw 'Release checker must keep external actions disabled.' }
