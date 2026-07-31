@@ -1,12 +1,19 @@
 name: Apply Seller Queue UI Patch
 
-# Existing workflow update intentionally triggers the one-shot source transformation.
 on:
   push:
     branches:
       - agent/persistent-seller-queues-272
     paths:
       - '.github/workflows/apply-seller-queue-ui-patch.yml'
+  pull_request:
+    branches:
+      - agent/component-scoring-271
+    paths:
+      - '.github/workflows/apply-seller-queue-ui-patch.yml'
+      - 'scripts/apply-seller-queue-ui-patch.mjs'
+      - 'packages/seller-queues/**'
+      - 'apps/web/src/seller-queue-view.ts'
 
 permissions:
   contents: write
