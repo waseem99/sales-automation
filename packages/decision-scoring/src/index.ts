@@ -137,7 +137,7 @@ export function calculateDecisionScore(
   const total = clamp(subtotal - riskPenalty);
   const priority = priorityFrom(total, riskPenalty, commercial.blocked, intent.strongNegative);
   const base = {
-    version: DECISION_SCORE_VERSION,
+    version: DECISION_SCORE_VERSION as typeof DECISION_SCORE_VERSION,
     weights: DECISION_SCORE_WEIGHTS,
     components,
     riskPenalty,
