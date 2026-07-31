@@ -44,6 +44,7 @@
     "@sales-automation/outreach-email": "workspace:*",
     "@sales-automation/outreach-workbench": "workspace:*",
     "@sales-automation/parsers": "workspace:*",
+    "@sales-automation/privacy-governance": "workspace:*",
     "@sales-automation/prospect-discovery": "workspace:*",
     "@sales-automation/seller-queues": "workspace:*",
     "@sales-automation/shared": "workspace:*",

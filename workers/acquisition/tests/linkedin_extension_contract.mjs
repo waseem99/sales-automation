@@ -17,7 +17,9 @@ const popupHtml = fs.readFileSync(path.join(root, "popup.html"), "utf8");
 const signalSource = fs.readFileSync(path.join(root, "signal.js"), "utf8");
 
 assert.equal(manifest.manifest_version, 3);
-assert.equal(manifest.version, "1.6.0");
+assert.equal(manifest.version, "1.6.1");
+assert.deepEqual([...manifest.permissions].sort(), ["alarms", "scripting", "storage", "tabs"]);
+assert(!manifest.permissions.includes("activeTab"));
 assert(entry.includes("background.js"));
 assert(entry.includes("sales-nav-catalogue.js"));
 assert(entry.includes("sales-nav-background.js"));
@@ -122,8 +124,9 @@ for (const prohibited of [
   "navigator.webdriver", "dispatchevent", "captcha", "cloudflare",
   "sendlinkedinmessage(", "connectrequest(", "followlead(", "sendemail(",
   "external_action_performed: true", "external_action_automated: true", "chrome.tabs.update",
-  "document.cookie", "localstorage.getitem", "sessionstorage.getitem",
-]) assert(!combined.includes(prohibited), `LinkedIn extension contains prohibited action or private-data marker: ${prohibited}`);
+  "document.cookie", "chrome.cookies", "localstorage.getitem", "sessionstorage.getitem",
+  "eval(", "new function(", "importscripts(\"http", "importscripts('http",
+]) assert(!combined.includes(prohibited), `LinkedIn extension contains prohibited action, private-data or remote-code marker: ${prohibited}`);
 
 assert(!resolver.includes("scrollIntoView"));
 assert(!background.includes("chrome.tabs.update"));
