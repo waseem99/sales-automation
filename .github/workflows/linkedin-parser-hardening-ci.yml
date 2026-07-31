@@ -1,0 +1,75 @@
+name: LinkedIn Parser Hardening CI
+
+on:
+  pull_request:
+    branches:
+      - agent/linkedin-warm-intent-269
+    paths:
+      - '.github/workflows/linkedin-parser-hardening-ci.yml'
+      - 'workers/acquisition/extensions/linkedin/manifest.json'
+      - 'workers/acquisition/extensions/linkedin/parser-hardening.js'
+      - 'workers/acquisition/extensions/linkedin/content.js'
+      - 'workers/acquisition/extensions/linkedin/sales-nav.js'
+      - 'workers/acquisition/tests/linkedin_extension_contract.mjs'
+      - 'workers/acquisition/tests/linkedin_parser_hardening_contract.mjs'
+      - 'workers/acquisition/tests/fixtures/linkedin_parser_layouts.json'
+      - 'workers/acquisition/acquisition_v4/linkedin_intent.py'
+      - 'workers/acquisition/acquisition_v4/qualification.py'
+      - 'workers/acquisition/tests/test_linkedin_intent.py'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: linkedin-parser-hardening-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  validate:
+    name: Prove fail-closed LinkedIn and Sales Navigator parsing
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    defaults:
+      run:
+        working-directory: workers/acquisition
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Validate sanitized parser fixtures and safety guard
+        run: node tests/linkedin_parser_hardening_contract.mjs
+
+      - name: Validate complete extension contract
+        run: node tests/linkedin_extension_contract.mjs
+
+      - name: Compile acquisition qualification runtime
+        run: python -m compileall -q acquisition_v4 tests
+
+      - name: Re-run warm-intent and qualification contracts
+        env:
+          PYTHONPATH: .:tests
+        run: |
+          python -m unittest test_linkedin_intent -v
+          python -m unittest test_qualification -v
+
+      - name: Enforce private-data and human-action boundary
+        shell: bash
+        run: |
+          ! grep -R -i "document.cookie\|localStorage.getItem\|sessionStorage.getItem\|navigator.webdriver" extensions/linkedin
+          ! grep -R -i "sendLinkedInMessage(\|connectRequest(\|followLead(\|external_action_performed: true\|external_action_automated: true" extensions/linkedin
+          grep -q 'SENSITIVE_KEY' extensions/linkedin/parser-hardening.js
+          grep -q 'partial_parse_rejections' extensions/linkedin/content.js
+          grep -q 'partial_parse_rejections' extensions/linkedin/sales-nav.js
