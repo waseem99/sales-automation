@@ -30,9 +30,9 @@ class _SyncHandler(BaseHTTPRequestHandler):
             return
         length = int(self.headers.get("Content-Length", "0"))
         payload = json.loads(self.rfile.read(length).decode("utf-8"))
-        self.payloads.append(payload)
-        if self.failures_remaining > 0:
-            self.failures_remaining -= 1
+        type(self).payloads.append(payload)
+        if type(self).failures_remaining > 0:
+            type(self).failures_remaining -= 1
             self.send_response(503)
             self.end_headers()
             return
@@ -42,8 +42,8 @@ class _SyncHandler(BaseHTTPRequestHandler):
         failed = 0
         for index, record in enumerate(payload.get("records", [])):
             key = str(record.get("idempotency_key", ""))
-            if key in self.mixed_failure_keys:
-                self.mixed_failure_keys.remove(key)
+            if key in type(self).mixed_failure_keys:
+                type(self).mixed_failure_keys.remove(key)
                 failed += 1
                 reconciliation.append({
                     "index": index,
