@@ -2,7 +2,12 @@ import { createHmac, timingSafeEqual } from 'node:crypto';
 import { attachBdWorkflow, recordBdPipelineEvent } from '@sales-automation/bd-workflow';
 import {
   assertCommerciallyReadyForApproval,
+  assertCommerciallyReadyForDraft,
+  assertOfferReadinessPinCurrent,
+  createOfferReadinessPin,
   evaluateCommercialReadiness,
+  type CommercialReadinessDecision,
+  type OfferReadinessPin,
 } from '@sales-automation/commercial-readiness';
 import { loadNeonProspectRecord, persistLeadRecords, requireDatabaseUrl, type ProspectVisibility } from '@sales-automation/neon-state';
 import {
@@ -18,6 +23,7 @@ import {
   requestDraftChanges,
   submitDraftForReview,
   type OutreachChannel,
+  type OutreachDraftRecord,
   type OutreachWorkbenchSnapshot,
 } from '@sales-automation/outreach-workbench';
 import { InMemoryLeadRepository } from '@sales-automation/storage';
@@ -26,6 +32,8 @@ export const maxDuration = 300;
 const SESSION_COOKIE = 'codistan_admin_session';
 const ACTOR_COOKIE = 'codistan_admin_actor';
 const MAX_REQUEST_BYTES = 1_000_000;
+
+type PinnedOutreachDraft = OutreachDraftRecord & {offerReadinessPin?: OfferReadinessPin};
 
 export default {
   async fetch(request: Request): Promise<Response> {
@@ -60,8 +68,10 @@ export default {
       const generatedAt = new Date().toISOString();
       let snapshot: OutreachWorkbenchSnapshot;
       const existing = readOutreachWorkbench(record.lead);
+      const existingDraftIds = new Set((existing?.drafts ?? []).map((draft) => draft.id));
 
       if (!draftId && pathname.endsWith('/drafts')) {
+        assertCommerciallyReadyForDraft(record.lead);
         snapshot = createManualDraft(record.lead, {
           channel: requireChannel(payload.channel),
           subject: optionalString(payload.subject),
@@ -70,6 +80,7 @@ export default {
           safeguards: stringArray(payload.safeguards),
         }, actor, generatedAt);
       } else if (!draftId) {
+        assertCommerciallyReadyForDraft(record.lead);
         snapshot = existing ?? initializeOutreachWorkbench(record.lead, record.latestEvaluation?.drafts ?? [], actor, generatedAt);
       } else {
         if (!existing) return json({error: 'Initialize the outreach workbench before editing a draft.'}, 409);
@@ -80,15 +91,24 @@ export default {
             changeNote: optionalString(payload.changeNote),
           }, actor, generatedAt);
         } else if (action === 'submit') {
+          assertCommerciallyReadyForDraft(record.lead);
+          assertDraftPinCurrent(existing, draftId, commercialReadiness, 'draft');
           snapshot = submitDraftForReview(record.lead, draftId, actor, generatedAt);
         } else if (action === 'changes') {
           snapshot = requestDraftChanges(record.lead, draftId, requireString(payload.note, 'note'), actor, generatedAt);
         } else if (action === 'approve') {
           assertCommerciallyReadyForApproval(record.lead);
+          assertDraftPinCurrent(existing, draftId, commercialReadiness, 'approval');
           snapshot = approveOutreachDraft(record.lead, draftId, optionalString(payload.note), actor, generatedAt);
         } else if (action === 'copy') {
+          assertCommerciallyReadyForApproval(record.lead);
+          assertDraftPinCurrent(existing, draftId, commercialReadiness, 'approval');
+          requireApprovedDraft(existing, draftId);
           snapshot = recordDraftCopied(record.lead, draftId, actor, generatedAt);
         } else if (action === 'sent') {
+          assertCommerciallyReadyForApproval(record.lead);
+          assertDraftPinCurrent(existing, draftId, commercialReadiness, 'approval');
+          requireApprovedDraft(existing, draftId);
           snapshot = markDraftSentManually(record.lead, draftId, {
             revisionId: requireString(payload.revisionId, 'revisionId'),
             sentAt: optionalString(payload.sentAt),
@@ -102,6 +122,7 @@ export default {
         }
       }
 
+      snapshot = pinNewDrafts(snapshot, existingDraftIds, commercialReadiness, generatedAt);
       const repository = new InMemoryLeadRepository([record]);
       let updatedLead = attachOutreachWorkbench(record.lead, snapshot);
       if (action === 'sent') {
@@ -134,6 +155,48 @@ export default {
     }
   },
 };
+
+function pinNewDrafts(
+  snapshot: OutreachWorkbenchSnapshot,
+  existingDraftIds: Set<string>,
+  decision: CommercialReadinessDecision,
+  generatedAt: string,
+): OutreachWorkbenchSnapshot {
+  const newDrafts = snapshot.drafts.filter((draft) => !existingDraftIds.has(draft.id));
+  if (newDrafts.length === 0) return snapshot;
+  const pin = createOfferReadinessPin(decision, generatedAt);
+  const safeguard = `Pinned offer ${pin.offerId} v${pin.offerVersion}, readiness revision ${pin.readinessVersion} (${pin.readinessStatus}).`;
+  return {
+    ...snapshot,
+    drafts: snapshot.drafts.map((draft) => existingDraftIds.has(draft.id)
+      ? draft
+      : {
+          ...draft,
+          offerReadinessPin: pin,
+          safeguards: [...new Set([...draft.safeguards, safeguard])],
+        }),
+  };
+}
+
+function assertDraftPinCurrent(
+  snapshot: OutreachWorkbenchSnapshot,
+  draftId: string,
+  decision: CommercialReadinessDecision,
+  action: 'draft' | 'approval',
+): OfferReadinessPin {
+  const draft = snapshot.drafts.find((candidate) => candidate.id === draftId) as PinnedOutreachDraft | undefined;
+  if (!draft) throw new Error(`Outreach draft not found: ${draftId}`);
+  return assertOfferReadinessPinCurrent(draft.offerReadinessPin, decision, action);
+}
+
+function requireApprovedDraft(snapshot: OutreachWorkbenchSnapshot, draftId: string): OutreachDraftRecord {
+  const draft = snapshot.drafts.find((candidate) => candidate.id === draftId);
+  if (!draft) throw new Error(`Outreach draft not found: ${draftId}`);
+  if (draft.status !== 'approved' || !draft.approval) {
+    throw new Error('Only the exact approved revision can be copied or marked as manually sent.');
+  }
+  return draft;
+}
 
 function originalUrl(request: Request): URL {
   const url = new URL(request.url);
@@ -185,6 +248,6 @@ function createActorToken(identifier: string, secret: string): string { const en
 function safeEqual(left: string, right: string): boolean { const a = Buffer.from(left); const b = Buffer.from(right); return a.length === b.length && timingSafeEqual(a, b); }
 function isAuthenticated(cookieHeader: string | null, secret: string): boolean { const token = parseCookies(cookieHeader ?? undefined)[SESSION_COOKIE]; const match = token?.match(/^(\d+)\.([A-Za-z0-9_-]+)$/); if (!match?.[1]) return false; const expiresAt = Number(match[1]); return Number.isFinite(expiresAt) && expiresAt > Math.floor(Date.now() / 1000) && safeEqual(token ?? '', createSessionToken(expiresAt, secret)); }
 function verifyActorToken(token: string | undefined, secret: string): string | undefined { const match = token?.match(/^([A-Za-z0-9_-]+)\.([A-Za-z0-9_-]+)$/); if (!match?.[1]) return undefined; const identifier = Buffer.from(match[1], 'base64url').toString('utf8').trim().toLowerCase(); return safeEqual(token ?? '', createActorToken(identifier, secret)) ? identifier : undefined; }
-function errorStatus(message: string): number { const value = message.toLowerCase(); if (value.includes('not found')) return 404; if (value.includes('immutable') || value.includes('approved') || value.includes('initialize') || value.includes('commercial approval blocked')) return 409; if (value.includes('required') || value.includes('invalid') || value.includes('at most') || value.includes('valid date')) return 400; return 500; }
+function errorStatus(message: string): number { const value = message.toLowerCase(); if (value.includes('not found')) return 404; if (value.includes('immutable') || value.includes('approved') || value.includes('initialize') || value.includes('commercial approval blocked') || value.includes('commercial draft blocked') || value.includes('readiness pin') || value.includes('offer version') || value.includes('readiness changed')) return 409; if (value.includes('required') || value.includes('invalid') || value.includes('at most') || value.includes('valid date')) return 400; return 500; }
 function securityHeaders(): Record<string, string> { return {'x-content-type-options': 'nosniff', 'x-frame-options': 'DENY', 'referrer-policy': 'same-origin', 'content-security-policy': "default-src 'none'; frame-ancestors 'none'; base-uri 'none'"}; }
 function json(value: unknown, status = 200, extra: Record<string, string> = {}): Response { return new Response(JSON.stringify(value), {status, headers: {...securityHeaders(), ...extra, 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store'}}); }

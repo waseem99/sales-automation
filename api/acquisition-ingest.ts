@@ -3,6 +3,7 @@ import { applyCampaignEngineAfterIntake } from '../vercel/acquisition-campaign-r
 import { applyEnrichmentAfterIntake } from '../vercel/acquisition-enrichment-runtime.js';
 import { applyIdentityGraphAfterIntake } from '../vercel/acquisition-identity-runtime.js';
 import { handleAcquisitionIntake } from '../vercel/acquisition-intake-runtime.js';
+import { applyIntentProvenanceAfterIntake } from '../vercel/acquisition-intent-provenance-runtime.js';
 import {
   attachAcquisitionReconciliation,
   prepareAcquisitionSyncPayload,
@@ -49,7 +50,8 @@ export default {
       const databaseUrl = requireEnvironment('DATABASE_URL');
       const intakeResponse = await handler({ body: prepared.body, databaseUrl });
       const identityResponse = await applyIdentityGraphAfterIntake({ response: intakeResponse, databaseUrl });
-      const enrichmentResponse = await applyEnrichmentAfterIntake({ response: identityResponse, databaseUrl });
+      const intentResponse = await applyIntentProvenanceAfterIntake({ response: identityResponse, databaseUrl });
+      const enrichmentResponse = await applyEnrichmentAfterIntake({ response: intentResponse, databaseUrl });
       const campaignResponse = await applyCampaignEngineAfterIntake({ response: enrichmentResponse, databaseUrl });
       const accountResponse = await applyUpworkAccountIntelligenceAfterIntake({ response: campaignResponse, databaseUrl });
       const workflowResponse = await applyBdWorkflowAfterIntake({ response: accountResponse, databaseUrl });

@@ -1,6 +1,7 @@
 param(
     [string]$InstallRoot = (Resolve-Path (Join-Path $PSScriptRoot "..\..\..\..")).Path,
-    [string]$StateRoot = (Join-Path $env:LOCALAPPDATA "Codistan\Acquisition")
+    [string]$StateRoot = (Join-Path $env:LOCALAPPDATA "Codistan\Acquisition"),
+    [switch]$EnableAutoStart
 )
 
 $ErrorActionPreference = "Stop"
@@ -73,24 +74,15 @@ if (-not (Test-Path $configPath)) {
     }
 }
 
-$watchdogPidFile = Join-Path $StateRoot "watchdog.pid"
-if (Test-Path $watchdogPidFile) {
-    $watchdogProcessId = 0
-    [void][int]::TryParse((Get-Content $watchdogPidFile -Raw).Trim(), [ref]$watchdogProcessId)
-    if ($watchdogProcessId -gt 0) { Stop-Process -Id $watchdogProcessId -Force -ErrorAction SilentlyContinue }
-    Remove-Item $watchdogPidFile -Force -ErrorAction SilentlyContinue
-    Start-Sleep -Seconds 1
-}
-$pidFile = Join-Path $StateRoot "runtime.pid"
-if (Test-Path $pidFile) {
-    $runtimeProcessId = 0
-    [void][int]::TryParse((Get-Content $pidFile -Raw).Trim(), [ref]$runtimeProcessId)
-    if ($runtimeProcessId -gt 0) { Stop-Process -Id $runtimeProcessId -Force -ErrorAction SilentlyContinue }
-    Remove-Item $pidFile -Force -ErrorAction SilentlyContinue
-}
-Get-NetTCPConnection -State Listen -LocalPort 8765,8775,8785 -ErrorAction SilentlyContinue |
-    Select-Object -ExpandProperty OwningProcess -Unique |
-    ForEach-Object { Stop-Process -Id $_ -Force -ErrorAction SilentlyContinue }
+$cleanupAutoStartScript = Join-Path $sourceRoot "scripts\windows\cleanup-sales-automation-autostart.ps1"
+$stopScript = Join-Path $sourceRoot "scripts\windows\stop-sales-automation.ps1"
+if (-not (Test-Path $cleanupAutoStartScript)) { throw "The Sales Automation auto-start cleanup command was not found." }
+if (-not (Test-Path $stopScript)) { throw "The Sales Automation stop command was not found." }
+
+# Upgrades remove legacy sign-in launch registrations before changing application files.
+# The cleanup command is deliberately scoped to known Sales Automation/Acquisition entries.
+& $cleanupAutoStartScript -StateRoot $StateRoot
+& $stopScript -StateRoot $StateRoot
 Start-Sleep -Seconds 1
 
 $appCurrent = Join-Path $StateRoot "app-current"
@@ -121,27 +113,34 @@ function New-Shortcut([string]$Path, [string]$Target, [string]$WorkingDirectory,
 $commands = Join-Path $appCurrent "workers\acquisition"
 $desktop = [Environment]::GetFolderPath("Desktop")
 $startup = [Environment]::GetFolderPath("Startup")
-$shortcutMap = @{
-    "Start Sales Automation.lnk" = "START-SALES-AUTOMATION.cmd"
-    "Check Sales Automation Release.lnk" = "CHECK-SALES-AUTOMATION-RELEASE.cmd"
-    "Check Sales Automation Pilot.lnk" = "CHECK-SALES-AUTOMATION-PILOT.cmd"
-    "Diagnose Sales Automation.lnk" = "DIAGNOSE-SALES-AUTOMATION.cmd"
-    "Rollback Sales Automation.lnk" = "ROLLBACK-SALES-AUTOMATION.cmd"
-    "Configure Prospect Desk Sync.lnk" = "CONFIGURE-PROSPECT-DESK-SYNC.cmd"
-    "Open Upwork Searches.lnk" = "OPEN-UPWORK-SEARCHES.cmd"
-    "Open LinkedIn Lead Searches.lnk" = "OPEN-LINKEDIN-LEAD-SEARCHES.cmd"
-    "Open Acquisition Review.lnk" = "OPEN-ACQUISITION-REVIEW.cmd"
-    "Check Sales Navigator Pilot.lnk" = "CHECK-SALES-NAVIGATOR-PILOT.cmd"
-    "Start Acquisition V5.lnk" = "START-ACQUISITION-V4.cmd"
-    "Check Acquisition V5.lnk" = "CHECK-ACQUISITION-V4.cmd"
-    "Diagnose Acquisition V5.lnk" = "DIAGNOSE-ACQUISITION-V4.cmd"
-    "Rollback Acquisition V5.lnk" = "ROLLBACK-ACQUISITION-V4.cmd"
+$legacyDesktopShortcutNames = @(
+    "Run Sales Automation.lnk",
+    "Start Sales Automation.lnk",
+    "Check Sales Automation Release.lnk",
+    "Check Sales Automation Pilot.lnk",
+    "Diagnose Sales Automation.lnk",
+    "Rollback Sales Automation.lnk",
+    "Configure Prospect Desk Sync.lnk",
+    "Open Upwork Searches.lnk",
+    "Open LinkedIn Lead Searches.lnk",
+    "Open Acquisition Review.lnk",
+    "Check Sales Navigator Pilot.lnk",
+    "Start Acquisition V5.lnk",
+    "Check Acquisition V5.lnk",
+    "Diagnose Acquisition V5.lnk",
+    "Rollback Acquisition V5.lnk"
+)
+foreach ($shortcutName in $legacyDesktopShortcutNames) {
+    Remove-Item (Join-Path $desktop $shortcutName) -Force -ErrorAction SilentlyContinue
 }
-foreach ($entry in $shortcutMap.GetEnumerator()) {
-    New-Shortcut (Join-Path $desktop $entry.Key) (Join-Path $commands $entry.Value) $commands
-}
-New-Shortcut (Join-Path $startup "Codistan Sales Automation.lnk") (Join-Path $commands "START-SALES-AUTOMATION.cmd") $commands
+New-Shortcut (Join-Path $desktop "Run Sales Automation.lnk") (Join-Path $commands "START-SALES-AUTOMATION.cmd") $commands
 
+if ($EnableAutoStart) {
+    New-Shortcut (Join-Path $startup "Codistan Sales Automation.lnk") (Join-Path $commands "START-SALES-AUTOMATION.cmd") $commands
+}
+
+# Start only for the bounded installation health check. The runtime is stopped again
+# before a successful install returns, so normal operation always begins manually.
 Start-Process -FilePath (Join-Path $commands "START-SALES-AUTOMATION.cmd") -WindowStyle Minimized
 $healthy = $false
 for ($attempt = 0; $attempt -lt 25; $attempt++) {
@@ -155,6 +154,10 @@ for ($attempt = 0; $attempt -lt 25; $attempt++) {
         if ($upwork.ready -and $linkedin.ready -and $salesNavigator.ready -and $versionMatches -and $safe) { $healthy = $true; break }
     } catch {}
 }
+
+$installedStopScript = Join-Path $commands "scripts\windows\stop-sales-automation.ps1"
+& $installedStopScript -StateRoot $StateRoot
+
 if (-not $healthy) {
     if (Test-Path $appPrevious) {
         if (Test-Path $appCurrent) { Remove-Item $appCurrent -Recurse -Force }
@@ -174,5 +177,13 @@ Write-Host "State preserved at: $StateRoot"
 Write-Host "Prospect Desk sync config: $configPath"
 Write-Host "Sync sources: LinkedIn warm, Upwork warm and Sales Navigator cold campaigns"
 Write-Host "External actions remain disabled."
+if ($EnableAutoStart) {
+    Write-Warning "Automatic Windows startup was explicitly enabled with -EnableAutoStart."
+} else {
+    Write-Host "Manual start is the default. Use the Run Sales Automation desktop shortcut when work begins."
+}
+Write-Host "The installation health check is complete and the runtime is stopped."
+Write-Host "Stop command: STOP-SALES-AUTOMATION.cmd"
+Write-Host "Auto-start cleanup command: CLEANUP-SALES-AUTOMATION-AUTOSTART.cmd"
 Write-Host "Load or reload both unpacked extensions in chrome://extensions/."
 Write-Host "Run Check Sales Automation Release before capture and Check Sales Automation Pilot before any release merge."
