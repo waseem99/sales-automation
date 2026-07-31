@@ -1,5 +1,6 @@
 name: Seller Queues CI
 
+# Exact-head validation for persistent per-user Prospect Desk queues.
 on:
   pull_request:
     branches:
