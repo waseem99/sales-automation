@@ -1,4 +1,4 @@
-import {createSyncHealthSnapshot, type SyncHealthRecord, type SyncSource} from '@sales-automation/sync-health';
+import {createSyncHealthSnapshot, redactDiagnostic, type SyncHealthRecord, type SyncSource} from '@sales-automation/sync-health';
 import {loadNeonAppState, persistLeadRecords} from '@sales-automation/neon-state';
 import {persistSyncHealthSnapshot} from '../packages/neon-state/src/sync-health-store.js';
 import type {LeadEvaluation} from '@sales-automation/evaluator';
@@ -189,7 +189,7 @@ function text(value: unknown): string | undefined {
 
 function safeText(value: unknown): string | undefined {
   const normalized = text(value);
-  return normalized?.replace(/Bearer\s+\S+/gi, 'Bearer [redacted]').replace(/([?&](?:token|key|secret|auth)=)[^&\s]+/gi, '$1[redacted]');
+  return normalized ? redactDiagnostic(normalized) : undefined;
 }
 
 function asRecord(value: unknown): Record<string, unknown> {
@@ -202,7 +202,7 @@ function unique<T>(values: T[]): T[] {
 
 function safeErrorMessage(error: unknown): string {
   const message = error instanceof Error ? error.message : String(error);
-  return message.replace(/postgres(?:ql)?:\/\/[^\s]+/gi, '[database-url-redacted]').replace(/Bearer\s+\S+/gi, 'Bearer [redacted]').slice(0, 500);
+  return redactDiagnostic(message.replace(/postgres(?:ql)?:\/\/[^\s]+/gi, '[database-url-redacted]')).slice(0, 500);
 }
 
 function responseJson(value: unknown, status: number, existingHeaders: Record<string, string>): Response {
