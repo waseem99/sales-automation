@@ -27,8 +27,12 @@ for (const marker of [
   assert(shared.includes(marker), `Shared intent-provenance contract is missing ${marker}`);
 }
 
-assert(intakeApi.indexOf('applyIdentityGraphAfterIntake') < intakeApi.indexOf('applyIntentProvenanceAfterIntake'));
-assert(intakeApi.indexOf('applyIntentProvenanceAfterIntake') < intakeApi.indexOf('applyEnrichmentAfterIntake'));
+const identityCall = 'const identityResponse = await applyIdentityGraphAfterIntake';
+const intentCall = 'const intentResponse = await applyIntentProvenanceAfterIntake';
+const enrichmentCall = 'const enrichmentResponse = await applyEnrichmentAfterIntake';
+assert(intakeApi.indexOf(identityCall) >= 0);
+assert(intakeApi.indexOf(intentCall) > intakeApi.indexOf(identityCall));
+assert(intakeApi.indexOf(enrichmentCall) > intakeApi.indexOf(intentCall));
 assert(intentRuntime.includes('resolveIntentGroup'));
 assert(intentRuntime.includes('readIdentityResolution'));
 assert(intentRuntime.includes('linked_warm_evidence'));
