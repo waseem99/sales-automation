@@ -1,0 +1,72 @@
+name: Cold Intent Provenance CI
+
+on:
+  pull_request:
+    branches:
+      - agent/prospecting-os-release-candidate-226
+    paths:
+      - '.github/workflows/cold-intent-provenance-ci.yml'
+      - 'api/acquisition-ingest.ts'
+      - 'packages/shared/**'
+      - 'packages/drafting/**'
+      - 'vercel/acquisition-intent-provenance-runtime.ts'
+      - 'vercel/sales-navigator-intake-runtime.ts'
+      - 'apps/web/src/prospect-handler.ts'
+      - 'apps/web/src/prospects-page.ts'
+      - 'workers/acquisition/tests/cold_intent_provenance_contract.mjs'
+      - 'package.json'
+      - 'pnpm-lock.yaml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: cold-intent-provenance-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  validate:
+    name: Preserve cold source and traceable warm evidence
+    runs-on: ubuntu-latest
+    timeout-minutes: 26
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Install standalone pnpm
+        run: npm install --global --force @pnpm/exe@9.15.9
+
+      - name: Install workspace dependencies
+        run: pnpm install --no-frozen-lockfile
+
+      - name: Build production workspace
+        run: pnpm build
+
+      - name: Test cold and warm intent provenance
+        run: pnpm --filter @sales-automation/shared test
+
+      - name: Test safe cold drafting
+        run: pnpm --filter @sales-automation/drafting test
+
+      - name: Validate API UI sync and drafting contracts
+        working-directory: workers/acquisition
+        run: node tests/cold_intent_provenance_contract.mjs
+
+      - name: Type-check Vercel ingestion integration
+        run: pnpm typecheck:vercel
+
+      - name: Enforce human-action boundary
+        shell: bash
+        run: |
+          ! grep -R "externalActionAutomated: true\|external_action_performed.*true" \
+            api/acquisition-ingest.ts \
+            packages/shared/src/intent-provenance.ts \
+            packages/drafting/src/index.ts \
+            vercel/acquisition-intent-provenance-runtime.ts

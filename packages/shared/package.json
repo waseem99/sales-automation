@@ -9,7 +9,7 @@
     "build": "tsc -p tsconfig.json",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "lint": "tsc -p tsconfig.json --noEmit",
-    "test": "echo 'No shared tests yet'"
+    "test": "tsx src/intent-provenance.test.ts"
   },
   "devDependencies": {
     "typescript": "^5.7.2"
