@@ -109,7 +109,7 @@ class WindowsBundleTests(unittest.TestCase):
 
         self.assertIn('"product": "Codistan Sales Automation"', release_manifest)
         self.assertIn('"application": "Prospect Desk"', release_manifest)
-        self.assertIn('"release_version": "1.0.0-rc.1"', release_manifest)
+        self.assertIn('"release_version": "1.0.0-rc.2"', release_manifest)
         self.assertIn('"commercial_readiness": "commercial-readiness.v1"', release_manifest)
         self.assertIn("install-acquisition-v4.ps1", canonical_install)
         self.assertIn("START-ACQUISITION-V4.cmd", canonical_start)
