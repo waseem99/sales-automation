@@ -1,0 +1,66 @@
+name: Sales Automation Windows Lifecycle CI
+
+on:
+  pull_request:
+    branches:
+      - agent/prospecting-os-release-candidate-226
+    paths:
+      - '.github/workflows/sales-automation-windows-lifecycle-ci.yml'
+      - 'workers/acquisition/START-HERE-SALES-AUTOMATION.cmd'
+      - 'workers/acquisition/START-SALES-AUTOMATION.cmd'
+      - 'workers/acquisition/STOP-SALES-AUTOMATION.cmd'
+      - 'workers/acquisition/CLEANUP-SALES-AUTOMATION-AUTOSTART.cmd'
+      - 'workers/acquisition/scripts/windows/**'
+      - 'workers/acquisition/tests/test_windows*.py'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: sales-automation-windows-lifecycle-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  validate:
+    name: Validate manual start, cleanup and state preservation
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    defaults:
+      run:
+        working-directory: workers/acquisition
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Parse PowerShell lifecycle scripts
+        shell: pwsh
+        run: |
+          $failures = New-Object System.Collections.Generic.List[string]
+          Get-ChildItem scripts/windows -Filter *.ps1 | ForEach-Object {
+            $tokens = $null
+            $errors = $null
+            [System.Management.Automation.Language.Parser]::ParseFile(
+              $_.FullName,
+              [ref]$tokens,
+              [ref]$errors
+            ) | Out-Null
+            foreach ($parseError in $errors) {
+              [void]$failures.Add("$($_.Name): $($parseError.Message)")
+            }
+          }
+          if ($failures.Count -gt 0) {
+            throw ($failures -join [Environment]::NewLine)
+          }
+
+      - name: Run Windows bundle and manual-start regression tests
+        env:
+          PYTHONPATH: .
+        run: python -m unittest discover -s tests -p 'test_windows*.py' -v
