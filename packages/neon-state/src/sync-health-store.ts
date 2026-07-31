@@ -4,6 +4,11 @@ interface SyncHealthRow {
   snapshot: unknown;
 }
 
+interface PersistableSyncHealthSnapshot {
+  source: string;
+  collectedAt: string;
+}
+
 export async function ensureSyncHealthSchema(databaseUrl: string): Promise<void> {
   const sql = neon(requireUrl(databaseUrl));
   await sql`
@@ -16,11 +21,10 @@ export async function ensureSyncHealthSchema(databaseUrl: string): Promise<void>
   `;
 }
 
-export async function persistSyncHealthSnapshot(databaseUrl: string, snapshot: {
-  source: string;
-  collectedAt: string;
-  [key: string]: unknown;
-}): Promise<void> {
+export async function persistSyncHealthSnapshot<T extends PersistableSyncHealthSnapshot>(
+  databaseUrl: string,
+  snapshot: T,
+): Promise<void> {
   if (!snapshot.source.trim()) throw new Error('Sync health source is required.');
   if (Number.isNaN(Date.parse(snapshot.collectedAt))) throw new Error('Sync health collectedAt must be a valid date.');
   await ensureSyncHealthSchema(databaseUrl);
