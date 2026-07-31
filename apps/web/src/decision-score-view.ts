@@ -31,10 +31,10 @@ export function renderDecisionScorePanel(lead: Lead): string {
   const coldSourcePreserved = score.coldSourcePreserved === true;
   const needsSellerReview = raw.decisionScoreNeedsSellerReview === true;
 
-  return `<section class="detail-section score-components" data-decision-score-version="${escapeAttribute(version)}">
+  return `<style>${panelStyles()}</style><section class="detail-section score-components" data-decision-score-version="${escapeAttribute(version)}">
     <div class="section-heading"><div><h3>Decision score</h3><p>Versioned fit, intent, evidence and commercial-readiness components.</p></div><span class="score">${total ?? '—'}<small>/100</small></span></div>
     <div class="score-summary"><span class="pill">${escapeHtml(label(priority))}</span><span>Risk penalty: ${riskPenalty ?? '—'}</span><span>Buyer intent: ${buyerIntentConfirmed ? 'Confirmed' : 'Not confirmed'}</span><span>Cold source preserved: ${coldSourcePreserved ? 'Yes' : 'No'}</span></div>
-    ${needsSellerReview ? '<div class="warning">New source evidence is available. The seller override remains protected until a human reviews the latest model candidate.</div>' : ''}
+    ${needsSellerReview ? '<div class="score-warning">New source evidence is available. The seller override remains protected until a human reviews the latest model candidate.</div>' : ''}
     <div class="score-component-grid">${COMPONENTS.map(([key, title]) => componentCard(title, numberValue(components[key]))).join('')}</div>
     <div class="score-evidence-grid">
       ${evidenceList('Positive reasons', reasons, 'No positive reasons recorded.')}
@@ -63,6 +63,10 @@ function renderOverride(value: Record<string, unknown>): string {
   const component = text(value.component) ?? 'priority';
   const occurredAt = text(value.occurredAt) ?? '';
   return `<article><strong>${escapeHtml(actor)}</strong><span>${escapeHtml(label(component))} · ${escapeHtml(occurredAt)}</span><p>${escapeHtml(reason)}</p><small>${escapeHtml(outcome)}</small></article>`;
+}
+
+function panelStyles(): string {
+  return `.score-components .section-heading{display:flex;justify-content:space-between;gap:16px;align-items:flex-start}.score-summary{display:flex;flex-wrap:wrap;gap:8px 16px;margin:12px 0 16px;font-size:13px}.score-component-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(145px,1fr));gap:10px}.score-component{padding:12px;border:1px solid #d9dee8;border-radius:10px;background:#f8fafc}.score-component span{display:block;font-size:12px;color:#5b6472}.score-component strong{font-size:22px}.score-bar{height:5px;margin-top:8px;border-radius:99px;background:#e4e9f0;overflow:hidden}.score-bar i{display:block;height:100%;background:currentColor}.score-evidence-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:14px;margin-top:16px}.score-evidence-grid h4,.override-history h4{margin:0 0 8px}.score-evidence-grid ul{margin:0;padding-left:18px}.score-warning{margin:12px 0;padding:10px;border-radius:8px;background:#fff4d6}.override-history{margin-top:16px}.override-history article{padding:10px 0;border-top:1px solid #e6e9ef}.override-history article span{display:block;font-size:12px;color:#687181}.override-history article p{margin:5px 0}`;
 }
 
 function label(value: string): string {
