@@ -5,6 +5,7 @@ import {
   validatePortfolio,
   type CampaignMatch,
 } from '@sales-automation/campaign-engine';
+import { applyCommercialReadinessToQualification, evaluateCommercialReadiness } from '@sales-automation/commercial-readiness';
 import { loadNeonAppState, persistLeadRecords } from '@sales-automation/neon-state';
 import type { StoredLeadRecord } from '@sales-automation/storage';
 
@@ -31,18 +32,20 @@ export async function applyCampaignEngineAfterIntake(input: {
     if (validationErrors.length > 0) throw new Error(`Campaign portfolio is invalid: ${validationErrors.join(' ')}`);
     const state = await loadNeonAppState(input.databaseUrl);
     const touchedLeadIds: string[] = [];
-    const matchesByLead: Array<{leadId: string; matches: CampaignMatch[]}> = [];
+    const matchesByLead: Array<{leadId: string; matches: CampaignMatch[]; actionable: boolean}> = [];
 
     for (const leadId of processedLeadIds) {
       const record = state.repository.getLead(leadId);
       if (!record) continue;
       const matches = matchLeadToCampaigns(record.lead, DEFAULT_PORTFOLIO);
-      matchesByLead.push({leadId, matches});
+      const matchedLead = attachCampaignMatches(record.lead, matches);
+      const qualifiedLead = applyCommercialReadinessToQualification(matchedLead);
+      const readiness = evaluateCommercialReadiness(qualifiedLead);
+      matchesByLead.push({leadId, matches, actionable: readiness.actionableQualificationAllowed});
       const previous = stableCampaignState(record.lead.rawPayload);
-      const enrichedLead = attachCampaignMatches(record.lead, matches);
-      const next = stableCampaignState(enrichedLead.rawPayload);
-      if (JSON.stringify(previous) === JSON.stringify(next)) continue;
-      state.repository.upsertLead(enrichedLead, ACTOR);
+      const next = stableCampaignState(qualifiedLead.rawPayload);
+      if (JSON.stringify(previous) === JSON.stringify(next) && qualifiedLead.pipelineStatus === record.lead.pipelineStatus) continue;
+      state.repository.upsertLead(qualifiedLead, ACTOR);
       touchedLeadIds.push(leadId);
     }
 
@@ -67,6 +70,7 @@ export async function applyCampaignEngineAfterIntake(input: {
         deliveryPartner: allMatches.filter((match) => match.route === 'delivery_partner').length,
         explicitBuyerIntentConfirmed: allMatches.filter((match) => match.explicitBuyerIntentConfirmed).length,
         coldHypotheses: allMatches.filter((match) => !match.explicitBuyerIntentConfirmed).length,
+        commercialReadinessBlocked: matchesByLead.filter((entry) => entry.matches.length > 0 && !entry.actionable).length,
       },
       humanReviewRequired: true,
       externalActionAutomated: false,
@@ -81,7 +85,7 @@ export async function applyCampaignEngineAfterIntake(input: {
       campaignEngine: {
         status: 'deferred',
         processed: 0,
-        reason: 'Source ingestion, identity and enrichment succeeded, but campaign matching was deferred for a later retry.',
+        reason: 'Source ingestion, identity and enrichment succeeded, but campaign matching and offer-readiness enforcement were deferred for a later retry.',
       },
       humanReviewRequired: true,
       externalActionAutomated: false,
@@ -95,6 +99,8 @@ function stableCampaignState(value: unknown): unknown {
     campaignEngineVersion: raw.campaignEngineVersion ?? null,
     campaignMatches: raw.campaignMatches ?? [],
     primaryCampaignMatch: raw.primaryCampaignMatch ?? null,
+    commercialReadinessVersion: raw.commercialReadinessVersion ?? null,
+    commercialReadinessDecision: raw.commercialReadinessDecision ?? null,
   };
 }
 
