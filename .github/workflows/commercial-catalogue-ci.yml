@@ -52,8 +52,7 @@ jobs:
         run: pnpm --filter @sales-automation/commercial-catalogue typecheck
 
       - name: Validate persisted recommendation and draft pins
-        working-directory: workers/acquisition
-        run: pnpm exec tsx tests/commercial_catalogue_integration_contract.ts
+        run: pnpm exec tsx workers/acquisition/tests/commercial_catalogue_integration_contract.ts
 
       - name: Type-check Vercel ingestion integration
         run: pnpm typecheck:vercel
