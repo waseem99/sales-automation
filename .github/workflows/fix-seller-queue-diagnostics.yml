@@ -1,0 +1,30 @@
+name: Fix Seller Queue Diagnostics Type
+
+on:
+  pull_request:
+    branches:
+      - agent/component-scoring-271
+    paths:
+      - '.github/workflows/fix-seller-queue-diagnostics.yml'
+      - 'scripts/fix-seller-queue-diagnostics.mjs'
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: agent/persistent-seller-queues-272
+          fetch-depth: 0
+      - run: node scripts/fix-seller-queue-diagnostics.mjs
+      - run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add packages/seller-queues/src/index.ts scripts/fix-seller-queue-diagnostics.mjs .github/workflows/fix-seller-queue-diagnostics.yml
+          git commit -m "Fix seller queue diagnostics typing"
+          git push origin HEAD:agent/persistent-seller-queues-272
