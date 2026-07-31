@@ -19,7 +19,7 @@ for (const marker of [
   'coldSourceHistory',
   'warmEvidence',
   'invalidOrStaleWarmEvidence',
-  "effectiveInterpretation: 'linked_warm_evidence'",
+  "'linked_warm_evidence'",
   'originalSourceClassificationPreserved: true',
   'buyerIntentConfirmed: provenance.sourceBuyerIntentConfirmed',
   'safeColdDraft',
