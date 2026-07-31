@@ -1,13 +1,19 @@
-import {createSyncHealthSnapshot, redactDiagnostic, type SyncHealthRecord, type SyncSource} from '@sales-automation/sync-health';
-import {loadNeonAppState, persistLeadRecords} from '@sales-automation/neon-state';
-import {persistSyncHealthSnapshot} from '../packages/neon-state/src/sync-health-store.js';
 import type {LeadEvaluation} from '@sales-automation/evaluator';
+import {loadNeonAppState, persistLeadRecords} from '@sales-automation/neon-state';
 import type {Lead} from '@sales-automation/shared';
 import type {StoredLeadRecord} from '@sales-automation/storage';
+import {
+  createSyncHealthSnapshot,
+  redactDiagnostic,
+  type SyncHealthRecord,
+  type SyncSource,
+} from '@sales-automation/sync-health';
+import {persistSyncHealthSnapshot} from '../packages/neon-state/src/sync-health-store.js';
 
 export const SYNC_HEALTH_RUNTIME_VERSION = 'sync-health-runtime.v1';
 const ACTOR = 'sync-health-runtime@codistan.local';
 const MAX_HISTORY = 100;
+const KEY_VALUE_SECRET = /\b(token|key|secret|auth|authorization|cookie|session|signature)=([^\s;&]+)/gi;
 
 interface ReconciliationRecord {
   source?: unknown;
@@ -36,8 +42,9 @@ export async function applySyncHealthAfterReconciliation(input: {
   if (!parsed) return input.response;
   const reconciliation = asRecord(parsed.body.reconciliation) as ReconciliationBody;
   const source = syncSource(reconciliation.source);
-  const rawRecords = Array.isArray(reconciliation.records) ? reconciliation.records : [];
-  const records = rawRecords.map((item) => asRecord(item) as ReconciliationRecord);
+  const records = Array.isArray(reconciliation.records)
+    ? reconciliation.records.map((item) => asRecord(item) as ReconciliationRecord)
+    : [];
   if (!source || records.length === 0) return input.response;
 
   const generatedAt = input.generatedAt ?? new Date().toISOString();
@@ -54,6 +61,7 @@ export async function applySyncHealthAfterReconciliation(input: {
       else state.repository.upsertLead(applied.lead, ACTOR);
       touchedLeadIds.push(leadId);
     }
+
     const touchedRecords = unique(touchedLeadIds)
       .map((leadId) => state.repository.getLead(leadId))
       .filter((record): record is StoredLeadRecord => Boolean(record));
@@ -61,13 +69,14 @@ export async function applySyncHealthAfterReconciliation(input: {
 
     const counts = asRecord(reconciliation.counts);
     const healthRecords = records.map(toHealthRecord).filter((item): item is SyncHealthRecord => Boolean(item));
+    const successful = count(counts.applied) + count(counts.duplicate) + count(counts.merged);
     const snapshot = createSyncHealthSnapshot({
       source,
       collectedAt: generatedAt,
       capture: 'unknown',
       localProcessing: 'unknown',
       outbox: healthRecords.length ? 'degraded' : 'unknown',
-      prospectDeskIngestion: count(counts.failed) > 0 || count(counts.conflicted) > 0 ? 'degraded' : 'healthy',
+      prospectDeskIngestion: count(counts.failed) || count(counts.conflicted) ? 'degraded' : 'healthy',
       endpointVersion: text(reconciliation.version),
       pending: count(counts.pending),
       conflicted: count(counts.conflicted),
@@ -78,9 +87,13 @@ export async function applySyncHealthAfterReconciliation(input: {
       records: healthRecords,
       diagnostics: records
         .filter((item) => ['failed', 'conflicted', 'pending'].includes(text(item.status) ?? ''))
-        .map((item) => ({status: item.status, reason: item.reason, idempotencyKey: item.idempotencyKey})),
+        .map((item) => ({
+          status: item.status,
+          reason: strictRedact(item.reason),
+          idempotencyKey: item.idempotencyKey,
+        })),
       lastAttemptAt: generatedAt,
-      lastSuccessfulSyncAt: count(counts.applied) + count(counts.duplicate) + count(counts.merged) > 0 ? generatedAt : undefined,
+      lastSuccessfulSyncAt: successful > 0 ? generatedAt : undefined,
     });
     await persistSyncHealthSnapshot(input.databaseUrl, snapshot);
 
@@ -100,7 +113,7 @@ export async function applySyncHealthAfterReconciliation(input: {
       externalActionAutomated: false,
     }, input.response.status, parsed.headers);
   } catch (error) {
-    console.error('SYNC_HEALTH_PERSISTENCE_ERROR', {message: safeErrorMessage(error), source});
+    console.error('SYNC_HEALTH_PERSISTENCE_ERROR', {message: strictRedact(error), source});
     return responseJson({
       ...parsed.body,
       syncHealthPersistence: {
@@ -117,10 +130,11 @@ export async function applySyncHealthAfterReconciliation(input: {
   }
 }
 
-export function attachReconciliationHealth(record: StoredLeadRecord, item: ReconciliationRecord, occurredAt: string): {
-  lead: Lead;
-  evaluation?: LeadEvaluation;
-} {
+export function attachReconciliationHealth(
+  record: StoredLeadRecord,
+  item: ReconciliationRecord,
+  occurredAt: string,
+): {lead: Lead; evaluation?: LeadEvaluation} {
   const raw = asRecord(record.lead.rawPayload);
   const history = Array.isArray(raw.syncReconciliationHistory)
     ? raw.syncReconciliationHistory.filter((entry) => entry && typeof entry === 'object').slice(-(MAX_HISTORY - 1))
@@ -133,7 +147,7 @@ export function attachReconciliationHealth(record: StoredLeadRecord, item: Recon
     expectedLeadId: text(item.expectedLeadId),
     status: text(item.status) ?? 'pending',
     outcome: text(item.outcome),
-    reason: safeText(item.reason),
+    reason: optionalRedacted(item.reason),
     sellerFieldsPreserved: true,
     sourceEvidenceRetained: true,
     diagnosticsRedacted: true,
@@ -155,10 +169,24 @@ function toHealthRecord(item: ReconciliationRecord): SyncHealthRecord | undefine
   const idempotencyKey = text(item.idempotencyKey);
   const status = text(item.status);
   if (!idempotencyKey || !status) return undefined;
-  if (status === 'conflicted') return {idempotencyKey, status: 'conflicted', attempts: 0, lastError: safeText(item.reason)};
-  if (status === 'failed') return {idempotencyKey, status: 'retrying', attempts: 1, lastError: safeText(item.reason)};
-  if (status === 'pending') return {idempotencyKey, status: 'pending', attempts: 0, lastError: safeText(item.reason)};
+  const lastError = optionalRedacted(item.reason);
+  if (status === 'conflicted') return {idempotencyKey, status: 'conflicted', attempts: 0, lastError};
+  if (status === 'failed') return {idempotencyKey, status: 'retrying', attempts: 1, lastError};
+  if (status === 'pending') return {idempotencyKey, status: 'pending', attempts: 0, lastError};
   return undefined;
+}
+
+function strictRedact(value: unknown): string {
+  const raw = value instanceof Error ? value.message : String(value ?? '');
+  return redactDiagnostic(raw)
+    .replace(KEY_VALUE_SECRET, '$1=[redacted]')
+    .replace(/postgres(?:ql)?:\/\/[^\s]+/gi, '[database-url-redacted]')
+    .slice(0, 500);
+}
+
+function optionalRedacted(value: unknown): string | undefined {
+  const output = strictRedact(value).trim();
+  return output || undefined;
 }
 
 async function parseResponse(response: Response): Promise<{body: Record<string, unknown>; headers: Record<string, string>} | undefined> {
@@ -187,22 +215,12 @@ function text(value: unknown): string | undefined {
   return typeof value === 'string' && value.trim() ? value.trim().slice(0, 300) : undefined;
 }
 
-function safeText(value: unknown): string | undefined {
-  const normalized = text(value);
-  return normalized ? redactDiagnostic(normalized) : undefined;
-}
-
 function asRecord(value: unknown): Record<string, unknown> {
   return value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : {};
 }
 
 function unique<T>(values: T[]): T[] {
   return [...new Set(values)];
-}
-
-function safeErrorMessage(error: unknown): string {
-  const message = error instanceof Error ? error.message : String(error);
-  return redactDiagnostic(message.replace(/postgres(?:ql)?:\/\/[^\s]+/gi, '[database-url-redacted]')).slice(0, 500);
 }
 
 function responseJson(value: unknown, status: number, existingHeaders: Record<string, string>): Response {
