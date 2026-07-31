@@ -1,0 +1,361 @@
+[
+  {
+    "name": "explicit vendor request",
+    "expected_category": "explicit_project_vendor_request",
+    "expected_disposition": "actionable",
+    "record": {
+      "source": "linkedin",
+      "canonical_url": "https://www.linkedin.com/feed/update/urn:li:activity:1001",
+      "source_native_id": "urn:li:activity:1001",
+      "title": "RFP for a customer software portal",
+      "body": "We are inviting software vendors to submit a proposal for a customer portal and API integration project.",
+      "author_name": "Ayesha Khan",
+      "author_profile_url": "https://www.linkedin.com/in/ayesha-khan",
+      "author_headline": "Chief Technology Officer at Example Co",
+      "company_name": "Example Co",
+      "posted_age": "2 hours ago",
+      "page_identity": "software portal RFP",
+      "commercial_evidence": {"contact_routes": ["proposal"], "service_lanes": ["software"]},
+      "raw_evidence": {}
+    }
+  },
+  {
+    "name": "agency partner request",
+    "expected_category": "looking_for_agency_partner",
+    "expected_disposition": "actionable",
+    "record": {
+      "source": "linkedin",
+      "canonical_url": "https://www.linkedin.com/posts/example_agency-request-activity-1002",
+      "source_native_id": "urn:li:activity:1002",
+      "title": "Looking for a digital marketing agency",
+      "body": "We are looking for a digital marketing agency for content, social media and paid ads. Please message me with relevant work.",
+      "author_name": "Marketing Director",
+      "author_profile_url": "https://www.linkedin.com/in/marketing-director",
+      "author_headline": "Marketing Director at Retail Co",
+      "company_name": "Retail Co",
+      "posted_age": "3h",
+      "page_identity": "digital marketing agency",
+      "commercial_evidence": {"contact_routes": ["direct_message"], "service_lanes": ["digital_growth"]},
+      "raw_evidence": {}
+    }
+  },
+  {
+    "name": "implementation problem",
+    "expected_category": "implementation_problem",
+    "expected_disposition": "actionable",
+    "record": {
+      "source": "linkedin",
+      "canonical_url": "https://www.linkedin.com/feed/update/urn:li:activity:1003",
+      "source_native_id": "urn:li:activity:1003",
+      "title": "Need help integrating our ERP and customer platform",
+      "body": "We need help integrating our ERP, automating manual workflows and implementing a reliable API layer.",
+      "author_name": "Operations Director",
+      "author_profile_url": "https://www.linkedin.com/in/operations-director",
+      "author_headline": "Operations Director at Manufacturing Co",
+      "company_name": "Manufacturing Co",
+      "posted_age": "1 day ago",
+      "page_identity": "ERP integration help",
+      "commercial_evidence": {"contact_routes": ["email"], "service_lanes": ["software", "ai_automation"]},
+      "raw_evidence": {}
+    }
+  },
+  {
+    "name": "capacity overflow need",
+    "expected_category": "capacity_overflow_need",
+    "expected_disposition": "actionable",
+    "record": {
+      "source": "linkedin",
+      "canonical_url": "https://www.linkedin.com/posts/example_overflow-activity-1004",
+      "source_native_id": "urn:li:activity:1004",
+      "title": "Overflow software projects need delivery support",
+      "body": "Our agency has overflow projects and needs additional engineering bandwidth from a white-label delivery team.",
+      "author_name": "Agency Founder",
+      "author_profile_url": "https://www.linkedin.com/in/agency-founder",
+      "author_headline": "Founder at Product Agency",
+      "company_name": "Product Agency",
+      "posted_age": "5 hours ago",
+      "page_identity": "agency overflow",
+      "commercial_evidence": {"contact_routes": ["direct_message"], "service_lanes": ["delivery_partner", "software"]},
+      "raw_evidence": {}
+    }
+  },
+  {
+    "name": "referral request",
+    "expected_category": "referral_request",
+    "expected_disposition": "actionable",
+    "record": {
+      "source": "linkedin",
+      "canonical_url": "https://www.linkedin.com/feed/update/urn:li:activity:1005",
+      "source_native_id": "urn:li:activity:1005",
+      "title": "Referral needed for an AI automation provider",
+      "body": "Can anyone refer us to a reliable AI automation provider for a private RAG workflow?",
+      "author_name": "Product Lead",
+      "author_profile_url": "https://www.linkedin.com/in/product-lead",
+      "author_headline": "Product Lead at Services Co",
+      "company_name": "Services Co",
+      "posted_age": "today",
+      "page_identity": "AI provider referral",
+      "commercial_evidence": {"contact_routes": ["comment"], "service_lanes": ["ai_automation"]},
+      "raw_evidence": {}
+    }
+  },
+  {
+    "name": "recommendation request",
+    "expected_category": "recommendation_request",
+    "expected_disposition": "actionable",
+    "record": {
+      "source": "linkedin",
+      "canonical_url": "https://www.linkedin.com/posts/example_recommendation-activity-1006",
+      "source_native_id": "urn:li:activity:1006",
+      "title": "Cybersecurity consultancy recommendations",
+      "body": "Can anyone recommend a cybersecurity consultancy for an ISO 27001 readiness assessment?",
+      "author_name": "Compliance Head",
+      "author_profile_url": "https://www.linkedin.com/in/compliance-head",
+      "author_headline": "Head of Compliance at SaaS Co",
+      "company_name": "SaaS Co",
+      "posted_age": "6h",
+      "page_identity": "security consultancy recommendation",
+      "commercial_evidence": {"contact_routes": ["comment"], "service_lanes": ["cybersecurity"]},
+      "raw_evidence": {}
+    }
+  },
+  {
+    "name": "employee hiring",
+    "expected_category": "employee_hiring",
+    "expected_disposition": "reject",
+    "record": {
+      "source": "linkedin",
+      "canonical_url": "https://www.linkedin.com/posts/example_fulltime-activity-1007",
+      "source_native_id": "urn:li:activity:1007",
+      "title": "We are hiring a full-time software engineer",
+      "body": "Join our team in a permanent employee position with salary and benefits. Apply now.",
+      "author_name": "People Team",
+      "author_profile_url": "https://www.linkedin.com/in/people-team",
+      "author_headline": "Talent Lead at Tech Co",
+      "company_name": "Tech Co",
+      "posted_age": "2h",
+      "page_identity": "full time role",
+      "commercial_evidence": {"contact_routes": ["email"], "service_lanes": ["software"]},
+      "raw_evidence": {}
+    }
+  },
+  {
+    "name": "contractor hiring",
+    "expected_category": "contractor_hiring",
+    "expected_disposition": "reject",
+    "record": {
+      "source": "linkedin",
+      "canonical_url": "https://www.linkedin.com/feed/update/urn:li:activity:1008",
+      "source_native_id": "urn:li:activity:1008",
+      "title": "Freelance React developer contract role",
+      "body": "Looking for one freelance developer to join our product team as an individual contractor for six months.",
+      "author_name": "Engineering Manager",
+      "author_profile_url": "https://www.linkedin.com/in/engineering-manager",
+      "author_headline": "Engineering Manager at Product Co",
+      "company_name": "Product Co",
+      "posted_age": "4h",
+      "page_identity": "freelance developer role",
+      "commercial_evidence": {"contact_routes": ["direct_message"], "service_lanes": ["software"]},
+      "raw_evidence": {}
+    }
+  },
+  {
+    "name": "job seeker",
+    "expected_category": "job_seeker",
+    "expected_disposition": "reject",
+    "record": {
+      "source": "linkedin",
+      "canonical_url": "https://www.linkedin.com/posts/example_opentowork-activity-1009",
+      "source_native_id": "urn:li:activity:1009",
+      "title": "Open to work as a software engineer",
+      "body": "I am seeking my next role. Please review my resume and contact me if your company is hiring.",
+      "author_name": "Candidate Name",
+      "author_profile_url": "https://www.linkedin.com/in/candidate-name",
+      "author_headline": "Software Engineer",
+      "posted_age": "1h",
+      "page_identity": "open to work",
+      "commercial_evidence": {"contact_routes": ["direct_message"], "service_lanes": ["software"]},
+      "raw_evidence": {}
+    }
+  },
+  {
+    "name": "recruiter advertisement",
+    "expected_category": "recruiter_advertisement",
+    "expected_disposition": "reject",
+    "record": {
+      "source": "linkedin",
+      "canonical_url": "https://www.linkedin.com/feed/update/urn:li:activity:1010",
+      "source_native_id": "urn:li:activity:1010",
+      "title": "Recruiter hiring a backend engineer for our client",
+      "body": "We are hiring for one of our clients. Send your CV for this full-time role.",
+      "author_name": "Recruiter Name",
+      "author_profile_url": "https://www.linkedin.com/in/recruiter-name",
+      "author_headline": "Recruiter at Staffing Co",
+      "company_name": "Staffing Co",
+      "posted_age": "3h",
+      "page_identity": "recruiter vacancy",
+      "commercial_evidence": {"contact_routes": ["email"], "service_lanes": ["software"]},
+      "raw_evidence": {}
+    }
+  },
+  {
+    "name": "vendor self promotion",
+    "expected_category": "vendor_self_promotion",
+    "expected_disposition": "reject",
+    "record": {
+      "source": "linkedin",
+      "canonical_url": "https://www.linkedin.com/posts/example_agency-services-activity-1011",
+      "source_native_id": "urn:li:activity:1011",
+      "title": "Our agency helps businesses build AI products",
+      "body": "Our agency helps companies deliver AI and software solutions. Book a call to learn about our services and portfolio.",
+      "author_name": "Agency Owner",
+      "author_profile_url": "https://www.linkedin.com/in/agency-owner",
+      "author_headline": "Owner at Vendor Agency",
+      "company_name": "Vendor Agency",
+      "posted_age": "2h",
+      "page_identity": "agency services",
+      "commercial_evidence": {"contact_routes": ["direct_message"], "service_lanes": ["ai_automation", "software"]},
+      "raw_evidence": {}
+    }
+  },
+  {
+    "name": "thought leadership news",
+    "expected_category": "thought_leadership_news",
+    "expected_disposition": "reject",
+    "record": {
+      "source": "linkedin",
+      "canonical_url": "https://www.linkedin.com/feed/update/urn:li:activity:1012",
+      "source_native_id": "urn:li:activity:1012",
+      "title": "My take on the future of generative AI",
+      "body": "Sharing an industry trends report and five lessons learned about how AI is transforming operations.",
+      "author_name": "Industry Analyst",
+      "author_profile_url": "https://www.linkedin.com/in/industry-analyst",
+      "author_headline": "Technology Analyst",
+      "posted_age": "5h",
+      "page_identity": "AI insights",
+      "commercial_evidence": {"contact_routes": [], "service_lanes": ["ai_automation"]},
+      "raw_evidence": {}
+    }
+  },
+  {
+    "name": "event course promotion",
+    "expected_category": "event_course_promotion",
+    "expected_disposition": "reject",
+    "record": {
+      "source": "linkedin",
+      "canonical_url": "https://www.linkedin.com/posts/example_webinar-activity-1013",
+      "source_native_id": "urn:li:activity:1013",
+      "title": "AI automation webinar next week",
+      "body": "Join us for our webinar and masterclass. Register now to reserve your seat.",
+      "author_name": "Event Host",
+      "author_profile_url": "https://www.linkedin.com/in/event-host",
+      "author_headline": "Community Lead",
+      "posted_age": "2h",
+      "page_identity": "AI webinar",
+      "commercial_evidence": {"contact_routes": [], "service_lanes": ["ai_automation"]},
+      "raw_evidence": {}
+    }
+  },
+  {
+    "name": "unclear research",
+    "expected_category": "unclear_research",
+    "expected_disposition": "research",
+    "record": {
+      "source": "linkedin",
+      "canonical_url": "https://www.linkedin.com/feed/update/urn:li:activity:1014",
+      "source_native_id": "urn:li:activity:1014",
+      "title": "Operational excellence discussion",
+      "body": "It was useful to discuss software delivery and operational excellence with peers this week.",
+      "author_name": "Operations Leader",
+      "author_profile_url": "https://www.linkedin.com/in/operations-leader",
+      "author_headline": "Operations Leader at Enterprise Co",
+      "company_name": "Enterprise Co",
+      "posted_age": "4h",
+      "page_identity": "operations discussion",
+      "commercial_evidence": {"contact_routes": [], "service_lanes": ["software"]},
+      "raw_evidence": {}
+    }
+  },
+  {
+    "name": "stale request",
+    "expected_category": "looking_for_agency_partner",
+    "expected_disposition": "reject",
+    "record": {
+      "source": "linkedin",
+      "canonical_url": "https://www.linkedin.com/posts/example_stale-activity-1015",
+      "source_native_id": "urn:li:activity:1015",
+      "title": "Looking for an AI automation partner",
+      "body": "We are looking for an AI automation partner for a private RAG workflow.",
+      "author_name": "Product Director",
+      "author_profile_url": "https://www.linkedin.com/in/product-director",
+      "author_headline": "Product Director at Enterprise Co",
+      "company_name": "Enterprise Co",
+      "posted_age": "3 weeks ago",
+      "page_identity": "old AI request",
+      "commercial_evidence": {"contact_routes": ["direct_message"], "service_lanes": ["ai_automation"]},
+      "raw_evidence": {}
+    }
+  },
+  {
+    "name": "closed request",
+    "expected_category": "explicit_project_vendor_request",
+    "expected_disposition": "reject",
+    "record": {
+      "source": "linkedin",
+      "canonical_url": "https://www.linkedin.com/feed/update/urn:li:activity:1016",
+      "source_native_id": "urn:li:activity:1016",
+      "title": "Software vendor request now closed",
+      "body": "We invited vendors to submit proposals, but the project was awarded and the request is closed.",
+      "author_name": "Procurement Lead",
+      "author_profile_url": "https://www.linkedin.com/in/procurement-lead",
+      "author_headline": "Procurement Lead at Enterprise Co",
+      "company_name": "Enterprise Co",
+      "posted_age": "2 days ago",
+      "request_status": "closed",
+      "page_identity": "closed procurement",
+      "commercial_evidence": {"contact_routes": ["proposal"], "service_lanes": ["software"]},
+      "raw_evidence": {}
+    }
+  },
+  {
+    "name": "repost without buyer context",
+    "expected_category": "unclear_research",
+    "expected_disposition": "reject",
+    "record": {
+      "source": "linkedin",
+      "canonical_url": "https://www.linkedin.com/feed/update/urn:li:activity:1017",
+      "source_native_id": "urn:li:activity:1017",
+      "title": "Repost",
+      "body": "Reposted from another account: useful opportunity for software professionals.",
+      "author_name": "Sharing User",
+      "author_profile_url": "https://www.linkedin.com/in/sharing-user",
+      "author_headline": "Community Member",
+      "posted_age": "1h",
+      "page_identity": "repost",
+      "commercial_evidence": {"contact_routes": [], "service_lanes": ["software"]},
+      "raw_evidence": {"is_repost": true}
+    }
+  },
+  {
+    "name": "cold fit never becomes warm intent",
+    "expected_category": "unclear_research",
+    "expected_disposition": "research",
+    "record": {
+      "source": "linkedin",
+      "canonical_url": "https://www.linkedin.com/feed/update/urn:li:activity:1018",
+      "source_native_id": "urn:li:activity:1018",
+      "lead_type": "sales_navigator_cold_prospect",
+      "prospect_stage": "cold_prospect",
+      "title": "CTO at a software agency",
+      "body": "Public profile and company-fit evidence only.",
+      "author_name": "Cold Prospect",
+      "author_profile_url": "https://www.linkedin.com/in/cold-prospect",
+      "author_headline": "CTO at Software Agency",
+      "company_name": "Software Agency",
+      "posted_age": "2h",
+      "page_identity": "cold prospect",
+      "commercial_evidence": {"contact_routes": ["direct_message"], "service_lanes": ["software"]},
+      "raw_evidence": {"source_classification": "cold_no_confirmed_intent"}
+    }
+  }
+]
