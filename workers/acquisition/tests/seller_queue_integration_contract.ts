@@ -10,10 +10,12 @@ import {
   encodeSellerQueuePreferenceCookie,
   SELLER_QUEUE_PREFERENCE_COOKIE,
 } from '../../../packages/seller-queues/src/index.js';
+import {renderSellerQueueNavigation} from '../../../apps/web/src/seller-queue-view.js';
 
 const root = resolve(process.cwd());
 const queueSource = readFileSync(resolve(root, 'packages/seller-queues/src/index.ts'), 'utf8');
 const handler = readFileSync(resolve(root, 'apps/web/src/prospect-handler.ts'), 'utf8');
+const secureHandler = readFileSync(resolve(root, 'apps/web/src/secure-prospect-handler.ts'), 'utf8');
 const page = readFileSync(resolve(root, 'apps/web/src/prospects-page.ts'), 'utf8');
 const view = readFileSync(resolve(root, 'apps/web/src/seller-queue-view.ts'), 'utf8');
 
@@ -49,6 +51,16 @@ for (const marker of [
 ]) assert(handler.includes(marker), `Prospect handler missing ${marker}`);
 
 for (const marker of [
+  'accessibleRecords(context.repository.listLeads(), access)',
+  'buildSellerQueueView(visibleRecords',
+  'filteredTotal: sellerQueue.records.length',
+  'visibleTotal: visibleRecords.length',
+  "rendered.headers['set-cookie']",
+  'sellerQueue,',
+  'sellerUserId: access.identifier',
+]) assert(secureHandler.includes(marker), `Secure Prospect handler missing ${marker}`);
+
+for (const marker of [
   "import type { SellerQueueView } from '@sales-automation/seller-queues';",
   "import { renderSellerQueueNavigation } from './seller-queue-view.js';",
   'sellerQueue: SellerQueueView',
@@ -57,13 +69,12 @@ for (const marker of [
 ]) assert(page.includes(marker), `Prospect page missing ${marker}`);
 
 for (const marker of [
-  'Follow-up Pending',
-  'Priority A/B without next action',
-  'Synchronization failures',
-  'Duplicates needing review',
-  'Campaign/offer risk',
+  'queue.label',
+  'sellerQueueDeepLink',
+  'data-queue-id',
   'Queue counts reconciled: Yes',
   'Refresh-safe signed preferences',
+  'No external action automated',
 ]) assert(view.includes(marker), `Seller queue view missing ${marker}`);
 
 function record(id: string, patch: Partial<Lead> = {}): StoredLeadRecord {
@@ -111,13 +122,24 @@ assert.equal(queueView.queues.find((item) => item.id === 'unassigned')?.count, 1
 assert.equal(queueView.queues.find((item) => item.id === 'priority_without_next_action')?.count, 1);
 assert.equal(queueView.countsReconciled, true);
 
+const renderedQueues = renderSellerQueueNavigation(queueView, 'seller-a@codistan.org');
+for (const label of [
+  'Follow-up Pending',
+  'Priority A/B without next action',
+  'Synchronization failures',
+  'Duplicates needing review',
+  'Campaign/offer risk',
+]) assert(renderedQueues.includes(label), `Rendered seller queue navigation missing ${label}`);
+assert(renderedQueues.includes('queue=follow_up_pending'), 'Rendered seller queue navigation missing Follow-up Pending deep link');
+assert(renderedQueues.includes('Queue counts reconciled: Yes'), 'Rendered seller queue navigation missing reconciliation status');
+
 const sellerA = createSellerQueuePreferences({userId: 'seller-a@codistan.org', activeQueue: 'overdue', sort: 'follow_up_asc', savedAt: '2026-07-31T15:00:00.000Z'});
 const token = encodeSellerQueuePreferenceCookie(sellerA, 'contract-secret-value');
 assert.equal(decodeSellerQueuePreferenceCookie(token, 'contract-secret-value', 'seller-a@codistan.org')?.activeQueue, 'overdue');
 assert.equal(decodeSellerQueuePreferenceCookie(token, 'contract-secret-value', 'seller-b@codistan.org'), undefined);
 assert.equal(SELLER_QUEUE_PREFERENCE_COOKIE, 'codistan_seller_queue_preferences');
 
-const combined = `${queueSource}\n${handler}\n${page}\n${view}`.toLowerCase();
+const queueImplementation = `${queueSource}\n${handler}\n${secureHandler}\n${view}`.toLowerCase();
 for (const prohibited of [
   'localstorage',
   'sessionstorage',
@@ -125,6 +147,6 @@ for (const prohibited of [
   'external_action_performed: true',
   'sendlinkedinmessage(',
   'connectrequest(',
-]) assert(!combined.includes(prohibited), `Seller queue boundary violated: ${prohibited}`);
+]) assert(!queueImplementation.includes(prohibited), `Seller queue boundary violated: ${prohibited}`);
 
-console.log('Seller queue API, preference isolation and Prospect Desk contract passed.');
+console.log('Seller queue API, secure scope, preference isolation and rendered Prospect Desk contract passed.');
