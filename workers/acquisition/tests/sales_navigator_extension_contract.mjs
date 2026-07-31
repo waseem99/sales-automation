@@ -80,7 +80,7 @@ for (const marker of [
   'CODISTAN_CAPTURE_VISIBLE_SALES_NAVIGATOR_LEADS',
   'CODISTAN_SCROLL_SALES_NAV_RESULTS',
   'CODISTAN_RESTORE_SALES_NAV_SCROLL',
-  'sales-navigator-dom-1.0.0',
+  'sales-navigator-dom-1.1.0',
 ]) assert(content.includes(marker), `missing Sales Navigator DOM marker: ${marker}`);
 
 for (const marker of [
