@@ -54,6 +54,8 @@ The parsers fail closed when critical public evidence is missing. Login, checkpo
 
 The extensions do not submit proposals, send messages or InMails, create connection requests, follow, react, comment, send email or update an existing user tab into an action surface. Scheduled search tabs open inactive and are closed after bounded capture.
 
+**Automatic external actions: disabled and prohibited.** All commercial actions remain human-controlled and may only be recorded after manual completion or a separately approved confirmation integration.
+
 ## Diagnostics access
 
 - Admin and Waseem: full **redacted** diagnostic summaries and exports.
