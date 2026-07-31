@@ -12,6 +12,7 @@ import {
   attachAcquisitionReconciliation,
   prepareAcquisitionSyncPayload,
 } from '../vercel/acquisition-sync-reconciliation.js';
+import { applySyncHealthAfterReconciliation } from '../vercel/acquisition-sync-health-runtime.js';
 import { applyBdWorkflowAfterIntake } from '../vercel/bd-workflow-intake-runtime.js';
 import { handleSalesNavigatorIntake } from '../vercel/sales-navigator-intake-runtime.js';
 import { applyUpworkAccountIntelligenceAfterIntake } from '../vercel/upwork-account-intelligence-runtime.js';
@@ -63,7 +64,8 @@ export default {
       const funnelResponse = await applyFunnelAnalyticsAfterIntake({ response: decisionScoreResponse, databaseUrl });
       const accountResponse = await applyUpworkAccountIntelligenceAfterIntake({ response: funnelResponse, databaseUrl });
       const workflowResponse = await applyBdWorkflowAfterIntake({ response: accountResponse, databaseUrl });
-      return attachAcquisitionReconciliation(workflowResponse, prepared);
+      const reconciliationResponse = await attachAcquisitionReconciliation(workflowResponse, prepared);
+      return applySyncHealthAfterReconciliation({ response: reconciliationResponse, databaseUrl });
     } catch (error) {
       console.error('ACQUISITION_INGEST_ERROR', {
         message: error instanceof Error ? error.message : String(error),
