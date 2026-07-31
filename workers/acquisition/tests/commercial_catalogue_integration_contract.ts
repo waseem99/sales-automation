@@ -16,10 +16,13 @@ const catalogue = readFileSync(resolve(root, 'packages/commercial-catalogue/src/
 const campaignCall = 'const campaignResponse = await applyCampaignEngineAfterIntake';
 const catalogueCall = 'const catalogueResponse = await applyCommercialCatalogueAfterIntake';
 const accountCall = 'const accountResponse = await applyUpworkAccountIntelligenceAfterIntake';
+const reconciliationCall = 'const reconciliationResponse = await attachAcquisitionReconciliation';
+const syncHealthCall = 'return applySyncHealthAfterReconciliation';
 assert(api.indexOf(campaignCall) >= 0);
 assert(api.indexOf(catalogueCall) > api.indexOf(campaignCall));
 assert(api.indexOf(accountCall) > api.indexOf(catalogueCall));
-assert(api.includes('return attachAcquisitionReconciliation(workflowResponse, prepared)'));
+assert(api.indexOf(reconciliationCall) > api.indexOf(accountCall));
+assert(api.indexOf(syncHealthCall) > api.indexOf(reconciliationCall));
 
 for (const marker of [
   'commercialCatalogueSelection',
