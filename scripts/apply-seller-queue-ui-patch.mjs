@@ -16,8 +16,8 @@ const pageInterfaceReplacement = `export interface ProspectDashboardPageInput {\
 if (!page.includes(pageInterfaceNeedle)) throw new Error('Prospect page input interface changed.');
 page = page.replace(pageInterfaceNeedle, pageInterfaceReplacement);
 
-const pageRenderNeedle = "return pageShell('Codistan Prospect Desk', `<main>${renderPageHeader(input.generatedAt)}<section class=\"summary-grid\">";
-const pageRenderReplacement = "return pageShell('Codistan Prospect Desk', `<main>${renderPageHeader(input.generatedAt)}${renderSellerQueueNavigation(input.sellerQueue, input.sellerUserId)}<section class=\"summary-grid\">";
+const pageRenderNeedle = '</header>\n\n  <section class="metrics">';
+const pageRenderReplacement = '</header>\n\n  ${renderSellerQueueNavigation(input.sellerQueue, input.sellerUserId)}\n\n  <section class="metrics">';
 if (!page.includes(pageRenderNeedle)) throw new Error('Prospect page queue insertion point changed.');
 page = page.replace(pageRenderNeedle, pageRenderReplacement);
 fs.writeFileSync(pagePath, page, 'utf8');
