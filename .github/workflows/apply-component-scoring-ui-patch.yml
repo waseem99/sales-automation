@@ -1,0 +1,34 @@
+name: Apply Component Scoring UI Patch
+
+on:
+  push:
+    branches:
+      - agent/component-scoring-271
+    paths:
+      - '.github/workflows/apply-component-scoring-ui-patch.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - name: Check out branch
+        uses: actions/checkout@v4
+        with:
+          ref: agent/component-scoring-271
+          fetch-depth: 0
+
+      - name: Apply exact source transformation
+        run: node scripts/apply-component-scoring-ui-patch.mjs
+
+      - name: Commit integrated panel
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add apps/web/src/prospects-page.ts scripts/apply-component-scoring-ui-patch.mjs .github/workflows/apply-component-scoring-ui-patch.yml
+          git commit -m "Integrate component decision score into Prospect Desk"
+          git push origin HEAD:agent/component-scoring-271
