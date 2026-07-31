@@ -1,5 +1,6 @@
 name: Decision Scoring CI
 
+# Exact-head validation for the stacked component-scoring Draft PR.
 on:
   pull_request:
     branches:
