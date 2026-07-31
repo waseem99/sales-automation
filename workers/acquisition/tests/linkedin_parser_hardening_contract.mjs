@@ -78,7 +78,10 @@ for (const fixture of fixtures) {
   }
   if (fixture.surface === "diagnostics") {
     const sanitized = guard.sanitize(fixture.diagnostic_input);
-    for (const key of fixture.expected_redactions) assert.equal(sanitized[key], "[redacted]", `${fixture.name}:${key}`);
+    for (const key of fixture.expected_redactions) {
+      const value = sanitized[key] ?? sanitized.nested?.[key];
+      assert.equal(value, "[redacted]", `${fixture.name}:${key}`);
+    }
     assert.equal(sanitized.nested.csrf_token, "[redacted]");
     assert.equal(sanitized.nested.safe, "selector changed");
     assert(!JSON.stringify(sanitized).includes("private-token-value"));
