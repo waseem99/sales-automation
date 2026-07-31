@@ -1,5 +1,6 @@
 name: Apply Seller Queue UI Patch
 
+# Existing workflow update intentionally triggers the one-shot source transformation.
 on:
   push:
     branches:
