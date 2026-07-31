@@ -149,7 +149,7 @@ export function createCampaignGovernance(input: CampaignGovernanceInput): Campai
   const createdAt = validIso(input.createdAt, 'createdAt');
   const searches = normalizeSearches(input.searches);
   const base = {
-    version: CAMPAIGN_GOVERNANCE_VERSION,
+    version: CAMPAIGN_GOVERNANCE_VERSION as typeof CAMPAIGN_GOVERNANCE_VERSION,
     campaignId: requiredText(input.campaignId, 'campaignId'),
     campaignVersion: positiveInteger(input.version, 'version'),
     name: requiredText(input.name, 'name'),
