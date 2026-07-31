@@ -45,7 +45,12 @@ jobs:
         run: pnpm install --no-frozen-lockfile
 
       - name: Build production workspace
-        run: pnpm build
+        shell: bash
+        run: |
+          if ! pnpm build > /tmp/seller-queue-build.log 2>&1; then
+            grep -E "error TS|ERR_PNPM|ELIFECYCLE|Failed" /tmp/seller-queue-build.log | tail -100 || tail -100 /tmp/seller-queue-build.log
+            exit 1
+          fi
 
       - name: Test seller queue membership and preferences
         run: pnpm --filter @sales-automation/seller-queues test
