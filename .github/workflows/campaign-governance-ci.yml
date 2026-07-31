@@ -1,0 +1,66 @@
+name: Campaign Governance CI
+
+on:
+  pull_request:
+    branches:
+      - agent/versioned-commercial-catalogue-267
+    paths:
+      - '.github/workflows/campaign-governance-ci.yml'
+      - 'api/acquisition-ingest.ts'
+      - 'package.json'
+      - 'pnpm-lock.yaml'
+      - 'packages/campaign-governance/**'
+      - 'vercel/acquisition-campaign-governance-runtime.ts'
+      - 'workers/acquisition/tests/campaign_governance_integration_contract.ts'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: campaign-governance-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  validate:
+    name: Enforce lifecycle ownership search drift and overlap
+    runs-on: ubuntu-latest
+    timeout-minutes: 28
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Install standalone pnpm
+        run: npm install --global --force @pnpm/exe@9.15.9
+
+      - name: Install workspace dependencies
+        run: pnpm install --no-frozen-lockfile
+
+      - name: Build production workspace
+        run: pnpm build
+
+      - name: Test campaign governance policy
+        run: pnpm --filter @sales-automation/campaign-governance test
+
+      - name: Type-check campaign governance
+        run: pnpm --filter @sales-automation/campaign-governance typecheck
+
+      - name: Validate server-side governance integration
+        run: pnpm exec tsx workers/acquisition/tests/campaign_governance_integration_contract.ts
+
+      - name: Type-check Vercel ingestion integration
+        run: pnpm typecheck:vercel
+
+      - name: Enforce human-action boundary
+        shell: bash
+        run: |
+          ! grep -R "externalActionAutomated: true\|external_action_performed.*true\|automaticSendingEnabled: true" \
+            api/acquisition-ingest.ts \
+            packages/campaign-governance/src/index.ts \
+            vercel/acquisition-campaign-governance-runtime.ts
