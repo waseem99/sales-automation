@@ -1,0 +1,74 @@
+name: Extension Privacy and Retention CI
+
+on:
+  pull_request:
+    branches:
+      - agent/sync-health-274
+    paths:
+      - '.github/workflows/extension-privacy-ci.yml'
+      - 'package.json'
+      - 'pnpm-lock.yaml'
+      - 'packages/privacy-governance/**'
+      - 'api/privacy-review.ts'
+      - 'docs/sales-automation/EXTENSION-PERMISSION-PRIVACY-REVIEW.md'
+      - 'workers/acquisition/extensions/linkedin/**'
+      - 'workers/acquisition/extensions/upwork/**'
+      - 'workers/acquisition/tests/linkedin_extension_contract.mjs'
+      - 'workers/acquisition/tests/sales_navigator_extension_contract.mjs'
+      - 'workers/acquisition/tests/upwork_extension_contract.mjs'
+      - 'workers/acquisition/tests/extension_privacy_contract.mjs'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: extension-privacy-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  validate:
+    name: Validate permissions, private-data boundary and retention policy
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install standalone pnpm
+        run: npm install --global --force @pnpm/exe@9.15.9
+      - name: Install workspace dependencies
+        run: pnpm install --no-frozen-lockfile
+      - name: Build production workspace
+        run: pnpm build
+      - name: Test privacy governance package
+        run: pnpm --filter @sales-automation/privacy-governance test
+      - name: Type-check privacy governance package
+        run: pnpm --filter @sales-automation/privacy-governance typecheck
+      - name: Validate LinkedIn extension contract
+        working-directory: workers/acquisition
+        run: node tests/linkedin_extension_contract.mjs
+      - name: Validate Sales Navigator extension contract
+        working-directory: workers/acquisition
+        run: node tests/sales_navigator_extension_contract.mjs
+      - name: Validate Upwork extension contract
+        working-directory: workers/acquisition
+        run: node tests/upwork_extension_contract.mjs
+      - name: Validate cross-extension privacy and retention contract
+        run: pnpm exec tsx workers/acquisition/tests/extension_privacy_contract.mjs
+      - name: Type-check Vercel privacy endpoint
+        run: pnpm typecheck:vercel
+      - name: Enforce least privilege, packaged code and state boundaries
+        shell: bash
+        run: |
+          ! grep -R '"activeTab"\|"cookies"\|"webRequest"\|"history"\|"downloads"\|"nativeMessaging"\|"<all_urls>"' \
+            workers/acquisition/extensions/linkedin/manifest.json workers/acquisition/extensions/upwork/manifest.json
+          ! grep -R -i "chrome.cookies\|document.cookie\|localStorage.getItem\|sessionStorage.getItem" \
+            workers/acquisition/extensions/linkedin workers/acquisition/extensions/upwork
+          ! grep -R -E "eval[[:space:]]*\(|new[[:space:]]+Function[[:space:]]*\(|importScripts[[:space:]]*\([[:space:]]*['\"]https?://" \
+            workers/acquisition/extensions/linkedin workers/acquisition/extensions/upwork
+          ! grep -R "externalActionAutomated: true\|external_action_performed.*true\|automatic sending enabled" \
+            packages/privacy-governance api/privacy-review.ts workers/acquisition/extensions/linkedin workers/acquisition/extensions/upwork
+          ! grep -R "Remove-Item.*Codistan.*Acquisition\|rmdir.*Codistan.*Acquisition\|shutil.rmtree" \
+            packages/privacy-governance api/privacy-review.ts
