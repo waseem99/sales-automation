@@ -11,6 +11,7 @@ on:
       - 'packages/privacy-governance/**'
       - 'api/privacy-review.ts'
       - 'docs/sales-automation/EXTENSION-PERMISSION-PRIVACY-REVIEW.md'
+      - 'workers/acquisition/release-manifest.json'
       - 'workers/acquisition/extensions/linkedin/**'
       - 'workers/acquisition/extensions/upwork/**'
       - 'workers/acquisition/tests/linkedin_extension_contract.mjs'
@@ -57,6 +58,22 @@ jobs:
         run: node tests/upwork_extension_contract.mjs
       - name: Validate cross-extension privacy and retention contract
         run: pnpm exec tsx workers/acquisition/tests/extension_privacy_contract.mjs
+      - name: Validate release manifest versions
+        shell: bash
+        run: |
+          node - <<'NODE'
+          const fs = require('node:fs');
+          const release = JSON.parse(fs.readFileSync('workers/acquisition/release-manifest.json', 'utf8'));
+          const linkedin = JSON.parse(fs.readFileSync('workers/acquisition/extensions/linkedin/manifest.json', 'utf8'));
+          const upwork = JSON.parse(fs.readFileSync('workers/acquisition/extensions/upwork/manifest.json', 'utf8'));
+          if (release.release_version !== '1.0.0-rc.2') throw new Error('Expected release candidate 1.0.0-rc.2.');
+          if (release.components.linkedin_sales_navigator_extension !== linkedin.version) throw new Error('LinkedIn/Sales Navigator release version drift.');
+          if (release.components.upwork_extension !== upwork.version) throw new Error('Upwork release version drift.');
+          for (const key of ['commercial_catalogue','campaign_governance','decision_scoring','seller_queues','seller_funnel','sync_health','extension_privacy']) {
+            if (!release.components[key]) throw new Error(`Release manifest missing ${key}.`);
+          }
+          if (release.state_contract.external_actions_enabled !== false) throw new Error('External actions must remain disabled.');
+          NODE
       - name: Type-check Vercel privacy endpoint
         run: pnpm typecheck:vercel
       - name: Enforce least privilege, packaged code and state boundaries
