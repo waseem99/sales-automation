@@ -1,0 +1,60 @@
+name: Seller Funnel Analytics CI
+
+on:
+  pull_request:
+    branches:
+      - agent/persistent-seller-queues-272
+    paths:
+      - '.github/workflows/funnel-analytics-ci.yml'
+      - 'package.json'
+      - 'pnpm-lock.yaml'
+      - 'packages/funnel-analytics/**'
+      - 'apps/web/package.json'
+      - 'apps/web/src/funnel-analytics-view.ts'
+      - 'api/funnel-feedback.ts'
+      - 'api/funnel-analytics.ts'
+      - 'api/acquisition-ingest.ts'
+      - 'vercel/acquisition-funnel-runtime.ts'
+      - 'workers/acquisition/tests/funnel_analytics_integration_contract.ts'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: seller-funnel-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  validate:
+    name: Validate seller funnel and feedback analytics
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install standalone pnpm
+        run: npm install --global --force @pnpm/exe@9.15.9
+      - name: Install workspace dependencies
+        run: pnpm install --no-frozen-lockfile
+      - name: Build production workspace
+        run: pnpm build
+      - name: Test funnel event and analytics package
+        run: pnpm --filter @sales-automation/funnel-analytics test
+      - name: Type-check funnel package
+        run: pnpm --filter @sales-automation/funnel-analytics typecheck
+      - name: Validate runtime, APIs and dashboard reconciliation
+        run: pnpm exec tsx workers/acquisition/tests/funnel_analytics_integration_contract.ts
+      - name: Type-check Vercel and web integration
+        run: pnpm typecheck:vercel
+      - name: Enforce human-action and state-preservation boundaries
+        shell: bash
+        run: |
+          ! grep -R "externalActionAutomated: true\|external_action_performed.*true\|automatic sending enabled" \
+            packages/funnel-analytics api/funnel-feedback.ts api/funnel-analytics.ts vercel/acquisition-funnel-runtime.ts apps/web/src/funnel-analytics-view.ts
+          ! grep -R "sendLinkedInMessage\|submitUpworkProposal\|sendEmailAutomatically\|connectionRequest" \
+            packages/funnel-analytics api/funnel-feedback.ts api/funnel-analytics.ts vercel/acquisition-funnel-runtime.ts
+          ! grep -R "Remove-Item.*Codistan.*Acquisition\|rmdir.*Codistan.*Acquisition" \
+            packages/funnel-analytics api/funnel-feedback.ts api/funnel-analytics.ts vercel/acquisition-funnel-runtime.ts
