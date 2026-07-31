@@ -17,7 +17,9 @@ for (const [name, source] of Object.entries({background, scroll, content, popup,
 }
 
 assert.equal(manifest.manifest_version, 3);
-assert.equal(manifest.version, "1.1.0");
+assert.equal(manifest.version, "1.1.1");
+assert.deepEqual([...manifest.permissions].sort(), ["alarms", "scripting", "storage", "tabs"]);
+assert(!manifest.permissions.includes("activeTab"));
 assert(background.includes('upwork-extension-1.1.0'));
 assert.deepEqual(manifest.content_scripts[0].js, ["evidence.js", "scroll.js", "content.js"]);
 assert(manifest.permissions.includes("alarms"));
@@ -95,7 +97,15 @@ const prohibitedExternalActions = [
   "submit proposal",
   "send message",
   "chrome.tabs.update",
-  "chrome.windows.create"
+  "chrome.windows.create",
+  "document.cookie",
+  "chrome.cookies",
+  "localStorage.getItem",
+  "sessionStorage.getItem",
+  "eval(",
+  "new Function(",
+  "importScripts(\"http",
+  "importScripts('http"
 ];
 for (const marker of prohibitedExternalActions) {
   assert(!background.toLowerCase().includes(marker.toLowerCase()), `background contains prohibited marker: ${marker}`);
