@@ -47,6 +47,9 @@ jobs:
       - name: Test commercial readiness policy
         run: pnpm --filter @sales-automation/commercial-readiness test
 
+      - name: Build shared workspace types
+        run: pnpm --filter @sales-automation/shared build
+
       - name: Type-check commercial readiness policy
         run: pnpm --filter @sales-automation/commercial-readiness typecheck
 
