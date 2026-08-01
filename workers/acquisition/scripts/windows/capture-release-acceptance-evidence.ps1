@@ -309,8 +309,13 @@ $snapshot = [ordered]@{
 
 $outputPath = Join-Path $evidencePath "$Phase.json"
 $snapshot | ConvertTo-Json -Depth 12 | Set-Content -LiteralPath $outputPath -Encoding UTF8
+$protectedStateCount = @($snapshot.protected_state_manifest).Count
+$startupRegistrationCount = @($snapshot.startup.startup_folder_entries).Count +
+    @($snapshot.startup.run_key_entries).Count +
+    @($snapshot.startup.startup_approved_entries).Count +
+    @($snapshot.startup.scheduled_tasks).Count
 Write-Host "Release evidence captured: $outputPath"
-Write-Host "Protected state files: $($snapshot.protected_state_manifest.Count)"
-Write-Host "Startup registrations: $($snapshot.startup.startup_folder_entries.Count + $snapshot.startup.run_key_entries.Count + $snapshot.startup.startup_approved_entries.Count + $snapshot.startup.scheduled_tasks.Count)"
+Write-Host "Protected state files: $protectedStateCount"
+Write-Host "Startup registrations: $startupRegistrationCount"
 Write-Host "All collectors ready: $($snapshot.runtime.all_collectors_ready)"
 Write-Host "All reachable collectors report external actions disabled: $($snapshot.runtime.all_external_actions_disabled)"
