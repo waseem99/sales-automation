@@ -15,7 +15,7 @@ class WindowsManualStartTests(unittest.TestCase):
         cls.stop_cmd = (cls.root / "STOP-SALES-AUTOMATION.cmd").read_text(encoding="utf-8")
         cls.cleanup_cmd = (cls.root / "CLEANUP-SALES-AUTOMATION-AUTOSTART.cmd").read_text(encoding="utf-8")
 
-    def test_autostart_is_opt_in_only(self) -> None:
+    def test_autostart_is_opt_in_runtime_only(self) -> None:
         self.assertIn("[switch]$EnableAutoStart", self.installer)
         self.assertIn("if ($EnableAutoStart) {", self.installer)
 
@@ -23,14 +23,23 @@ class WindowsManualStartTests(unittest.TestCase):
         opt_in_block = opt_in_and_after.split("}", 1)[0]
         self.assertNotIn("Codistan Sales Automation.lnk", before_opt_in)
         self.assertIn("Codistan Sales Automation.lnk", opt_in_block)
+        self.assertIn("START-SALES-AUTOMATION.cmd", opt_in_block)
+        self.assertNotIn("RUN-SALES-AUTOMATION.cmd", opt_in_block)
         self.assertIn("Manual start is the default", self.installer)
         self.assertIn("The installation health check is complete and the runtime is stopped", self.installer)
 
-    def test_installer_creates_one_daily_desktop_launcher(self) -> None:
+    def test_installer_creates_explicit_operator_shortcuts(self) -> None:
         desktop_shortcut_creations = re.findall(r"New-Shortcut \(Join-Path \$desktop", self.installer)
-        self.assertEqual(1, len(desktop_shortcut_creations))
-        self.assertIn('"Run Sales Automation.lnk"', self.installer)
-        self.assertIn('"START-SALES-AUTOMATION.cmd"', self.installer)
+        self.assertEqual(4, len(desktop_shortcut_creations))
+        expected = {
+            '"Start Sales Automation.lnk"': '"RUN-SALES-AUTOMATION.cmd"',
+            '"Stop Sales Automation.lnk"': '"STOP-SALES-AUTOMATION.cmd"',
+            '"Open Lead Desk.lnk"': '"OPEN-ACQUISITION-REVIEW.cmd"',
+            '"Setup Browser Extensions.lnk"': '"SETUP-SALES-AUTOMATION-EXTENSIONS.cmd"',
+        }
+        for shortcut, target in expected.items():
+            self.assertIn(shortcut, self.installer)
+            self.assertIn(target, self.installer)
 
     def test_upgrade_cleanup_covers_legacy_windows_startup_mechanisms(self) -> None:
         self.assertLess(
