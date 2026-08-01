@@ -13,11 +13,14 @@ if (Test-Path -LiteralPath $pythonBootstrap) {
     . $pythonBootstrap
     $pythonCommand = Get-CodistanPythonCommand
     if ($pythonCommand) {
+        $pythonExecutable = [string]$pythonCommand.Executable
+        $pythonArguments = @($pythonCommand.Arguments)
         $previousPythonPath = $env:PYTHONPATH
         $env:PYTHONPATH = $commands
         try {
             $reviewCode = "from pathlib import Path; from acquisition_v4.review_v5 import write_review_outputs; write_review_outputs(Path(__import__('sys').argv[1]))"
-            & $pythonCommand.Executable @($pythonCommand.Arguments) -c $reviewCode $StateRoot | Out-Null
+            & $pythonExecutable @pythonArguments -c $reviewCode $StateRoot | Out-Null
+            if ($LASTEXITCODE -ne 0) { throw "The current lead queue could not be generated." }
         } finally {
             $env:PYTHONPATH = $previousPythonPath
         }
