@@ -56,8 +56,11 @@ class WindowsManualStartTests(unittest.TestCase):
             "StartupApproved\\Run",
             "StartupApproved\\Run32",
             "StartupApproved\\StartupFolder",
+            "Convert-ScheduledTaskActionToText",
         ]:
             self.assertIn(marker, self.cleanup)
+        self.assertNotIn("$_.Execute", self.cleanup)
+        self.assertNotIn("$_.Arguments", self.cleanup)
 
     def test_stop_and_cleanup_preserve_operational_state(self) -> None:
         for content in [self.installer, self.cleanup, self.stop]:
@@ -72,10 +75,12 @@ class WindowsManualStartTests(unittest.TestCase):
     def test_install_health_check_stops_runtime_before_returning(self) -> None:
         start_index = self.installer.index("Start-Process -FilePath")
         stop_index = self.installer.index("& $installedStopScript -StateRoot $StateRoot")
-        success_index = self.installer.index('Write-Host "$($release.product)')
+        success_index = self.installer.index('Write-Host "$releaseProduct / $releaseApplication $releaseVersion installed and healthy."')
         self.assertLess(start_index, stop_index)
         self.assertLess(stop_index, success_index)
-        self.assertIn("external_actions_enabled -eq $false", self.installer)
+        self.assertIn('Get-OptionalPropertyValue -InputObject $upwork -Name "external_actions_enabled"', self.installer)
+        self.assertIn('Get-OptionalPropertyValue -InputObject $linkedin -Name "external_actions_enabled"', self.installer)
+        self.assertIn('Get-OptionalPropertyValue -InputObject $salesNavigator -Name "external_actions_enabled"', self.installer)
 
 
 if __name__ == "__main__":
