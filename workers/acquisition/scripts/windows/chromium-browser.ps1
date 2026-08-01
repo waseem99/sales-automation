@@ -61,26 +61,23 @@ function New-CodistanBrowserCandidate {
 function Get-CodistanBrowserCandidates {
     $programFilesX86 = ${env:ProgramFiles(x86)}
 
-    $chromePaths = New-Object System.Collections.Generic.List[string]
-    [void]$chromePaths.Add((Join-Path $env:ProgramFiles "Google\Chrome\Application\chrome.exe"))
+    $chromePaths = @((Join-Path $env:ProgramFiles "Google\Chrome\Application\chrome.exe"))
     if (-not [string]::IsNullOrWhiteSpace($programFilesX86)) {
-        [void]$chromePaths.Add((Join-Path $programFilesX86 "Google\Chrome\Application\chrome.exe"))
+        $chromePaths += Join-Path $programFilesX86 "Google\Chrome\Application\chrome.exe"
     }
-    [void]$chromePaths.Add((Join-Path $env:LOCALAPPDATA "Google\Chrome\Application\chrome.exe"))
+    $chromePaths += Join-Path $env:LOCALAPPDATA "Google\Chrome\Application\chrome.exe"
 
-    $edgePaths = New-Object System.Collections.Generic.List[string]
-    [void]$edgePaths.Add((Join-Path $env:ProgramFiles "Microsoft\Edge\Application\msedge.exe"))
+    $edgePaths = @((Join-Path $env:ProgramFiles "Microsoft\Edge\Application\msedge.exe"))
     if (-not [string]::IsNullOrWhiteSpace($programFilesX86)) {
-        [void]$edgePaths.Add((Join-Path $programFilesX86 "Microsoft\Edge\Application\msedge.exe"))
+        $edgePaths += Join-Path $programFilesX86 "Microsoft\Edge\Application\msedge.exe"
     }
-    [void]$edgePaths.Add((Join-Path $env:LOCALAPPDATA "Microsoft\Edge\Application\msedge.exe"))
+    $edgePaths += Join-Path $env:LOCALAPPDATA "Microsoft\Edge\Application\msedge.exe"
 
-    $bravePaths = New-Object System.Collections.Generic.List[string]
-    [void]$bravePaths.Add((Join-Path $env:ProgramFiles "BraveSoftware\Brave-Browser\Application\brave.exe"))
+    $bravePaths = @((Join-Path $env:ProgramFiles "BraveSoftware\Brave-Browser\Application\brave.exe"))
     if (-not [string]::IsNullOrWhiteSpace($programFilesX86)) {
-        [void]$bravePaths.Add((Join-Path $programFilesX86 "BraveSoftware\Brave-Browser\Application\brave.exe"))
+        $bravePaths += Join-Path $programFilesX86 "BraveSoftware\Brave-Browser\Application\brave.exe"
     }
-    [void]$bravePaths.Add((Join-Path $env:LOCALAPPDATA "BraveSoftware\Brave-Browser\Application\brave.exe"))
+    $bravePaths += Join-Path $env:LOCALAPPDATA "BraveSoftware\Brave-Browser\Application\brave.exe"
 
     $candidates = @(
         (New-CodistanBrowserCandidate `
@@ -108,39 +105,39 @@ function Get-CodistanBrowserCandidates {
         (New-CodistanBrowserCandidate `
             -Id "chrome" `
             -Name "Google Chrome" `
-            -ExecutablePaths @($chromePaths) `
+            -ExecutablePaths $chromePaths `
             -ExtensionsUrl "chrome://extensions/" `
             -ProgIdPatterns @("ChromeHTML") `
             -ProfileRoots @((Join-Path $env:LOCALAPPDATA "Google\Chrome\User Data"))),
         (New-CodistanBrowserCandidate `
             -Id "edge" `
             -Name "Microsoft Edge" `
-            -ExecutablePaths @($edgePaths) `
+            -ExecutablePaths $edgePaths `
             -ExtensionsUrl "edge://extensions/" `
             -ProgIdPatterns @("MSEdgeHTM") `
             -ProfileRoots @((Join-Path $env:LOCALAPPDATA "Microsoft\Edge\User Data"))),
         (New-CodistanBrowserCandidate `
             -Id "brave" `
             -Name "Brave" `
-            -ExecutablePaths @($bravePaths) `
+            -ExecutablePaths $bravePaths `
             -ExtensionsUrl "brave://extensions/" `
             -ProgIdPatterns @("BraveHTML") `
             -ProfileRoots @((Join-Path $env:LOCALAPPDATA "BraveSoftware\Brave-Browser\User Data")))
     )
 
-    $available = New-Object System.Collections.Generic.List[object]
+    $available = @()
     foreach ($candidate in $candidates) {
         $paths = @(Get-OptionalPropertyValue -InputObject $candidate -Name "ExecutablePaths" -DefaultValue @())
         $executable = @($paths | Where-Object { $_ -and (Test-Path -LiteralPath $_) }) | Select-Object -First 1
         if (-not $executable) { continue }
-        [void]$available.Add([pscustomobject]@{
+        $available += [pscustomobject]@{
             Id = [string](Get-OptionalPropertyValue -InputObject $candidate -Name "Id" -DefaultValue "")
             Name = [string](Get-OptionalPropertyValue -InputObject $candidate -Name "Name" -DefaultValue "")
             Executable = [string]$executable
             ExtensionsUrl = [string](Get-OptionalPropertyValue -InputObject $candidate -Name "ExtensionsUrl" -DefaultValue "")
             ProgIdPatterns = @(Get-OptionalPropertyValue -InputObject $candidate -Name "ProgIdPatterns" -DefaultValue @())
             ProfileRoots = @((Get-OptionalPropertyValue -InputObject $candidate -Name "ProfileRoots" -DefaultValue @()) | Where-Object { $_ })
-        })
+        }
     }
     return @($available)
 }
@@ -189,16 +186,16 @@ function Get-CodistanChromiumBrowser {
 
 function Get-CodistanBrowserProfileDirectories {
     param([Parameter(Mandatory = $true)][object]$Browser)
-    $profiles = New-Object System.Collections.Generic.List[object]
+    $profiles = @()
     foreach ($root in @(Get-OptionalPropertyValue -InputObject $Browser -Name "ProfileRoots" -DefaultValue @())) {
         if (-not (Test-Path -LiteralPath $root)) { continue }
 
         if (Test-Path -LiteralPath (Join-Path $root "Preferences")) {
-            [void]$profiles.Add([pscustomobject]@{
+            $profiles += [pscustomobject]@{
                 Name = [System.IO.Path]::GetFileName($root)
                 Path = $root
                 BrowserArgument = ""
-            })
+            }
         }
 
         foreach ($directory in @(Get-ChildItem -LiteralPath $root -Directory -ErrorAction SilentlyContinue)) {
@@ -206,11 +203,11 @@ function Get-CodistanBrowserProfileDirectories {
             if ($directoryName -ne "Default" -and $directoryName -notlike "Profile *") { continue }
             $directoryPath = [string](Get-OptionalPropertyValue -InputObject $directory -Name "FullName" -DefaultValue "")
             if ([string]::IsNullOrWhiteSpace($directoryPath)) { continue }
-            [void]$profiles.Add([pscustomobject]@{
+            $profiles += [pscustomobject]@{
                 Name = $directoryName
                 Path = $directoryPath
                 BrowserArgument = "--profile-directory=$directoryName"
-            })
+            }
         }
     }
     return @($profiles)
