@@ -23,6 +23,22 @@ param(
 $ErrorActionPreference = "Stop"
 Set-StrictMode -Version Latest
 
+function Convert-BytesToHex {
+    param([byte[]]$Bytes)
+    if ($null -eq $Bytes) { return $null }
+    return -join ($Bytes | ForEach-Object { $_.ToString("x2") })
+}
+
+function Get-Sha256Hex {
+    param([byte[]]$Bytes)
+    $sha256 = [System.Security.Cryptography.SHA256]::Create()
+    try {
+        return Convert-BytesToHex -Bytes $sha256.ComputeHash($Bytes)
+    } finally {
+        $sha256.Dispose()
+    }
+}
+
 function Convert-ToSafePath {
     param([string]$Value)
     if ([string]::IsNullOrWhiteSpace($Value)) { return $null }
@@ -125,7 +141,7 @@ function Get-StartupApprovedEntries {
                 [ordered]@{
                     registry_path = $path
                     name = $property.Name
-                    value_hex = if ($value -is [byte[]]) { [Convert]::ToHexString($value) } else { [string]$value }
+                    value_hex = if ($value -is [byte[]]) { Convert-BytesToHex -Bytes $value } else { [string]$value }
                 }
             }
         }
@@ -164,7 +180,7 @@ function Get-ManagedProcesses {
                 name = [string]$process.Name
                 command_line_hash = if ($commandLine) {
                     $bytes = [Text.Encoding]::UTF8.GetBytes($commandLine)
-                    [Convert]::ToHexString([Security.Cryptography.SHA256]::HashData($bytes)).ToLowerInvariant()
+                    Get-Sha256Hex -Bytes $bytes
                 } else { $null }
             }
         }
