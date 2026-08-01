@@ -11,6 +11,7 @@ on:
       - 'workers/acquisition/STOP-SALES-AUTOMATION.cmd'
       - 'workers/acquisition/CLEANUP-SALES-AUTOMATION-AUTOSTART.cmd'
       - 'workers/acquisition/scripts/windows/**'
+      - 'workers/acquisition/acquisition_v4/**'
       - 'workers/acquisition/tests/test_windows*.py'
   workflow_dispatch:
 
@@ -64,3 +65,140 @@ jobs:
         env:
           PYTHONPATH: .
         run: python -m unittest discover -s tests -p 'test_windows*.py' -v
+
+  windows-runtime-smoke:
+    name: Install and run collectors on Windows
+    runs-on: windows-latest
+    timeout-minutes: 15
+
+    defaults:
+      run:
+        working-directory: workers/acquisition
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Exercise legacy cleanup, install, health and stop
+        shell: powershell
+        run: |
+          $ErrorActionPreference = "Stop"
+          Set-StrictMode -Version Latest
+
+          $repoRoot = (Resolve-Path ..\..).Path
+          $packageRoot = (Resolve-Path .).Path
+          $stateRoot = Join-Path $env:RUNNER_TEMP "Codistan-Acquisition-Windows-Smoke"
+          $legacyState = Join-Path $env:RUNNER_TEMP "Codistan-Acquisition-Legacy-Smoke"
+          $stdout = Join-Path $env:RUNNER_TEMP "sales-automation-supervisor.stdout.log"
+          $stderr = Join-Path $env:RUNNER_TEMP "sales-automation-supervisor.stderr.log"
+          $env:PYTHONPATH = $packageRoot
+
+          function Wait-Health {
+            param([int]$TimeoutSeconds = 90)
+            $deadline = (Get-Date).AddSeconds($TimeoutSeconds)
+            do {
+              try {
+                $upwork = Invoke-RestMethod -Uri "http://127.0.0.1:8765/health" -TimeoutSec 2
+                $linkedin = Invoke-RestMethod -Uri "http://127.0.0.1:8775/health" -TimeoutSec 2
+                $salesNavigator = Invoke-RestMethod -Uri "http://127.0.0.1:8785/health" -TimeoutSec 2
+                $all = @(
+                  @{ expected = "upwork"; value = $upwork },
+                  @{ expected = "linkedin"; value = $linkedin },
+                  @{ expected = "sales_navigator"; value = $salesNavigator }
+                )
+                $valid = $true
+                foreach ($entry in $all) {
+                  if ($entry.value.ready -ne $true) { $valid = $false }
+                  if ([string]$entry.value.schema_version -ne "codistan-acquisition-health.v1") { $valid = $false }
+                  if ([string]$entry.value.source -ne [string]$entry.expected) { $valid = $false }
+                  if ([string]$entry.value.runtime_version -ne "0.3.0") { $valid = $false }
+                  if ($entry.value.external_actions_enabled -ne $false) { $valid = $false }
+                }
+                if ($valid) { return $true }
+              } catch {}
+              Start-Sleep -Seconds 2
+            } while ((Get-Date) -lt $deadline)
+            return $false
+          }
+
+          function Assert-PortsFree {
+            $listeners = @(Get-NetTCPConnection -State Listen -LocalPort @(8765,8775,8785) -ErrorAction SilentlyContinue)
+            if ($listeners.Count -gt 0) {
+              $summary = ($listeners | ForEach-Object { "port $($_.LocalPort), PID $($_.OwningProcess)" }) -join "; "
+              throw "Collector ports were not released: $summary"
+            }
+          }
+
+          Remove-Item -LiteralPath $stateRoot -Recurse -Force -ErrorAction SilentlyContinue
+          Remove-Item -LiteralPath $legacyState -Recurse -Force -ErrorAction SilentlyContinue
+          New-Item -ItemType Directory -Force -Path $legacyState | Out-Null
+
+          # Reproduce earlier V4 one-process-per-source collectors and prove that
+          # the current stop command recognizes and terminates only these known
+          # Codistan runtimes before installation.
+          $legacy = @()
+          foreach ($entry in @(
+            @{ source = "upwork"; port = 8765 },
+            @{ source = "linkedin"; port = 8775 },
+            @{ source = "sales_navigator"; port = 8785 }
+          )) {
+            $legacy += Start-Process -FilePath python -ArgumentList @(
+              "-u", "-m", "acquisition_v4.runtime",
+              "--source", $entry.source,
+              "--state-root", $legacyState,
+              "--port", [string]$entry.port
+            ) -PassThru -WindowStyle Hidden
+          }
+          Start-Sleep -Seconds 4
+
+          & .\scripts\windows\stop-sales-automation.ps1 -StateRoot $legacyState
+          Start-Sleep -Seconds 2
+          Assert-PortsFree
+
+          try {
+            & .\scripts\windows\install-acquisition-v4.ps1 -InstallRoot $repoRoot -StateRoot $stateRoot
+
+            $installedRoot = Join-Path $stateRoot "app-current\workers\acquisition"
+            if (-not (Test-Path -LiteralPath (Join-Path $installedRoot "acquisition_v4\supervisor.py"))) {
+              throw "Installed supervisor package was not found."
+            }
+
+            $startCommand = Join-Path $installedRoot "START-ACQUISITION-V4.cmd"
+            Start-Process -FilePath $startCommand -WindowStyle Hidden | Out-Null
+            if (-not (Wait-Health -TimeoutSeconds 90)) {
+              throw "The installed collectors did not reach the exact safe health contract."
+            }
+
+            & (Join-Path $installedRoot "scripts\windows\stop-sales-automation.ps1") -StateRoot $stateRoot
+            Start-Sleep -Seconds 2
+            Assert-PortsFree
+          } catch {
+            Write-Host "--- watchdog log ---"
+            Get-Content -LiteralPath (Join-Path $stateRoot "logs\watchdog.log") -Tail 120 -ErrorAction SilentlyContinue
+            Write-Host "--- runtime log ---"
+            Get-Content -LiteralPath (Join-Path $stateRoot "logs\runtime.log") -Tail 120 -ErrorAction SilentlyContinue
+            Write-Host "--- redirected stdout ---"
+            Get-Content -LiteralPath $stdout -Tail 120 -ErrorAction SilentlyContinue
+            Write-Host "--- redirected stderr ---"
+            Get-Content -LiteralPath $stderr -Tail 120 -ErrorAction SilentlyContinue
+            throw
+          } finally {
+            try { & .\scripts\windows\stop-sales-automation.ps1 -StateRoot $stateRoot } catch {}
+            try { & .\scripts\windows\stop-sales-automation.ps1 -StateRoot $legacyState } catch {}
+            Remove-Item -LiteralPath $stateRoot -Recurse -Force -ErrorAction SilentlyContinue
+            Remove-Item -LiteralPath $legacyState -Recurse -Force -ErrorAction SilentlyContinue
+            foreach ($name in @(
+              "Start Sales Automation.lnk",
+              "Stop Sales Automation.lnk",
+              "Open Lead Desk.lnk",
+              "Setup Browser Extensions.lnk",
+              "Sales Navigator Campaigns.lnk"
+            )) {
+              Remove-Item -LiteralPath (Join-Path ([Environment]::GetFolderPath("Desktop")) $name) -Force -ErrorAction SilentlyContinue
+            }
+          }
