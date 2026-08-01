@@ -1,0 +1,136 @@
+from __future__ import annotations
+
+from pathlib import Path
+import unittest
+
+
+class WindowsOperationalPilotTests(unittest.TestCase):
+    def setUp(self) -> None:
+        self.root = Path(__file__).resolve().parents[1]
+
+    def read(self, relative: str) -> str:
+        return (self.root / relative).read_text(encoding="utf-8")
+
+    def test_python_bootstrap_has_verified_non_winget_fallback(self) -> None:
+        content = self.read("scripts/windows/python-bootstrap.ps1")
+        for marker in [
+            "Get-CodistanPythonCommand",
+            "Ensure-CodistanPython",
+            "Python.Python.3.12",
+            "python-3.12.10-amd64.exe",
+            "Get-AuthenticodeSignature",
+            "Python Software Foundation",
+            "InstallAllUsers=0",
+            "PrependPath=1",
+            "Include_launcher=1",
+        ]:
+            self.assertIn(marker, content)
+        self.assertNotIn("Invoke-Expression", content)
+        self.assertNotIn("Start-BitsTransfer", content)
+
+    def test_installer_creates_operator_shortcuts_and_uses_runtime_only_health_check(self) -> None:
+        content = self.read("scripts/windows/install-acquisition-v4.ps1")
+        for marker in [
+            ". $pythonBootstrap",
+            "Ensure-CodistanPython",
+            "Start Sales Automation.lnk",
+            "Stop Sales Automation.lnk",
+            "Open Lead Desk.lnk",
+            "Setup Browser Extensions.lnk",
+            "RUN-SALES-AUTOMATION.cmd",
+            "STOP-SALES-AUTOMATION.cmd",
+            "OPEN-ACQUISITION-REVIEW.cmd",
+            "SETUP-SALES-AUTOMATION-EXTENSIONS.cmd",
+            "START-ACQUISITION-V4.cmd",
+            "external_actions_enabled -eq $false",
+            "Manual start is the default",
+        ]:
+            self.assertIn(marker, content)
+        self.assertNotIn("Remove-Item $StateRoot", content)
+        self.assertNotIn("Remove-Item -Path $StateRoot", content)
+
+    def test_operational_start_is_one_click_safe_and_opens_capture(self) -> None:
+        content = self.read("scripts/windows/run-sales-automation-operational.ps1")
+        for marker in [
+            "http://127.0.0.1:8765/health",
+            "http://127.0.0.1:8775/health",
+            "http://127.0.0.1:8785/health",
+            "external_actions_enabled -ne $false",
+            "setup-sales-automation-extensions.ps1",
+            "open-approved-upwork-searches.ps1",
+            "open-linkedin-lead-searches.ps1",
+            "review_v5 import write_review_outputs",
+            "operational-status.json",
+            "Sales Automation is running and lead capture is open",
+        ]:
+            self.assertIn(marker, content)
+        self.assertNotIn("Remove-Item $StateRoot", content)
+        self.assertNotIn("submit proposal", content.lower())
+        self.assertNotIn("send message", content.lower())
+
+    def test_browser_setup_requires_human_confirmation_and_preserves_safety(self) -> None:
+        content = self.read("scripts/windows/setup-sales-automation-extensions.ps1")
+        for marker in [
+            "chrome://extensions/",
+            "Type LOADED",
+            "browser-extensions-confirmed.json",
+            "external_actions_enabled = $false",
+            "Sales Navigator Campaigns.lnk",
+            "open-sales-navigator-campaigns.ps1",
+        ]:
+            self.assertIn(marker, content)
+        self.assertIn("never submit proposals", content.lower())
+        self.assertIn("never bypass login", content.lower())
+
+    def test_sales_navigator_campaign_launcher_resolves_unpacked_extension(self) -> None:
+        content = self.read("scripts/windows/open-sales-navigator-campaigns.ps1")
+        for marker in [
+            "Secure Preferences",
+            "Codistan LinkedIn & Sales Navigator Capture",
+            "chrome-extension://$extensionId/sales-nav-options.html",
+            "no-confirmed-intent warning",
+        ]:
+            self.assertIn(marker, content)
+
+    def test_operator_commands_are_present(self) -> None:
+        setup = self.read("SETUP-AND-RUN-SALES-AUTOMATION.cmd")
+        run = self.read("RUN-SALES-AUTOMATION.cmd")
+        stop = self.read("STOP-SALES-AUTOMATION.cmd")
+        extensions = self.read("SETUP-SALES-AUTOMATION-EXTENSIONS.cmd")
+        campaigns = self.read("OPEN-SALES-NAVIGATOR-CAMPAIGNS.cmd")
+        self.assertIn("install-acquisition-v4.ps1", setup)
+        self.assertIn("RUN-SALES-AUTOMATION.cmd", setup)
+        self.assertIn("run-sales-automation-operational.ps1", run)
+        self.assertIn("stop-sales-automation.ps1", stop)
+        self.assertIn("setup-sales-automation-extensions.ps1", extensions)
+        self.assertIn("open-sales-navigator-campaigns.ps1", campaigns)
+
+    def test_lead_desk_defaults_to_actionable_and_auto_refreshes(self) -> None:
+        content = self.read("acquisition_v4/review.py")
+        for marker in [
+            'http-equiv="refresh" content="30"',
+            'data-filter="actionable"',
+            "applyFilter('actionable')",
+            "Actionable A/B",
+            "Sales Navigator cold",
+            "no confirmed buyer intent",
+        ]:
+            self.assertIn(marker, content)
+
+    def test_operational_linkedin_queries_are_buyer_request_focused(self) -> None:
+        content = self.read("scripts/windows/open-linkedin-lead-searches.ps1")
+        for marker in [
+            "need recommendations for",
+            "request for proposal",
+            "software development partner",
+            "AI implementation partner",
+            "performance marketing agency",
+            "3D visualization studio",
+            "ISO 27001 consultant",
+            "NOT recruiter",
+        ]:
+            self.assertIn(marker, content)
+
+
+if __name__ == "__main__":
+    unittest.main()
