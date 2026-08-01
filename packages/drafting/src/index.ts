@@ -1,6 +1,13 @@
 import type { PortfolioMatch } from '@sales-automation/portfolio-matching';
 import type { ProfileRecommendation } from '@sales-automation/routing';
-import type { Lead, LeadScore } from '@sales-automation/shared';
+import {
+  COLD_NO_CONFIRMED_INTENT_WARNING,
+  isSalesNavigatorCold,
+  readIntentProvenance,
+  safeColdDraft,
+  type Lead,
+  type LeadScore,
+} from '@sales-automation/shared';
 
 export type DraftType =
   | 'upwork_proposal'
@@ -44,14 +51,25 @@ export function generateDrafts(input: GenerateDraftInput): GeneratedDraft[] {
   const generatedAt = input.generatedAt ?? new Date().toISOString();
   const proof = getApprovedProof(input.portfolioMatches);
   const assumptions = buildAssumptions(input, proof);
+  const cold = isSalesNavigatorCold(input.lead);
   const safeguards = [
     'Draft is internal only and must be approved by a human before sending.',
     'Draft references only public or anonymized portfolio proof.',
     'No external outreach is performed by this package.',
+    ...(cold ? [
+      COLD_NO_CONFIRMED_INTENT_WARNING,
+      'Do not rewrite account fit, role fit, enrichment or campaign matching as confirmed buyer intent.',
+      'Any buyer-intent reference must come from separate, traceable and currently valid warm evidence.',
+    ] : []),
   ];
 
   if (input.lead.leadType === 'upwork_job') {
     return [createDraft(input, 'upwork_proposal', buildUpworkProposal(input, proof), generatedAt, assumptions, safeguards)];
+  }
+
+  if (cold) {
+    const provenance = readIntentProvenance(input.lead);
+    return [createDraft(input, 'linkedin_dm', safeColdDraft(input.lead, provenance), generatedAt, assumptions, safeguards)];
   }
 
   if (input.lead.leadType === 'linkedin_warm_post' || input.lead.leadType === 'linkedin_sales_nav_alert') {
@@ -85,7 +103,7 @@ function createDraft(
   return {
     id: `${input.lead.id}-${type}`,
     type,
-    status: 'draft_ready',
+    status: isSalesNavigatorCold(input.lead) ? 'needs_review' : 'draft_ready',
     subject: getSubject(input, type),
     body,
     metadata: {
@@ -197,6 +215,13 @@ function buildAssumptions(input: GenerateDraftInput, proof: PortfolioMatch[]): s
   ];
   if (proof.length === 0) assumptions.push('No approved public/anonymized portfolio proof was matched automatically.');
   if (!input.lead.contactName) assumptions.push('Contact name is unknown; personalize before sending.');
+  if (isSalesNavigatorCold(input.lead)) {
+    const provenance = readIntentProvenance(input.lead);
+    assumptions.push('Sales Navigator supplied fit and identity evidence, not confirmed buyer-authored demand.');
+    if (provenance?.linkedWarmIntentConfirmed) {
+      assumptions.push('Separate warm evidence is linked but must be rechecked for validity, recency and relevance before it is referenced.');
+    }
+  }
   return assumptions;
 }
 

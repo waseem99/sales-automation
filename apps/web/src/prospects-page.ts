@@ -1,6 +1,9 @@
 import type { ProspectDiscoveryRun } from '@sales-automation/prospect-discovery';
 import type { Lead, PipelineStatus, ServiceCategory } from '@sales-automation/shared';
+import type { SellerQueueView } from '@sales-automation/seller-queues';
 import type { StoredLeadRecord } from '@sales-automation/storage';
+import { renderDecisionScorePanel } from './decision-score-view.js';
+import { renderSellerQueueNavigation } from './seller-queue-view.js';
 import {
   getPortfolioLibraryUrl,
   getTeamMembers,
@@ -13,6 +16,8 @@ export interface ProspectDashboardPageInput {
   selected?: StoredLeadRecord;
   runs: ProspectDiscoveryRun[];
   generatedAt: string;
+  sellerQueue: SellerQueueView;
+  sellerUserId: string;
 }
 
 const pipelineStatuses: PipelineStatus[] = [
@@ -51,6 +56,8 @@ export function renderProspectDashboardPage(input: ProspectDashboardPageInput): 
 </aside>
 <main class="main">
   <header class="topbar"><div><p class="eyebrow">Live internal BD workspace</p><h1>Prospect Discovery & Management</h1><p>Assign owners, review routing, manage outreach and record outcomes.</p></div><div class="top-actions">${portfolioUrl ? `<a class="ghost" href="${escapeAttribute(portfolioUrl)}" target="_blank" rel="noopener noreferrer">Open portfolio library</a>` : ''}<button id="import-starter" class="ghost">Load verified prospects</button><button id="run-discovery" class="primary">Run discovery now</button></div></header>
+
+  ${renderSellerQueueNavigation(input.sellerQueue, input.sellerUserId)}
 
   <section class="metrics">
     ${metric('Total prospects', metrics.total)}${metric('Live opportunities', metrics.live)}${metric('Contacted', metrics.contacted)}${metric('Replies', metrics.replied)}${metric('Follow-ups due', metrics.followUpsDue)}${metric('Unassigned', metrics.unassigned)}${metric('Won', metrics.won)}${metric('Feedback pending', metrics.feedbackPending)}
@@ -106,6 +113,8 @@ function renderProspectDetail(record: StoredLeadRecord, teamMembers: TeamMemberO
   <div class="detail-grid">${detailItem('Company website', link(lead.companyWebsite, lead.companyWebsite ?? 'Not resolved'))}${detailItem('Who to reach', escapeHtml(formatContact(lead)))}${detailItem('Email', lead.contactEmail ? `<a href="mailto:${escapeAttribute(lead.contactEmail)}">${escapeHtml(lead.contactEmail)}</a>` : 'Not publicly found')}${detailItem('Owner', escapeHtml(lead.owner ?? 'Unassigned'))}${detailItem('Send from', escapeHtml(routing.sendFrom))}${detailItem('Reply-To', escapeHtml(routing.replyTo))}${detailItem('Reply alerts', escapeHtml(routing.alertEmails.join(', ')))}${detailItem('Next follow-up', lead.nextFollowUpAt ? escapeHtml(formatDateTime(lead.nextFollowUpAt)) : 'Not scheduled')}</div>
 
   <section class="detail-section evidence"><h3>Why this prospect is here</h3><p>${escapeHtml(lead.evidenceSummary ?? lead.description)}</p><p><strong>Recommended contact method:</strong> ${escapeHtml(lead.reachMethod ?? 'Research the most relevant public contact route.')}</p><div class="evidence-links">${link(lead.evidenceUrl ?? lead.sourceUrl, 'Open source evidence')} ${link(lead.companyWebsite, 'Open company website')} ${portfolioUrl ? link(portfolioUrl, 'Open portfolio library') : ''}</div><small>Source: ${escapeHtml(lead.discoverySource ?? lead.source)} · Discovered ${escapeHtml(formatDateTime(lead.discoveredAt ?? lead.capturedAt))}</small></section>
+
+  ${renderDecisionScorePanel(lead)}
 
   <section class="detail-section service-box"><h3>Service and sales package</h3><form data-action-form data-endpoint="/api/prospects/${encodeURIComponent(lead.id)}/service" class="service-form"><label>Primary service<select name="serviceCategory" required>${serviceCategories.map((category) => `<option value="${category}" ${category === lead.serviceCategory ? 'selected' : ''}>${escapeHtml(label(category))}</option>`).join('')}</select></label><label class="wide">Codistan offer<textarea name="serviceOffer" rows="3" required>${escapeHtml(lead.serviceOffer ?? '')}</textarea></label><label class="wide">What the BD team should share<textarea name="materialsToShare" rows="3" required>${escapeHtml(lead.materialsToShare ?? proofNames ?? '')}</textarea></label><button type="submit">Save service plan</button></form></section>
 

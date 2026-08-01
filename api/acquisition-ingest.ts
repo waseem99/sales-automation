@@ -1,8 +1,18 @@
 import { createHash, timingSafeEqual } from 'node:crypto';
 import { applyCampaignEngineAfterIntake } from '../vercel/acquisition-campaign-runtime.js';
+import { applyCampaignGovernanceAfterIntake } from '../vercel/acquisition-campaign-governance-runtime.js';
+import { applyCommercialCatalogueAfterIntake } from '../vercel/acquisition-commercial-catalogue-runtime.js';
+import { applyDecisionScoringAfterIntake } from '../vercel/acquisition-decision-scoring-runtime.js';
 import { applyEnrichmentAfterIntake } from '../vercel/acquisition-enrichment-runtime.js';
+import { applyFunnelAnalyticsAfterIntake } from '../vercel/acquisition-funnel-runtime.js';
 import { applyIdentityGraphAfterIntake } from '../vercel/acquisition-identity-runtime.js';
 import { handleAcquisitionIntake } from '../vercel/acquisition-intake-runtime.js';
+import { applyIntentProvenanceAfterIntake } from '../vercel/acquisition-intent-provenance-runtime.js';
+import {
+  attachAcquisitionReconciliation,
+  prepareAcquisitionSyncPayload,
+} from '../vercel/acquisition-sync-reconciliation.js';
+import { applySyncHealthAfterReconciliation } from '../vercel/acquisition-sync-health-runtime.js';
 import { applyBdWorkflowAfterIntake } from '../vercel/bd-workflow-intake-runtime.js';
 import { handleSalesNavigatorIntake } from '../vercel/sales-navigator-intake-runtime.js';
 import { applyUpworkAccountIntelligenceAfterIntake } from '../vercel/upwork-account-intelligence-runtime.js';
@@ -37,17 +47,25 @@ export default {
         return responseJson({ error: 'Request body must be valid JSON.' }, 400);
       }
 
-      const source = body && typeof body === 'object' && !Array.isArray(body)
+      const prepared = prepareAcquisitionSyncPayload(body);
+      const source = prepared.source ?? (body && typeof body === 'object' && !Array.isArray(body)
         ? String((body as Record<string, unknown>).source ?? '')
-        : '';
+        : '');
       const handler = source === 'sales_navigator' ? handleSalesNavigatorIntake : handleAcquisitionIntake;
       const databaseUrl = requireEnvironment('DATABASE_URL');
-      const intakeResponse = await handler({ body, databaseUrl });
+      const intakeResponse = await handler({ body: prepared.body, databaseUrl });
       const identityResponse = await applyIdentityGraphAfterIntake({ response: intakeResponse, databaseUrl });
-      const enrichmentResponse = await applyEnrichmentAfterIntake({ response: identityResponse, databaseUrl });
+      const intentResponse = await applyIntentProvenanceAfterIntake({ response: identityResponse, databaseUrl });
+      const enrichmentResponse = await applyEnrichmentAfterIntake({ response: intentResponse, databaseUrl });
       const campaignResponse = await applyCampaignEngineAfterIntake({ response: enrichmentResponse, databaseUrl });
-      const accountResponse = await applyUpworkAccountIntelligenceAfterIntake({ response: campaignResponse, databaseUrl });
-      return applyBdWorkflowAfterIntake({ response: accountResponse, databaseUrl });
+      const governanceResponse = await applyCampaignGovernanceAfterIntake({ response: campaignResponse, databaseUrl });
+      const catalogueResponse = await applyCommercialCatalogueAfterIntake({ response: governanceResponse, databaseUrl });
+      const decisionScoreResponse = await applyDecisionScoringAfterIntake({ response: catalogueResponse, databaseUrl });
+      const funnelResponse = await applyFunnelAnalyticsAfterIntake({ response: decisionScoreResponse, databaseUrl });
+      const accountResponse = await applyUpworkAccountIntelligenceAfterIntake({ response: funnelResponse, databaseUrl });
+      const workflowResponse = await applyBdWorkflowAfterIntake({ response: accountResponse, databaseUrl });
+      const reconciliationResponse = await attachAcquisitionReconciliation(workflowResponse, prepared);
+      return applySyncHealthAfterReconciliation({ response: reconciliationResponse, databaseUrl });
     } catch (error) {
       console.error('ACQUISITION_INGEST_ERROR', {
         message: error instanceof Error ? error.message : String(error),

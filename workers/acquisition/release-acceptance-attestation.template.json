@@ -1,0 +1,50 @@
+{
+  "schema_version": "codistan-sales-automation-release-attestation.v1",
+  "product": "Codistan Sales Automation",
+  "release_version": "1.0.0-rc.2",
+  "tested_integration_head": "REPLACE_WITH_EXACT_SHA",
+  "tested_pr255_head": "REPLACE_WITH_EXACT_SHA",
+  "operator": "REPLACE_WITH_NAME_AND_EMAIL",
+  "reviewer": "REPLACE_WITH_REVIEWER_NAME_AND_EMAIL",
+  "machine": {
+    "name": "REPLACE_WITH_MACHINE_NAME",
+    "windows_edition": "REPLACE_WITH_WINDOWS_EDITION",
+    "windows_build": "REPLACE_WITH_WINDOWS_BUILD",
+    "user": "REPLACE_WITH_WINDOWS_USER"
+  },
+  "recorded_at": "REPLACE_WITH_ISO_TIMESTAMP",
+  "windows_results": {
+    "clean_install_no_default_autostart": false,
+    "clean_install_runtime_stopped": false,
+    "supported_upgrade_removed_legacy_autostart": false,
+    "restart_remained_manual_start_only": false,
+    "manual_launcher_started_all_three_collectors": false,
+    "all_health_endpoints_external_actions_disabled": false,
+    "explicit_autostart_opt_in_worked": false,
+    "cleanup_command_idempotent": false,
+    "stop_command_idempotent": false,
+    "rollback_restored_previous_application": false,
+    "rollback_left_runtime_stopped": false,
+    "protected_state_preserved": false
+  },
+  "pilot_results": {
+    "upwork_real_authorized_pilot_completed": false,
+    "linkedin_warm_real_authorized_pilot_completed": false,
+    "licensed_sales_navigator_pilot_completed": false,
+    "repeated_sync_no_duplicate_active_opportunities": false,
+    "seller_owned_fields_and_history_preserved": false,
+    "cold_no_confirmed_intent_preserved": false,
+    "pending_retry_dead_letter_records_locatable": false,
+    "human_commercial_review_completed": false,
+    "zero_automatic_external_actions_observed": false
+  },
+  "evidence_references": [],
+  "final_approval": {
+    "approved": false,
+    "approved_by": "",
+    "approved_at": "",
+    "approved_in_issue_comment_url": "",
+    "exact_head_confirmed": false
+  },
+  "notes": "Do not set a result to true until it is directly observed and supported by the evidence package. Final approval must be a separate explicit human decision for the same exact head."
+}

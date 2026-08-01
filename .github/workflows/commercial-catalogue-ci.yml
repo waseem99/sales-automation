@@ -1,0 +1,66 @@
+name: Commercial Catalogue Versioning CI
+
+on:
+  pull_request:
+    branches:
+      - agent/p0-release-integration-262
+    paths:
+      - '.github/workflows/commercial-catalogue-ci.yml'
+      - 'api/acquisition-ingest.ts'
+      - 'package.json'
+      - 'pnpm-lock.yaml'
+      - 'packages/commercial-catalogue/**'
+      - 'vercel/acquisition-commercial-catalogue-runtime.ts'
+      - 'workers/acquisition/tests/commercial_catalogue_integration_contract.ts'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: commercial-catalogue-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  validate:
+    name: Prove immutable offers proof packs and disqualifiers
+    runs-on: ubuntu-latest
+    timeout-minutes: 28
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Install standalone pnpm
+        run: npm install --global --force @pnpm/exe@9.15.9
+
+      - name: Install workspace dependencies
+        run: pnpm install --no-frozen-lockfile
+
+      - name: Build production workspace
+        run: pnpm build
+
+      - name: Test immutable commercial catalogue
+        run: pnpm --filter @sales-automation/commercial-catalogue test
+
+      - name: Type-check commercial catalogue
+        run: pnpm --filter @sales-automation/commercial-catalogue typecheck
+
+      - name: Validate persisted recommendation and draft pins
+        run: pnpm exec tsx workers/acquisition/tests/commercial_catalogue_integration_contract.ts
+
+      - name: Type-check Vercel ingestion integration
+        run: pnpm typecheck:vercel
+
+      - name: Enforce human-action boundary
+        shell: bash
+        run: |
+          ! grep -R "externalActionAutomated: true\|external_action_performed.*true\|automaticSendingEnabled: true" \
+            api/acquisition-ingest.ts \
+            packages/commercial-catalogue/src/index.ts \
+            vercel/acquisition-commercial-catalogue-runtime.ts

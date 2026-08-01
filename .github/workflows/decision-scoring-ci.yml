@@ -1,0 +1,74 @@
+name: Decision Scoring CI
+
+# Exact-head validation for the stacked component-scoring Draft PR.
+on:
+  pull_request:
+    branches:
+      - agent/linkedin-parser-hardening-270
+    paths:
+      - '.github/workflows/decision-scoring-ci.yml'
+      - 'api/acquisition-ingest.ts'
+      - 'api/decision-score-override.ts'
+      - 'package.json'
+      - 'pnpm-lock.yaml'
+      - 'packages/decision-scoring/**'
+      - 'vercel/acquisition-decision-scoring-runtime.ts'
+      - 'apps/web/src/decision-score-view.ts'
+      - 'apps/web/src/prospects-page.ts'
+      - 'workers/acquisition/tests/decision_scoring_integration_contract.ts'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: decision-scoring-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  validate:
+    name: Separate fit intent evidence readiness and overrides
+    runs-on: ubuntu-latest
+    timeout-minutes: 28
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Install standalone pnpm
+        run: npm install --global --force @pnpm/exe@9.15.9
+
+      - name: Install workspace dependencies
+        run: pnpm install --no-frozen-lockfile
+
+      - name: Build production workspace
+        run: pnpm build
+
+      - name: Test component decision model and seller overrides
+        run: pnpm --filter @sales-automation/decision-scoring test
+
+      - name: Type-check component decision model
+        run: pnpm --filter @sales-automation/decision-scoring typecheck
+
+      - name: Validate persistence API and Prospect Desk integration
+        run: pnpm exec tsx workers/acquisition/tests/decision_scoring_integration_contract.ts
+
+      - name: Type-check Vercel and API integration
+        run: pnpm typecheck:vercel
+
+      - name: Enforce human-action and state boundary
+        shell: bash
+        run: |
+          ! grep -R "externalActionAutomated: true\|external_action_performed.*true\|automatic sending enabled" \
+            api/acquisition-ingest.ts \
+            api/decision-score-override.ts \
+            packages/decision-scoring/src/index.ts \
+            vercel/acquisition-decision-scoring-runtime.ts \
+            apps/web/src/decision-score-view.ts
+          ! grep -R "Remove-Item.*Codistan.*Acquisition\|rmdir.*Codistan.*Acquisition" \
+            api packages/decision-scoring vercel apps/web/src/decision-score-view.ts

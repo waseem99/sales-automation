@@ -1,0 +1,189 @@
+[
+  {
+    "name": "standard feed post",
+    "layout": "standard_feed_post",
+    "surface": "linkedin_post",
+    "dom_fixture": "<article data-urn='urn:li:activity:2001'><a href='/feed/update/urn:li:activity:2001'>2h</a><span data-test-id='actor-name'>Buyer One</span><div data-view-name='feed-commentary'>Looking for a software agency to build a customer portal.</div></article>",
+    "record": {
+      "source_url": "https://www.linkedin.com/feed/update/urn:li:activity:2001",
+      "source_native_id": "urn:li:activity:2001",
+      "title": "Looking for a software agency",
+      "body": "Looking for a software agency to build a customer portal.",
+      "author": {"name": "Buyer One", "profile_url": "https://www.linkedin.com/in/buyer-one", "headline": "CTO", "company": "Buyer Co"}
+    },
+    "expected_status": "complete"
+  },
+  {
+    "name": "search result card",
+    "layout": "search_result_card",
+    "surface": "linkedin_post",
+    "dom_fixture": "<li class='reusable-search__result-container' data-chameleon-result-urn='urn:li:activity:2002'><a href='/posts/buyer_post-activity-2002'>3h</a><div class='entity-result__summary'>Need an AI automation partner for document processing.</div></li>",
+    "record": {
+      "source_url": "https://www.linkedin.com/posts/buyer_post-activity-2002",
+      "source_native_id": "urn:li:activity:2002",
+      "title": "Need an AI automation partner",
+      "body": "Need an AI automation partner for document processing and workflow integration.",
+      "author": {"name": "Buyer Two", "profile_url": "https://www.linkedin.com/in/buyer-two", "headline": "Operations Director", "company": "Buyer Co"}
+    },
+    "expected_status": "complete"
+  },
+  {
+    "name": "expanded see more text",
+    "layout": "expanded_see_more",
+    "surface": "linkedin_post",
+    "dom_fixture": "<article><a href='/feed/update/urn:li:activity:2003'>1d</a><div class='feed-shared-inline-show-more-text'>Expanded requirement with full scope, integrations, timeline and proposal route.</div></article>",
+    "record": {
+      "source_url": "https://www.linkedin.com/feed/update/urn:li:activity:2003",
+      "source_native_id": "urn:li:activity:2003",
+      "title": "Expanded implementation requirement",
+      "body": "Expanded requirement with full scope, integrations, timeline and a manual proposal route for qualified vendors.",
+      "author": {"name": "Buyer Three", "profile_url": "https://www.linkedin.com/in/buyer-three", "headline": "Product Director", "company": "Product Co"}
+    },
+    "expected_status": "complete"
+  },
+  {
+    "name": "repost and quoted post",
+    "layout": "repost_quoted_post",
+    "surface": "linkedin_post",
+    "dom_fixture": "<article><div class='feed-shared-update-v2__reshared-content'><a href='/feed/update/urn:li:activity:2004'>4h</a><span>Original Buyer</span><div>Requesting recommendations for a cybersecurity consultancy.</div></div><span>Reposted by Sharing User</span></article>",
+    "record": {
+      "source_url": "https://www.linkedin.com/feed/update/urn:li:activity:2004",
+      "source_native_id": "urn:li:activity:2004",
+      "title": "Cybersecurity consultancy recommendation",
+      "body": "Requesting recommendations for a cybersecurity consultancy and ISO 27001 assessment.",
+      "author": {"name": "Original Buyer", "profile_url": "https://www.linkedin.com/in/original-buyer", "headline": "Compliance Head", "company": "SaaS Co"},
+      "raw_evidence": {"is_repost": true, "reposter_name": "Sharing User"}
+    },
+    "expected_status": "complete"
+  },
+  {
+    "name": "company post",
+    "layout": "company_post",
+    "surface": "linkedin_post",
+    "dom_fixture": "<article><a href='/posts/example-company_vendor-request-activity-2005'>5h</a><a href='/company/example-company'>Example Company</a><div>Inviting vendors for an ecommerce platform rebuild.</div></article>",
+    "record": {
+      "source_url": "https://www.linkedin.com/posts/example-company_vendor-request-activity-2005",
+      "source_native_id": "urn:li:activity:2005",
+      "title": "Ecommerce platform vendor request",
+      "body": "Example Company is inviting vendors for an ecommerce platform rebuild and API migration.",
+      "author": {"name": "Example Company", "profile_url": "https://www.linkedin.com/company/example-company", "headline": "Company page", "company": "Example Company"}
+    },
+    "expected_status": "complete"
+  },
+  {
+    "name": "document carousel post",
+    "layout": "document_carousel",
+    "surface": "linkedin_post",
+    "dom_fixture": "<article><a href='/feed/update/urn:li:activity:2006'>6h</a><div class='document-description'>Attached brief: seeking a delivery partner for mobile application development.</div><div class='carousel'></div></article>",
+    "record": {
+      "source_url": "https://www.linkedin.com/feed/update/urn:li:activity:2006",
+      "source_native_id": "urn:li:activity:2006",
+      "title": "Mobile application delivery brief",
+      "body": "Attached brief: seeking a delivery partner for mobile application development and backend integration.",
+      "author": {"name": "Buyer Six", "profile_url": "https://www.linkedin.com/in/buyer-six", "headline": "Digital Director", "company": "Enterprise Co"}
+    },
+    "expected_status": "complete"
+  },
+  {
+    "name": "external link post",
+    "layout": "external_link",
+    "surface": "linkedin_post",
+    "dom_fixture": "<article><a href='/feed/update/urn:li:activity:2007'>2h</a><div>RFP details are available on example.org. We are inviting qualified implementation partners.</div><a href='https://example.org/rfp'>External RFP</a></article>",
+    "record": {
+      "source_url": "https://www.linkedin.com/feed/update/urn:li:activity:2007",
+      "source_native_id": "urn:li:activity:2007",
+      "title": "External RFP link",
+      "body": "RFP details are available on example.org. We are inviting qualified implementation partners.",
+      "author": {"name": "Procurement Lead", "profile_url": "https://www.linkedin.com/in/procurement-lead", "headline": "Procurement Lead", "company": "Enterprise Co"}
+    },
+    "expected_status": "complete"
+  },
+  {
+    "name": "localized date",
+    "layout": "localized_date",
+    "surface": "linkedin_post",
+    "dom_fixture": "<article><a href='/feed/update/urn:li:activity:2008'>vor 2 Stunden</a><div>Looking for an implementation partner.</div></article>",
+    "posted_age": "vor 2 Stunden",
+    "expected_age_status": "current",
+    "record": {
+      "source_url": "https://www.linkedin.com/feed/update/urn:li:activity:2008",
+      "source_native_id": "urn:li:activity:2008",
+      "title": "Implementation partner request",
+      "body": "Looking for an implementation partner for a software integration programme.",
+      "author": {"name": "Buyer Eight", "profile_url": "https://www.linkedin.com/in/buyer-eight", "headline": "Technology Lead", "company": "Enterprise Co"}
+    },
+    "expected_status": "complete"
+  },
+  {
+    "name": "missing critical fields",
+    "layout": "missing_fields",
+    "surface": "linkedin_post",
+    "dom_fixture": "<article><div class='feed-shared-text'>Partial visible text without an author or canonical permalink.</div></article>",
+    "record": {
+      "source_url": "",
+      "source_native_id": "",
+      "title": "Partial record",
+      "body": "Partial visible text without an author or canonical permalink.",
+      "author": {"name": "", "profile_url": "", "headline": "", "company": ""}
+    },
+    "expected_status": "reject",
+    "expected_missing": ["canonical_source_url", "author_or_prospect_name"]
+  },
+  {
+    "name": "sales navigator result card",
+    "layout": "sales_navigator_result",
+    "surface": "sales_navigator",
+    "dom_fixture": "<li data-x-search-result><a href='/sales/lead/ACwAAExample'>Lead Name</a><span data-anonymize='headline'>CTO</span><span data-anonymize='company-name'>Software Agency</span></li>",
+    "record": {
+      "source_url": "https://www.linkedin.com/sales/lead/ACwAAExample",
+      "source_native_id": "ACwAAExample",
+      "title": "Lead Name — CTO",
+      "body": "Prospect: Lead Name | Role: CTO | Company: Software Agency | Visible Sales Navigator card: CTO at Software Agency.",
+      "author": {"name": "Lead Name", "profile_url": "https://www.linkedin.com/sales/lead/ACwAAExample", "headline": "CTO", "company": "Software Agency"}
+    },
+    "expected_status": "complete"
+  },
+  {
+    "name": "sales navigator missing role and company",
+    "layout": "sales_navigator_missing_fields",
+    "surface": "sales_navigator",
+    "dom_fixture": "<li data-x-search-result><a href='/sales/lead/ACwAAMissing'>Lead Name</a></li>",
+    "record": {
+      "source_url": "https://www.linkedin.com/sales/lead/ACwAAMissing",
+      "source_native_id": "ACwAAMissing",
+      "title": "Lead Name",
+      "body": "Prospect: Lead Name | Visible Sales Navigator card with no role or company.",
+      "author": {"name": "Lead Name", "profile_url": "https://www.linkedin.com/sales/lead/ACwAAMissing", "headline": "", "company": ""}
+    },
+    "expected_status": "reject",
+    "expected_missing": ["headline_or_company"]
+  },
+  {
+    "name": "infinite scroll rerender",
+    "layout": "infinite_scroll",
+    "surface": "dedupe",
+    "dom_fixture": "<main class='search-results'><article data-id='urn:li:activity:2010'></article><article data-id='urn:li:activity:2010'></article><article data-id='urn:li:activity:2011'></article></main>",
+    "records": [
+      {"source_url": "https://www.linkedin.com/feed/update/urn:li:activity:2010", "source_native_id": "urn:li:activity:2010", "title": "Post A", "body": "Buyer-authored post A with sufficient visible content.", "author": {"name": "Buyer A"}},
+      {"source_url": "https://www.linkedin.com/feed/update/urn:li:activity:2010?trk=rerender", "source_native_id": "urn:li:activity:2010", "title": "Post A duplicate", "body": "Buyer-authored post A after a UI rerender.", "author": {"name": "Buyer A"}},
+      {"source_url": "https://www.linkedin.com/feed/update/urn:li:activity:2011", "source_native_id": "urn:li:activity:2011", "title": "Post B", "body": "Buyer-authored post B from the next infinite-scroll batch.", "author": {"name": "Buyer B"}}
+    ],
+    "expected_unique": 2,
+    "expected_duplicates": 1
+  },
+  {
+    "name": "dom mutation diagnostics",
+    "layout": "dom_mutations",
+    "surface": "diagnostics",
+    "dom_fixture": "<main><article data-view-name='feed-full-update'><div data-test-id='post-text'>Content before a bounded mutation.</div></article></main>",
+    "diagnostic_input": {
+      "parser_version": "fixture-parser",
+      "mutation_count": 12,
+      "cookie": "li_at=private-cookie-value",
+      "authorization": "Bearer private-token-value",
+      "private_message": "private conversation text",
+      "nested": {"csrf_token": "private-csrf-value", "safe": "selector changed"}
+    },
+    "expected_redactions": ["cookie", "authorization", "private_message", "csrf_token"]
+  }
+]
