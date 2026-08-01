@@ -34,6 +34,8 @@ class WindowsOperationalPilotTests(unittest.TestCase):
             "Get-CodistanDefaultBrowserHint",
             "Get-CodistanChromiumBrowser",
             "Find-CodistanBrowserExtension",
+            "Get-OptionalPropertyValue",
+            "Get-NestedOptionalPropertyValue",
             "Opera Software\\Opera Stable",
             "Opera GX Stable",
             "Google\\Chrome",
@@ -52,6 +54,8 @@ class WindowsOperationalPilotTests(unittest.TestCase):
         for marker in [
             ". $pythonBootstrap",
             "Ensure-CodistanPython",
+            "Get-OptionalPropertyValue",
+            "Get-NestedOptionalPropertyValue",
             "$pythonExecutable",
             "$pythonArguments",
             "Start Sales Automation.lnk",
@@ -63,7 +67,7 @@ class WindowsOperationalPilotTests(unittest.TestCase):
             "OPEN-ACQUISITION-REVIEW.cmd",
             "SETUP-SALES-AUTOMATION-EXTENSIONS.cmd",
             "START-ACQUISITION-V4.cmd",
-            "external_actions_enabled -eq $false",
+            "external_actions_enabled",
             "Manual start is the default",
         ]:
             self.assertIn(marker, content)
@@ -76,7 +80,7 @@ class WindowsOperationalPilotTests(unittest.TestCase):
             "http://127.0.0.1:8765/health",
             "http://127.0.0.1:8775/health",
             "http://127.0.0.1:8785/health",
-            "external_actions_enabled -ne $false",
+            "Get-OptionalPropertyValue",
             "Test-BrowserSetupCurrent",
             "setup-sales-automation-extensions.ps1",
             "open-approved-upwork-searches.ps1",
@@ -89,6 +93,25 @@ class WindowsOperationalPilotTests(unittest.TestCase):
         self.assertNotIn("Remove-Item $StateRoot", content)
         self.assertNotIn("submit proposal", content.lower())
         self.assertNotIn("send message", content.lower())
+
+    def test_strict_mode_external_object_access_is_defensive(self) -> None:
+        cleanup = self.read("scripts/windows/cleanup-sales-automation-autostart.ps1")
+        stop = self.read("scripts/windows/stop-sales-automation.ps1")
+        starter = self.read("scripts/windows/start-acquisition-v4.ps1")
+        installer = self.read("scripts/windows/install-acquisition-v4.ps1")
+        operational = self.read("scripts/windows/run-sales-automation-operational.ps1")
+        browser = self.read("scripts/windows/chromium-browser.ps1")
+
+        for content in [cleanup, stop, starter, installer, operational, browser]:
+            self.assertIn("Get-OptionalPropertyValue", content)
+            self.assertIn("Set-StrictMode -Version Latest", content)
+
+        self.assertIn("Convert-ScheduledTaskActionToText", cleanup)
+        self.assertIn('foreach ($propertyName in @("Execute", "Arguments", "WorkingDirectory", "ClassId", "Data"))', cleanup)
+        self.assertNotIn("$_.Execute", cleanup)
+        self.assertNotIn("$_.Arguments", cleanup)
+        self.assertIn('Get-OptionalPropertyValue -InputObject $process -Name "CommandLine"', stop)
+        self.assertIn('Get-OptionalPropertyValue -InputObject $process -Name "CommandLine"', starter)
 
     def test_browser_setup_requires_human_confirmation_and_preserves_safety(self) -> None:
         content = self.read("scripts/windows/setup-sales-automation-extensions.ps1")
