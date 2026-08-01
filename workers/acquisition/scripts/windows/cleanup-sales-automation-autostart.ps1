@@ -3,6 +3,7 @@ param(
 )
 
 $ErrorActionPreference = "Stop"
+Set-StrictMode -Version Latest
 
 # This command removes only known Sales Automation/Acquisition launch registrations.
 # It never deletes or recreates the operational state root.
@@ -19,6 +20,18 @@ function Add-Warning([string]$Description) {
     [void]$warnings.Add($Description)
 }
 
+function Get-OptionalPropertyValue {
+    param(
+        [AllowNull()][object]$InputObject,
+        [Parameter(Mandatory = $true)][string]$Name,
+        [AllowNull()][object]$DefaultValue = $null
+    )
+    if ($null -eq $InputObject) { return $DefaultValue }
+    $property = $InputObject.PSObject.Properties[$Name]
+    if ($null -eq $property) { return $DefaultValue }
+    return $property.Value
+}
+
 function Test-KnownLaunch([string]$Name, [string]$Value = "") {
     return ($Name -match $knownNamePattern) -or ($Value -match $knownValuePattern)
 }
@@ -30,24 +43,24 @@ function Remove-StartupShortcuts {
     ) | Where-Object { $_ -and (Test-Path $_) } | Select-Object -Unique
 
     foreach ($folder in $startupFolders) {
-        foreach ($item in (Get-ChildItem -Path $folder -File -ErrorAction SilentlyContinue)) {
-            $baseName = [IO.Path]::GetFileNameWithoutExtension($item.Name)
+        foreach ($item in @(Get-ChildItem -Path $folder -File -ErrorAction SilentlyContinue)) {
+            $baseName = [IO.Path]::GetFileNameWithoutExtension([string]$item.Name)
             $target = ""
-            if ($item.Extension -ieq ".lnk") {
+            if ([string]$item.Extension -ieq ".lnk") {
                 try {
                     $shell = New-Object -ComObject WScript.Shell
-                    $shortcut = $shell.CreateShortcut($item.FullName)
+                    $shortcut = $shell.CreateShortcut([string]$item.FullName)
                     $target = "{0} {1}" -f [string]$shortcut.TargetPath, [string]$shortcut.Arguments
                 } catch {
-                    Add-Warning "Could not inspect startup shortcut: $($item.FullName)"
+                    Add-Warning "Could not inspect startup shortcut: $([string]$item.FullName)"
                 }
             }
             if (Test-KnownLaunch $baseName $target) {
                 try {
-                    Remove-Item -Path $item.FullName -Force -ErrorAction Stop
-                    Add-Removal "Startup shortcut: $($item.FullName)"
+                    Remove-Item -Path ([string]$item.FullName) -Force -ErrorAction Stop
+                    Add-Removal "Startup shortcut: $([string]$item.FullName)"
                 } catch {
-                    Add-Warning "Could not remove startup shortcut: $($item.FullName)"
+                    Add-Warning "Could not remove startup shortcut: $([string]$item.FullName)"
                 }
             }
         }
@@ -81,21 +94,46 @@ function Remove-RunEntries {
     }
 }
 
+function Convert-ScheduledTaskActionToText {
+    param([AllowNull()][object]$Action)
+    if ($null -eq $Action) { return "" }
+
+    $parts = New-Object System.Collections.Generic.List[string]
+    foreach ($propertyName in @("Execute", "Arguments", "WorkingDirectory", "ClassId", "Data")) {
+        $value = Get-OptionalPropertyValue -InputObject $Action -Name $propertyName
+        if ($null -eq $value) { continue }
+        $text = [string]$value
+        if (-not [string]::IsNullOrWhiteSpace($text)) { [void]$parts.Add($text) }
+    }
+
+    if ($parts.Count -eq 0) {
+        $fallback = [string]$Action
+        if (-not [string]::IsNullOrWhiteSpace($fallback)) { [void]$parts.Add($fallback) }
+    }
+    return ($parts -join " ")
+}
+
 function Remove-ScheduledTasks {
     try {
-        $tasks = Get-ScheduledTask -ErrorAction Stop
+        $tasks = @(Get-ScheduledTask -ErrorAction Stop)
     } catch {
         Add-Warning "Scheduled Tasks could not be inspected."
         return
     }
 
     foreach ($task in $tasks) {
-        $actionText = (($task.Actions | ForEach-Object { "{0} {1}" -f [string]$_.Execute, [string]$_.Arguments }) -join " ")
-        $taskName = [string]$task.TaskName
-        $taskPathAndName = "{0}{1}" -f [string]$task.TaskPath, $taskName
+        $actions = @(Get-OptionalPropertyValue -InputObject $task -Name "Actions" -DefaultValue @())
+        $actionText = (@($actions | ForEach-Object { Convert-ScheduledTaskActionToText -Action $_ }) -join " ")
+        $taskName = [string](Get-OptionalPropertyValue -InputObject $task -Name "TaskName" -DefaultValue "")
+        $taskPath = [string](Get-OptionalPropertyValue -InputObject $task -Name "TaskPath" -DefaultValue "")
+        $taskPathAndName = "{0}{1}" -f $taskPath, $taskName
         if ((Test-KnownLaunch $taskName $actionText) -or ($taskPathAndName -match '(?i)(Codistan.*(Sales Automation|Acquisition)|Prospecting\s+OS)')) {
             try {
-                Unregister-ScheduledTask -TaskName $task.TaskName -TaskPath $task.TaskPath -Confirm:$false -ErrorAction Stop
+                if ([string]::IsNullOrWhiteSpace($taskName)) {
+                    Add-Warning "A matching Scheduled Task had no TaskName and was not removed."
+                    continue
+                }
+                Unregister-ScheduledTask -TaskName $taskName -TaskPath $taskPath -Confirm:$false -ErrorAction Stop
                 Add-Removal "Scheduled Task: $taskPathAndName"
             } catch {
                 Add-Warning "Could not remove Scheduled Task: $taskPathAndName"
