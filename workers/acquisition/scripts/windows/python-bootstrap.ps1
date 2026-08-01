@@ -48,11 +48,13 @@ function Get-CodistanPythonCommand {
 
     foreach ($candidate in $candidates) {
         try {
-            $version = & $candidate.Executable @($candidate.Arguments) -c "import sys; print('.'.join(map(str, sys.version_info[:3]))); raise SystemExit(0 if sys.version_info >= (3, 12) else 1)" 2>$null
+            $candidateExecutable = [string]$candidate.Executable
+            $candidateArguments = @($candidate.Arguments)
+            $version = & $candidateExecutable @candidateArguments -c "import sys; print('.'.join(map(str, sys.version_info[:3]))); raise SystemExit(0 if sys.version_info >= (3, 12) else 1)" 2>$null
             if ($LASTEXITCODE -eq 0) {
                 return [pscustomobject]@{
-                    Executable = [string]$candidate.Executable
-                    Arguments = @($candidate.Arguments)
+                    Executable = $candidateExecutable
+                    Arguments = $candidateArguments
                     Version = ([string]$version).Trim()
                     Label = [string]$candidate.Label
                 }
@@ -118,7 +120,8 @@ function Ensure-CodistanPython {
     $winget = Get-Command winget.exe -ErrorAction SilentlyContinue
     if ($winget) {
         Write-Host "Installing Python 3.12 with winget..."
-        & $winget.Source install --exact --id Python.Python.3.12 --scope user --accept-package-agreements --accept-source-agreements
+        $wingetExecutable = [string]$winget.Source
+        & $wingetExecutable install --exact --id Python.Python.3.12 --scope user --accept-package-agreements --accept-source-agreements
         if ($LASTEXITCODE -ne 0) {
             Write-Warning "winget could not install Python. Falling back to the official signed installer."
             Install-CodistanPythonFromOfficialInstaller
