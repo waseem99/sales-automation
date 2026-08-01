@@ -6,6 +6,18 @@ param(
 $ErrorActionPreference = "Stop"
 Set-StrictMode -Version Latest
 
+function Get-OptionalPropertyValue {
+    param(
+        [AllowNull()][object]$InputObject,
+        [Parameter(Mandatory = $true)][string]$Name,
+        [AllowNull()][object]$DefaultValue = $null
+    )
+    if ($null -eq $InputObject) { return $DefaultValue }
+    $property = $InputObject.PSObject.Properties[$Name]
+    if ($null -eq $property) { return $DefaultValue }
+    return $property.Value
+}
+
 $pythonBootstrap = Join-Path $PSScriptRoot "python-bootstrap.ps1"
 if (-not (Test-Path -LiteralPath $pythonBootstrap)) {
     throw "The Sales Automation Python bootstrap was not found. Reinstall Sales Automation."
@@ -42,13 +54,17 @@ function Test-CollectorHealth {
         $upwork = Invoke-RestMethod -Uri "http://127.0.0.1:8765/health" -TimeoutSec 2
         $linkedin = Invoke-RestMethod -Uri "http://127.0.0.1:8775/health" -TimeoutSec 2
         $salesNavigator = Invoke-RestMethod -Uri "http://127.0.0.1:8785/health" -TimeoutSec 2
-        return ($upwork.ready -and $linkedin.ready -and $salesNavigator.ready -and
-            $upwork.schema_version -eq "codistan-acquisition-health.v1" -and
-            $linkedin.schema_version -eq "codistan-acquisition-health.v1" -and
-            $salesNavigator.schema_version -eq "codistan-acquisition-health.v1" -and
-            $upwork.external_actions_enabled -eq $false -and
-            $linkedin.external_actions_enabled -eq $false -and
-            $salesNavigator.external_actions_enabled -eq $false)
+        return (
+            (Get-OptionalPropertyValue -InputObject $upwork -Name "ready" -DefaultValue $false) -eq $true -and
+            (Get-OptionalPropertyValue -InputObject $linkedin -Name "ready" -DefaultValue $false) -eq $true -and
+            (Get-OptionalPropertyValue -InputObject $salesNavigator -Name "ready" -DefaultValue $false) -eq $true -and
+            [string](Get-OptionalPropertyValue -InputObject $upwork -Name "schema_version" -DefaultValue "") -eq "codistan-acquisition-health.v1" -and
+            [string](Get-OptionalPropertyValue -InputObject $linkedin -Name "schema_version" -DefaultValue "") -eq "codistan-acquisition-health.v1" -and
+            [string](Get-OptionalPropertyValue -InputObject $salesNavigator -Name "schema_version" -DefaultValue "") -eq "codistan-acquisition-health.v1" -and
+            (Get-OptionalPropertyValue -InputObject $upwork -Name "external_actions_enabled" -DefaultValue $null) -eq $false -and
+            (Get-OptionalPropertyValue -InputObject $linkedin -Name "external_actions_enabled" -DefaultValue $null) -eq $false -and
+            (Get-OptionalPropertyValue -InputObject $salesNavigator -Name "external_actions_enabled" -DefaultValue $null) -eq $false
+        )
     } catch {
         return $false
     }
@@ -86,11 +102,18 @@ try {
         $managedListeners = @()
         $listeners = @(Get-NetTCPConnection -State Listen -LocalPort $collectorPorts -ErrorAction SilentlyContinue)
         foreach ($listener in $listeners) {
-            $process = Get-CimInstance Win32_Process -Filter "ProcessId=$($listener.OwningProcess)" -ErrorAction SilentlyContinue
+            $owningProcess = Get-OptionalPropertyValue -InputObject $listener -Name "OwningProcess"
+            $listenerProcessId = 0
+            if ($null -eq $owningProcess -or -not [int]::TryParse([string]$owningProcess, [ref]$listenerProcessId) -or $listenerProcessId -le 0) {
+                continue
+            }
+            $localPort = 0
+            [void][int]::TryParse([string](Get-OptionalPropertyValue -InputObject $listener -Name "LocalPort" -DefaultValue 0), [ref]$localPort)
+            $process = Get-CimInstance Win32_Process -Filter "ProcessId=$listenerProcessId" -ErrorAction SilentlyContinue
             $entry = [pscustomobject]@{
-                Port = $listener.LocalPort
-                ProcessId = $listener.OwningProcess
-                CommandLine = [string]$process.CommandLine
+                Port = $localPort
+                ProcessId = $listenerProcessId
+                CommandLine = [string](Get-OptionalPropertyValue -InputObject $process -Name "CommandLine" -DefaultValue "")
             }
             if ($entry.CommandLine -match "acquisition_v4\.supervisor") { $managedListeners += $entry }
             else { $foreignListeners += $entry }
@@ -106,11 +129,15 @@ try {
         foreach ($listenerProcessId in @($managedListeners | Select-Object -ExpandProperty ProcessId -Unique)) {
             Stop-Process -Id $listenerProcessId -Force -ErrorAction SilentlyContinue
         }
-        if (Test-Path $runtimePidFile) {
+        if (Test-Path -LiteralPath $runtimePidFile) {
             $runtimeProcessId = 0
-            [void][int]::TryParse((Get-Content $runtimePidFile -Raw).Trim(), [ref]$runtimeProcessId)
+            try {
+                [void][int]::TryParse((Get-Content -LiteralPath $runtimePidFile -Raw).Trim(), [ref]$runtimeProcessId)
+            } catch {
+                $runtimeProcessId = 0
+            }
             if ($runtimeProcessId -gt 0) { Stop-Process -Id $runtimeProcessId -Force -ErrorAction SilentlyContinue }
-            Remove-Item $runtimePidFile -Force -ErrorAction SilentlyContinue
+            Remove-Item -LiteralPath $runtimePidFile -Force -ErrorAction SilentlyContinue
         }
         Start-Sleep -Seconds 2
 
@@ -125,8 +152,8 @@ try {
     }
 } finally {
     try {
-        if (Test-Path $watchdogPidFile -and (Get-Content $watchdogPidFile -Raw).Trim() -eq [string]$PID) {
-            Remove-Item $watchdogPidFile -Force -ErrorAction SilentlyContinue
+        if (Test-Path -LiteralPath $watchdogPidFile -and (Get-Content -LiteralPath $watchdogPidFile -Raw).Trim() -eq [string]$PID) {
+            Remove-Item -LiteralPath $watchdogPidFile -Force -ErrorAction SilentlyContinue
         }
     } catch {}
     if ($lockStream) { $lockStream.Dispose() }
