@@ -3,12 +3,29 @@ param(
 )
 
 $ErrorActionPreference = "Stop"
+Set-StrictMode -Version Latest
 $stopped = New-Object System.Collections.Generic.List[int]
 
+function Get-OptionalPropertyValue {
+    param(
+        [AllowNull()][object]$InputObject,
+        [Parameter(Mandatory = $true)][string]$Name,
+        [AllowNull()][object]$DefaultValue = $null
+    )
+    if ($null -eq $InputObject) { return $DefaultValue }
+    $property = $InputObject.PSObject.Properties[$Name]
+    if ($null -eq $property) { return $DefaultValue }
+    return $property.Value
+}
+
 function Stop-RecordedProcess([string]$PidFile) {
-    if (-not (Test-Path $PidFile)) { return }
+    if (-not (Test-Path -LiteralPath $PidFile)) { return }
     $recordedPid = 0
-    [void][int]::TryParse((Get-Content $PidFile -Raw).Trim(), [ref]$recordedPid)
+    try {
+        [void][int]::TryParse((Get-Content -LiteralPath $PidFile -Raw).Trim(), [ref]$recordedPid)
+    } catch {
+        $recordedPid = 0
+    }
     if ($recordedPid -gt 0) {
         $process = Get-Process -Id $recordedPid -ErrorAction SilentlyContinue
         if ($process) {
@@ -16,7 +33,7 @@ function Stop-RecordedProcess([string]$PidFile) {
             [void]$stopped.Add($recordedPid)
         }
     }
-    Remove-Item $PidFile -Force -ErrorAction SilentlyContinue
+    Remove-Item -LiteralPath $PidFile -Force -ErrorAction SilentlyContinue
 }
 
 $watchdogPidFile = Join-Path $StateRoot "watchdog.pid"
@@ -28,18 +45,22 @@ Stop-RecordedProcess $runtimePidFile
 Start-Sleep -Milliseconds 500
 
 $collectorPorts = @(8765, 8775, 8785)
-$listeners = Get-NetTCPConnection -State Listen -LocalPort $collectorPorts -ErrorAction SilentlyContinue
+$listeners = @(Get-NetTCPConnection -State Listen -LocalPort $collectorPorts -ErrorAction SilentlyContinue)
 foreach ($listener in $listeners) {
-    $processId = [int]$listener.OwningProcess
+    $owningProcess = Get-OptionalPropertyValue -InputObject $listener -Name "OwningProcess"
+    $processId = 0
+    if ($null -eq $owningProcess -or -not [int]::TryParse([string]$owningProcess, [ref]$processId) -or $processId -le 0) {
+        continue
+    }
     $process = Get-CimInstance Win32_Process -Filter "ProcessId=$processId" -ErrorAction SilentlyContinue
-    $commandLine = [string]$process.CommandLine
+    $commandLine = [string](Get-OptionalPropertyValue -InputObject $process -Name "CommandLine" -DefaultValue "")
     if ($commandLine -match '(?i)acquisition_v4\.supervisor') {
         Stop-Process -Id $processId -Force -ErrorAction SilentlyContinue
         if (-not $stopped.Contains($processId)) { [void]$stopped.Add($processId) }
     }
 }
 
-Remove-Item $watchdogLockFile -Force -ErrorAction SilentlyContinue
+Remove-Item -LiteralPath $watchdogLockFile -Force -ErrorAction SilentlyContinue
 
 if ($stopped.Count -eq 0) {
     Write-Host "Sales Automation was already stopped."
