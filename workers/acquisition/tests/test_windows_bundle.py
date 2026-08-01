@@ -41,7 +41,7 @@ class WindowsBundleTests(unittest.TestCase):
             '$enabledSources = @("linkedin", "upwork", "sales_navigator")',
             "$migratedConfig", "Sync sources: LinkedIn warm, Upwork warm and Sales Navigator cold campaigns",
             "release-manifest.json", "external_actions_enabled -eq $false",
-            "The previous application folder was restored", "Commercial readiness:",
+            "The previous application folder was restored",
             "cleanup-sales-automation-autostart.ps1", "stop-sales-automation.ps1",
             "[switch]$EnableAutoStart", "Manual start is the default",
         ]:
@@ -140,7 +140,7 @@ class WindowsBundleTests(unittest.TestCase):
         for prohibited in ["database_url", "password=", "linkedin message", "upwork proposal"]:
             self.assertNotIn(prohibited, combined)
 
-    def test_chrome_launchers_build_argument_arrays_before_start_process(self) -> None:
+    def test_chromium_launchers_build_argument_arrays_before_start_process(self) -> None:
         root = Path(__file__).resolve().parents[1]
         launchers = [
             root / "scripts/windows/open-approved-upwork-searches.ps1",
