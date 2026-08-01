@@ -9,6 +9,18 @@ param(
 $ErrorActionPreference = "Stop"
 Set-StrictMode -Version Latest
 
+function Get-OptionalPropertyValue {
+    param(
+        [AllowNull()][object]$InputObject,
+        [Parameter(Mandatory = $true)][string]$Name,
+        [AllowNull()][object]$DefaultValue = $null
+    )
+    if ($null -eq $InputObject) { return $DefaultValue }
+    $property = $InputObject.PSObject.Properties[$Name]
+    if ($null -eq $property) { return $DefaultValue }
+    return $property.Value
+}
+
 $commands = Join-Path $StateRoot "app-current\workers\acquisition"
 if (-not (Test-Path -LiteralPath (Join-Path $commands "START-ACQUISITION-V4.cmd"))) {
     throw "Sales Automation is not installed. Run SETUP-AND-RUN-SALES-AUTOMATION.cmd once."
@@ -25,15 +37,19 @@ function Get-OperationalHealth {
     foreach ($entry in $healthEndpoints.GetEnumerator()) {
         try {
             $health = Invoke-RestMethod -Uri $entry.Value -TimeoutSec 3
+            $accepted = 0
+            $enriched = 0
+            [void][int]::TryParse([string](Get-OptionalPropertyValue -InputObject $health -Name "accepted" -DefaultValue 0), [ref]$accepted)
+            [void][int]::TryParse([string](Get-OptionalPropertyValue -InputObject $health -Name "enriched" -DefaultValue 0), [ref]$enriched)
             $results[$entry.Key] = [ordered]@{
                 reachable = $true
-                ready = ($health.ready -eq $true)
-                schema_version = [string]$health.schema_version
-                source = [string]$health.source
-                runtime_version = [string]$health.runtime_version
-                accepted = [int]($health.accepted -as [int])
-                enriched = [int]($health.enriched -as [int])
-                external_actions_enabled = $health.external_actions_enabled
+                ready = ((Get-OptionalPropertyValue -InputObject $health -Name "ready" -DefaultValue $false) -eq $true)
+                schema_version = [string](Get-OptionalPropertyValue -InputObject $health -Name "schema_version" -DefaultValue "")
+                source = [string](Get-OptionalPropertyValue -InputObject $health -Name "source" -DefaultValue $entry.Key)
+                runtime_version = [string](Get-OptionalPropertyValue -InputObject $health -Name "runtime_version" -DefaultValue "")
+                accepted = $accepted
+                enriched = $enriched
+                external_actions_enabled = Get-OptionalPropertyValue -InputObject $health -Name "external_actions_enabled" -DefaultValue $null
             }
         } catch {
             $results[$entry.Key] = [ordered]@{
@@ -55,11 +71,13 @@ function Get-OperationalHealth {
 function Test-OperationalHealth {
     param([object]$Health)
     foreach ($source in $healthEndpoints.Keys) {
+        if ($null -eq $Health -or -not $Health.Contains($source)) { return $false }
         $entry = $Health[$source]
-        if (-not $entry.reachable -or -not $entry.ready) { return $false }
-        if ($entry.schema_version -ne "codistan-acquisition-health.v1") { return $false }
-        if ($entry.source -ne $source) { return $false }
-        if ($entry.external_actions_enabled -ne $false) { return $false }
+        if ((Get-OptionalPropertyValue -InputObject $entry -Name "reachable" -DefaultValue $false) -ne $true) { return $false }
+        if ((Get-OptionalPropertyValue -InputObject $entry -Name "ready" -DefaultValue $false) -ne $true) { return $false }
+        if ([string](Get-OptionalPropertyValue -InputObject $entry -Name "schema_version" -DefaultValue "") -ne "codistan-acquisition-health.v1") { return $false }
+        if ([string](Get-OptionalPropertyValue -InputObject $entry -Name "source" -DefaultValue "") -ne $source) { return $false }
+        if ((Get-OptionalPropertyValue -InputObject $entry -Name "external_actions_enabled" -DefaultValue $null) -ne $false) { return $false }
     }
     return $true
 }
@@ -67,10 +85,11 @@ function Test-OperationalHealth {
 function Wait-OperationalHealth {
     param([int]$TimeoutSeconds = 120)
     $deadline = (Get-Date).AddSeconds($TimeoutSeconds)
+    $health = Get-OperationalHealth
     do {
-        $health = Get-OperationalHealth
         if (Test-OperationalHealth -Health $health) { return $health }
         Start-Sleep -Seconds 3
+        $health = Get-OperationalHealth
     } while ((Get-Date) -lt $deadline)
     return $health
 }
@@ -106,10 +125,10 @@ function Test-BrowserSetupCurrent {
         $upworkManifest = Get-Content -LiteralPath $upworkManifestPath -Raw | ConvertFrom-Json
         $linkedinManifest = Get-Content -LiteralPath $linkedinManifestPath -Raw | ConvertFrom-Json
         return (
-            $marker.confirmed -eq $true -and
-            [string]$marker.upwork_extension_version -eq [string]$upworkManifest.version -and
-            [string]$marker.linkedin_sales_navigator_extension_version -eq [string]$linkedinManifest.version -and
-            $marker.external_actions_enabled -eq $false
+            (Get-OptionalPropertyValue -InputObject $marker -Name "confirmed" -DefaultValue $false) -eq $true -and
+            [string](Get-OptionalPropertyValue -InputObject $marker -Name "upwork_extension_version" -DefaultValue "") -eq [string](Get-OptionalPropertyValue -InputObject $upworkManifest -Name "version" -DefaultValue "") -and
+            [string](Get-OptionalPropertyValue -InputObject $marker -Name "linkedin_sales_navigator_extension_version" -DefaultValue "") -eq [string](Get-OptionalPropertyValue -InputObject $linkedinManifest -Name "version" -DefaultValue "") -and
+            (Get-OptionalPropertyValue -InputObject $marker -Name "external_actions_enabled" -DefaultValue $null) -eq $false
         )
     } catch {
         return $false
@@ -120,7 +139,7 @@ $health = Get-OperationalHealth
 if (-not (Test-OperationalHealth -Health $health)) {
     Write-Host "Starting Sales Automation collectors..." -ForegroundColor Cyan
     Start-Process -FilePath (Join-Path $commands "START-ACQUISITION-V4.cmd") -WindowStyle Minimized | Out-Null
-    $health = Wait-OperationalHealth -TimeoutSeconds 120
+    $health = Wait-OperationalHealth -TimeoutSeconds 150
 }
 
 if (-not (Test-OperationalHealth -Health $health)) {
@@ -150,8 +169,11 @@ $pythonCommand = Get-CodistanPythonCommand
 if (-not $pythonCommand) {
     throw "Python is unavailable after installation. Run setup again."
 }
-$pythonExecutable = [string]$pythonCommand.Executable
-$pythonArguments = @($pythonCommand.Arguments)
+$pythonExecutable = [string](Get-OptionalPropertyValue -InputObject $pythonCommand -Name "Executable" -DefaultValue "")
+$pythonArguments = @(Get-OptionalPropertyValue -InputObject $pythonCommand -Name "Arguments" -DefaultValue @())
+if ([string]::IsNullOrWhiteSpace($pythonExecutable)) {
+    throw "Python is unavailable after installation. Run setup again."
+}
 $previousPythonPath = $env:PYTHONPATH
 $env:PYTHONPATH = $commands
 try {
@@ -180,7 +202,9 @@ $statusPath = Write-OperationalStatus -Health $health -Status "running_and_captu
 $prioritySummary = @()
 foreach ($source in $healthEndpoints.Keys) {
     $entry = $health[$source]
-    $prioritySummary += "${source}: $($entry.accepted) accepted, $($entry.enriched) enriched"
+    $accepted = [int](Get-OptionalPropertyValue -InputObject $entry -Name "accepted" -DefaultValue 0)
+    $enriched = [int](Get-OptionalPropertyValue -InputObject $entry -Name "enriched" -DefaultValue 0)
+    $prioritySummary += "${source}: $accepted accepted, $enriched enriched"
 }
 
 Write-Host ""
