@@ -40,7 +40,7 @@ class WindowsBundleTests(unittest.TestCase):
             "127.0.0.1:8765", "127.0.0.1:8775", "127.0.0.1:8785",
             '$enabledSources = @("linkedin", "upwork", "sales_navigator")',
             "$migratedConfig", "Sync sources: LinkedIn warm, Upwork warm and Sales Navigator cold campaigns",
-            "release-manifest.json", "external_actions_enabled -eq $false",
+            "release-manifest.json", "Get-OptionalPropertyValue", "Get-NestedOptionalPropertyValue",
             "The previous application folder was restored",
             "cleanup-sales-automation-autostart.ps1", "stop-sales-automation.ps1",
             "[switch]$EnableAutoStart", "Manual start is the default",
@@ -61,12 +61,14 @@ class WindowsBundleTests(unittest.TestCase):
             "watchdog.pid", "watchdog.lock", "watchdog.log", "runtime.log",
             "Test-CollectorHealth", "while ($true)", "Restarting in 5 seconds",
             "acquisition_v4.supervisor", "Sales Navigator collector", "8765, 8775, 8785",
+            "Get-OptionalPropertyValue",
         ]:
             self.assertIn(marker, starter)
 
         for marker in [
             "watchdog.pid", "runtime.pid", "watchdog.lock", "8765, 8775, 8785",
             "acquisition_v4\\.supervisor", "Operational state preserved at",
+            "Get-OptionalPropertyValue",
         ]:
             self.assertIn(marker, stopper)
 
@@ -75,9 +77,11 @@ class WindowsBundleTests(unittest.TestCase):
             "CurrentVersion\\Run", "CurrentVersion\\RunOnce",
             "Get-ScheduledTask", "Unregister-ScheduledTask",
             "StartupApproved\\Run", "StartupApproved\\Run32", "StartupApproved\\StartupFolder",
-            "Operational state preserved at",
+            "Operational state preserved at", "Convert-ScheduledTaskActionToText",
         ]:
             self.assertIn(marker, autostart_cleanup)
+        self.assertNotIn("$_.Execute", autostart_cleanup)
+        self.assertNotIn("$_.Arguments", autostart_cleanup)
 
         for marker in [
             "http://127.0.0.1:8785/health",
