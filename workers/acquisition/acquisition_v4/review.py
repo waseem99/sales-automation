@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import csv
+from datetime import datetime, timezone
 from html import escape
 import io
 import json
@@ -58,6 +59,15 @@ def _summary(records: list[dict[str, Any]]) -> dict[str, int]:
     return counts
 
 
+def _source_summary(records: list[dict[str, Any]]) -> dict[str, int]:
+    counts = {"upwork": 0, "linkedin": 0, "sales_navigator": 0}
+    for record in records:
+        source = str(record.get("source", ""))
+        if source in counts:
+            counts[source] += 1
+    return counts
+
+
 def _csv_content(records: list[dict[str, Any]]) -> str:
     output = io.StringIO(newline="")
     writer = csv.DictWriter(
@@ -96,6 +106,9 @@ def _list(values: Any) -> str:
 
 def _html_content(records: list[dict[str, Any]]) -> str:
     counts = _summary(records)
+    source_counts = _source_summary(records)
+    actionable = counts["priority_a"] + counts["priority_b"]
+    generated_at = datetime.now(timezone.utc).isoformat()
     cards: list[str] = []
     for record in records:
         q = _qualification(record)
@@ -103,44 +116,79 @@ def _html_content(records: list[dict[str, Any]]) -> str:
         score = int(q.get("total_score", 0) or 0)
         url = escape(str(record.get("canonical_url", "")), quote=True)
         title = escape(str(record.get("title", "Untitled opportunity")))
-        source = escape(str(record.get("source", ""))).upper()
+        source_value = str(record.get("source", ""))
+        source = escape(source_value.replace("_", " ").title())
         author = escape(str(record.get("author_name", "") or record.get("company_name", "") or "Buyer not visible"))
         body = escape(str(record.get("body", ""))[:700])
-        service = escape(str(q.get("service_route", "Unrouted")))
+        service = escape(str(q.get("service_route", "Unrouted")).replace("_", " ").title())
         action = escape(str(q.get("recommended_next_action", "Review manually.")))
         confidence = escape(str(q.get("confidence", "low")))
+        intent_warning = ""
+        if source_value == "sales_navigator":
+            intent_warning = '<p class="cold-warning"><strong>Cold fit only:</strong> no confirmed buyer intent.</p>'
         cards.append(f"""
-        <article class="opportunity {escape(disposition)}">
+        <article class="opportunity {escape(disposition)}" data-priority="{escape(disposition)}" data-source="{escape(source_value)}">
           <div class="topline"><span class="badge">{escape(disposition.replace('_', ' ').title())}</span><strong>{score}/100</strong><span>{source}</span><span>{service}</span></div>
           <h2><a href="{url}" target="_blank" rel="noreferrer">{title}</a></h2>
           <p class="meta">{author} · Confidence: {confidence} · Captured: {escape(str(record.get('captured_at', '')))}</p>
+          {intent_warning}
           <p>{body}</p>
           <p><strong>Why:</strong> {_list(q.get('positive_reasons'))}</p>
           <p><strong>Missing:</strong> {_list(q.get('missing_evidence'))}</p>
           <p><strong>Risks:</strong> {_list(q.get('risk_reasons'))}</p>
           <p class="action"><strong>Next:</strong> {action}</p>
         </article>""")
-    empty = '<p class="empty">No captured opportunities yet. Run the Upwork or LinkedIn search launcher.</p>'
+    empty = '<p class="empty">No captured opportunities yet. Keep this page open while the approved source searches run.</p>'
     return f"""<!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Codistan Acquisition Review</title>
+<meta http-equiv="refresh" content="30">
+<title>Codistan Lead Desk</title>
 <style>
-body{{font-family:Segoe UI,Arial,sans-serif;margin:0;background:#f4f6f8;color:#17202a}}main{{max-width:1050px;margin:auto;padding:24px}}
-h1{{margin:0 0 6px}}.subtitle{{color:#5b6573;margin-top:0}}.metrics{{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin:20px 0}}
+body{{font-family:Segoe UI,Arial,sans-serif;margin:0;background:#f4f6f8;color:#17202a}}main{{max-width:1120px;margin:auto;padding:24px}}
+h1{{margin:0 0 6px}}.subtitle{{color:#5b6573;margin-top:0}}.metrics{{display:grid;grid-template-columns:repeat(5,1fr);gap:10px;margin:20px 0}}
 .metric{{background:white;border:1px solid #dde2e8;border-radius:10px;padding:14px}}.metric strong{{display:block;font-size:24px}}
-.opportunity{{background:white;border:1px solid #dfe4ea;border-left:6px solid #7b8794;border-radius:10px;padding:18px;margin:14px 0}}
+.controls{{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin:14px 0}}button{{border:1px solid #bcc5cf;background:white;border-radius:8px;padding:9px 13px;cursor:pointer}}button.active{{background:#17202a;color:white;border-color:#17202a}}
+.source-line{{color:#5b6573;font-size:13px}}.opportunity{{background:white;border:1px solid #dfe4ea;border-left:6px solid #7b8794;border-radius:10px;padding:18px;margin:14px 0}}
 .opportunity.priority_a{{border-left-color:#137333}}.opportunity.priority_b{{border-left-color:#b06000}}.opportunity.reject{{opacity:.66}}.topline{{display:flex;gap:10px;align-items:center;flex-wrap:wrap;color:#5b6573}}
-.badge{{font-weight:700}}h2{{font-size:19px;margin:10px 0}}a{{color:#0a66c2}}.meta{{font-size:13px;color:#5b6573}}.action{{background:#f1f6ff;padding:10px;border-radius:8px}}
-@media(max-width:650px){{.metrics{{grid-template-columns:repeat(2,1fr)}}main{{padding:14px}}}}
+.badge{{font-weight:700}}h2{{font-size:19px;margin:10px 0}}a{{color:#0a66c2}}.meta{{font-size:13px;color:#5b6573}}.action{{background:#f1f6ff;padding:10px;border-radius:8px}}.cold-warning{{background:#fff3cd;padding:9px;border-radius:8px}}
+.hidden{{display:none}}.empty{{background:white;border:1px solid #dde2e8;border-radius:10px;padding:24px}}.footer{{font-size:12px;color:#697582;margin-top:24px}}
+@media(max-width:750px){{.metrics{{grid-template-columns:repeat(2,1fr)}}main{{padding:14px}}}}
 </style></head><body><main>
-<h1>Codistan Acquisition Review</h1><p class="subtitle">Priority A first. Every external action remains manual.</p>
+<h1>Codistan Lead Desk</h1><p class="subtitle">Actionable leads first. This page refreshes every 30 seconds; every external action remains manual.</p>
 <section class="metrics">
+<div class="metric"><span>Actionable A/B</span><strong>{actionable}</strong></div>
 <div class="metric"><span>Priority A</span><strong>{counts['priority_a']}</strong></div>
 <div class="metric"><span>Priority B</span><strong>{counts['priority_b']}</strong></div>
 <div class="metric"><span>Research</span><strong>{counts['research']}</strong></div>
 <div class="metric"><span>Reject</span><strong>{counts['reject']}</strong></div>
 </section>
-{''.join(cards) if cards else empty}
+<p class="source-line">Sources — Upwork: {source_counts['upwork']} · LinkedIn warm: {source_counts['linkedin']} · Sales Navigator cold: {source_counts['sales_navigator']}</p>
+<div class="controls" role="group" aria-label="Lead filters">
+<button type="button" data-filter="actionable" class="active">Priority A/B</button>
+<button type="button" data-filter="priority_a">Priority A only</button>
+<button type="button" data-filter="research">Research</button>
+<button type="button" data-filter="all">All records</button>
+<button type="button" id="refresh">Refresh now</button>
+</div>
+<section id="lead-list">{''.join(cards) if cards else empty}</section>
+<p class="footer">Generated {escape(generated_at)}. Upwork proposals, LinkedIn actions and email are never sent automatically.</p>
+<script>
+(() => {{
+  const cards = Array.from(document.querySelectorAll('.opportunity'));
+  const buttons = Array.from(document.querySelectorAll('button[data-filter]'));
+  function applyFilter(filter) {{
+    for (const card of cards) {{
+      const priority = card.dataset.priority || 'research';
+      const visible = filter === 'all' || priority === filter || (filter === 'actionable' && (priority === 'priority_a' || priority === 'priority_b'));
+      card.classList.toggle('hidden', !visible);
+    }}
+    for (const button of buttons) button.classList.toggle('active', button.dataset.filter === filter);
+  }}
+  for (const button of buttons) button.addEventListener('click', () => applyFilter(button.dataset.filter));
+  document.getElementById('refresh')?.addEventListener('click', () => location.reload());
+  applyFilter('actionable');
+}})();
+</script>
 </main></body></html>"""
 
 
