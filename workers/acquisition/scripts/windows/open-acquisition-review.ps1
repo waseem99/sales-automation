@@ -3,9 +3,29 @@ param(
 )
 
 $ErrorActionPreference = "Stop"
+Set-StrictMode -Version Latest
+
+$commands = Join-Path $StateRoot "app-current\workers\acquisition"
 $reviewPath = Join-Path $StateRoot "review\index.html"
-if (-not (Test-Path $reviewPath)) {
-    throw "No acquisition review exists yet. Run an Upwork or LinkedIn capture first."
+$pythonBootstrap = Join-Path $commands "scripts\windows\python-bootstrap.ps1"
+
+if (Test-Path -LiteralPath $pythonBootstrap) {
+    . $pythonBootstrap
+    $pythonCommand = Get-CodistanPythonCommand
+    if ($pythonCommand) {
+        $previousPythonPath = $env:PYTHONPATH
+        $env:PYTHONPATH = $commands
+        try {
+            $reviewCode = "from pathlib import Path; from acquisition_v4.review_v5 import write_review_outputs; write_review_outputs(Path(__import__('sys').argv[1]))"
+            & $pythonCommand.Executable @($pythonCommand.Arguments) -c $reviewCode $StateRoot | Out-Null
+        } finally {
+            $env:PYTHONPATH = $previousPythonPath
+        }
+    }
 }
-Start-Process -FilePath $reviewPath
-Write-Host "Opened the local Codistan Acquisition Review."
+
+if (-not (Test-Path -LiteralPath $reviewPath)) {
+    throw "The lead desk could not be generated. Start Sales Automation and run the approved source searches first."
+}
+Start-Process -FilePath $reviewPath | Out-Null
+Write-Host "Opened the Codistan Lead Desk. It refreshes every 30 seconds."
