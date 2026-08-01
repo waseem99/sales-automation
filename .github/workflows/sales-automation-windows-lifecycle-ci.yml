@@ -13,6 +13,7 @@ on:
       - 'workers/acquisition/scripts/windows/**'
       - 'workers/acquisition/acquisition_v4/**'
       - 'workers/acquisition/tests/test_windows*.py'
+      - 'workers/acquisition/tests/test-browser-discovery.ps1'
   workflow_dispatch:
 
 permissions:
@@ -83,6 +84,10 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: '3.12'
+
+      - name: Execute browser discovery on Windows PowerShell 5.1
+        shell: powershell
+        run: .\tests\test-browser-discovery.ps1
 
       - name: Exercise legacy cleanup, install, operational start, health and stop
         shell: powershell
