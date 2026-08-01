@@ -28,11 +28,32 @@ class WindowsOperationalPilotTests(unittest.TestCase):
         self.assertNotIn("Invoke-Expression", content)
         self.assertNotIn("Start-BitsTransfer", content)
 
+    def test_browser_discovery_supports_operator_chromium_options(self) -> None:
+        content = self.read("scripts/windows/chromium-browser.ps1")
+        for marker in [
+            "Get-CodistanDefaultBrowserHint",
+            "Get-CodistanChromiumBrowser",
+            "Find-CodistanBrowserExtension",
+            "Opera Software\\Opera Stable",
+            "Opera GX Stable",
+            "Google\\Chrome",
+            "Microsoft\\Edge",
+            "BraveSoftware\\Brave-Browser",
+            "opera://extensions/",
+            "chrome://extensions/",
+            "edge://extensions/",
+            "brave://extensions/",
+            "Secure Preferences",
+        ]:
+            self.assertIn(marker, content)
+
     def test_installer_creates_operator_shortcuts_and_uses_runtime_only_health_check(self) -> None:
         content = self.read("scripts/windows/install-acquisition-v4.ps1")
         for marker in [
             ". $pythonBootstrap",
             "Ensure-CodistanPython",
+            "$pythonExecutable",
+            "$pythonArguments",
             "Start Sales Automation.lnk",
             "Stop Sales Automation.lnk",
             "Open Lead Desk.lnk",
@@ -56,6 +77,7 @@ class WindowsOperationalPilotTests(unittest.TestCase):
             "http://127.0.0.1:8775/health",
             "http://127.0.0.1:8785/health",
             "external_actions_enabled -ne $false",
+            "Test-BrowserSetupCurrent",
             "setup-sales-automation-extensions.ps1",
             "open-approved-upwork-searches.ps1",
             "open-linkedin-lead-searches.ps1",
@@ -71,9 +93,11 @@ class WindowsOperationalPilotTests(unittest.TestCase):
     def test_browser_setup_requires_human_confirmation_and_preserves_safety(self) -> None:
         content = self.read("scripts/windows/setup-sales-automation-extensions.ps1")
         for marker in [
-            "chrome://extensions/",
+            "Get-CodistanChromiumBrowser",
+            "$browser.ExtensionsUrl",
             "Type LOADED",
             "browser-extensions-confirmed.json",
+            "browser_executable",
             "external_actions_enabled = $false",
             "Sales Navigator Campaigns.lnk",
             "open-sales-navigator-campaigns.ps1",
@@ -83,14 +107,16 @@ class WindowsOperationalPilotTests(unittest.TestCase):
         self.assertIn("never bypass login", content.lower())
 
     def test_sales_navigator_campaign_launcher_resolves_unpacked_extension(self) -> None:
-        content = self.read("scripts/windows/open-sales-navigator-campaigns.ps1")
+        launcher = self.read("scripts/windows/open-sales-navigator-campaigns.ps1")
+        browser = self.read("scripts/windows/chromium-browser.ps1")
         for marker in [
-            "Secure Preferences",
+            "Find-CodistanBrowserExtension",
             "Codistan LinkedIn & Sales Navigator Capture",
             "chrome-extension://$extensionId/sales-nav-options.html",
             "no-confirmed-intent warning",
         ]:
-            self.assertIn(marker, content)
+            self.assertIn(marker, launcher)
+        self.assertIn("Secure Preferences", browser)
 
     def test_operator_commands_are_present(self) -> None:
         setup = self.read("SETUP-AND-RUN-SALES-AUTOMATION.cmd")
@@ -120,6 +146,7 @@ class WindowsOperationalPilotTests(unittest.TestCase):
     def test_operational_linkedin_queries_are_buyer_request_focused(self) -> None:
         content = self.read("scripts/windows/open-linkedin-lead-searches.ps1")
         for marker in [
+            "Get-CodistanChromiumBrowser",
             "need recommendations for",
             "request for proposal",
             "software development partner",
@@ -130,6 +157,12 @@ class WindowsOperationalPilotTests(unittest.TestCase):
             "NOT recruiter",
         ]:
             self.assertIn(marker, content)
+
+    def test_upwork_launcher_uses_the_configured_browser(self) -> None:
+        content = self.read("scripts/windows/open-approved-upwork-searches.ps1")
+        self.assertIn("Get-CodistanChromiumBrowser", content)
+        self.assertIn("$browser.Executable", content)
+        self.assertIn("external_actions_enabled -ne $false", content)
 
 
 if __name__ == "__main__":
