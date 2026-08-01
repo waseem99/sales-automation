@@ -18,6 +18,12 @@ function Get-OptionalPropertyValue {
     return $property.Value
 }
 
+function Test-CodistanCollectorCommandLine {
+    param([string]$CommandLine)
+    if ([string]::IsNullOrWhiteSpace($CommandLine)) { return $false }
+    return $CommandLine -match '(?i)(?:-m\s+acquisition_v4\.(?:supervisor|runtime|runtime_v5)\b|acquisition_v4[\\/](?:supervisor|runtime|runtime_v5)\.py\b|Codistan[\\/]Acquisition.*(?:8765|8775|8785))'
+}
+
 function Stop-RecordedProcess([string]$PidFile) {
     if (-not (Test-Path -LiteralPath $PidFile)) { return }
     $recordedPid = 0
@@ -42,8 +48,12 @@ $watchdogLockFile = Join-Path $StateRoot "watchdog.lock"
 
 Stop-RecordedProcess $watchdogPidFile
 Stop-RecordedProcess $runtimePidFile
-Start-Sleep -Milliseconds 500
+Start-Sleep -Milliseconds 750
 
+# Upgrades can encounter older V4 collectors that ran one process per source
+# (`acquisition_v4.runtime`) rather than the combined V5 supervisor. Stop only
+# listeners on the three reserved collector ports whose command line proves they
+# are Codistan Acquisition processes. Never terminate an unrelated port owner.
 $collectorPorts = @(8765, 8775, 8785)
 $listeners = @(Get-NetTCPConnection -State Listen -LocalPort $collectorPorts -ErrorAction SilentlyContinue)
 foreach ($listener in $listeners) {
@@ -54,12 +64,13 @@ foreach ($listener in $listeners) {
     }
     $process = Get-CimInstance Win32_Process -Filter "ProcessId=$processId" -ErrorAction SilentlyContinue
     $commandLine = [string](Get-OptionalPropertyValue -InputObject $process -Name "CommandLine" -DefaultValue "")
-    if ($commandLine -match '(?i)acquisition_v4\.supervisor') {
+    if (Test-CodistanCollectorCommandLine -CommandLine $commandLine) {
         Stop-Process -Id $processId -Force -ErrorAction SilentlyContinue
         if (-not $stopped.Contains($processId)) { [void]$stopped.Add($processId) }
     }
 }
 
+Start-Sleep -Milliseconds 750
 Remove-Item -LiteralPath $watchdogLockFile -Force -ErrorAction SilentlyContinue
 
 if ($stopped.Count -eq 0) {
