@@ -1,8 +1,11 @@
 param(
-    [string]$InstallRoot = (Resolve-Path (Join-Path $PSScriptRoot "..\..\..\..")).Path
+    [string]$InstallRoot = (Resolve-Path (Join-Path $PSScriptRoot "..\..\..\..")).Path,
+    [string]$StateRoot = (Join-Path $env:LOCALAPPDATA "Codistan\Acquisition")
 )
 
 $ErrorActionPreference = "Stop"
+Set-StrictMode -Version Latest
+
 $healthUrl = "http://127.0.0.1:8775/health"
 try {
     $health = Invoke-RestMethod -Uri $healthUrl -TimeoutSec 2
@@ -12,7 +15,7 @@ try {
 } catch {
     $startCommand = Join-Path $InstallRoot "workers\acquisition\START-ACQUISITION-V4.cmd"
     if (-not (Test-Path $startCommand)) { throw "The Sales Automation start command was not found." }
-    Start-Process -FilePath $startCommand -WindowStyle Minimized
+    Start-Process -FilePath $startCommand -WindowStyle Minimized | Out-Null
     $ready = $false
     for ($attempt = 0; $attempt -lt 30; $attempt++) {
         Start-Sleep -Seconds 1
@@ -27,13 +30,10 @@ try {
     if (-not $ready) { throw "The LinkedIn collector did not become healthy on port 8775." }
 }
 
-$chromeCandidates = @(
-    (Join-Path $env:ProgramFiles "Google\Chrome\Application\chrome.exe"),
-    (if (${env:ProgramFiles(x86)}) { Join-Path ${env:ProgramFiles(x86)} "Google\Chrome\Application\chrome.exe" } else { $null }),
-    (Join-Path $env:LOCALAPPDATA "Google\Chrome\Application\chrome.exe")
-)
-$chrome = $chromeCandidates | Where-Object { $_ -and (Test-Path -LiteralPath $_) } | Select-Object -First 1
-if (-not $chrome) { throw "Google Chrome was not found." }
+$browserBootstrap = Join-Path $PSScriptRoot "chromium-browser.ps1"
+if (-not (Test-Path -LiteralPath $browserBootstrap)) { throw "The browser discovery module was not found." }
+. $browserBootstrap
+$browser = Get-CodistanChromiumBrowser -StateRoot $StateRoot
 
 # These searches bias toward buyer-authored vendor/agency requests and away from employment posts.
 $queries = @(
@@ -47,5 +47,5 @@ $urls = $queries | ForEach-Object {
     "https://www.linkedin.com/search/results/content/?keywords=$([uri]::EscapeDataString($_))&origin=GLOBAL_SEARCH_HEADER"
 }
 $chromeArguments = @("--new-window") + @($urls)
-Start-Process -FilePath $chrome -ArgumentList $chromeArguments
-Write-Host "Opened five high-intent buyer-request LinkedIn searches in normal Chrome."
+Start-Process -FilePath ([string]$browser.Executable) -ArgumentList $chromeArguments | Out-Null
+Write-Host "Opened five high-intent buyer-request LinkedIn searches in $($browser.Name)."
