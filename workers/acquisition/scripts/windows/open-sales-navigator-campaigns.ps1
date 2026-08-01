@@ -5,65 +5,46 @@ param(
 $ErrorActionPreference = "Stop"
 Set-StrictMode -Version Latest
 
-$chromeCandidates = @(
-    (Join-Path $env:ProgramFiles "Google\Chrome\Application\chrome.exe"),
-    (if (${env:ProgramFiles(x86)}) { Join-Path ${env:ProgramFiles(x86)} "Google\Chrome\Application\chrome.exe" } else { $null }),
-    (Join-Path $env:LOCALAPPDATA "Google\Chrome\Application\chrome.exe")
-)
-$chrome = $chromeCandidates | Where-Object { $_ -and (Test-Path -LiteralPath $_) } | Select-Object -First 1
-if (-not $chrome) { throw "Google Chrome was not found." }
+$browserBootstrap = Join-Path $PSScriptRoot "chromium-browser.ps1"
+if (-not (Test-Path -LiteralPath $browserBootstrap)) { throw "The browser discovery module was not found." }
+. $browserBootstrap
+$browser = Get-CodistanChromiumBrowser -StateRoot $StateRoot
 
 $expectedPath = [System.IO.Path]::GetFullPath((Join-Path $StateRoot "extensions\linkedin")).TrimEnd("\")
-$userDataRoot = Join-Path $env:LOCALAPPDATA "Google\Chrome\User Data"
 $extensionId = ""
-$profileName = ""
+$profileArgument = ""
+$markerPath = Join-Path $StateRoot "config\browser-extensions-confirmed.json"
 
-if (Test-Path -LiteralPath $userDataRoot) {
-    $profiles = @(Get-ChildItem -LiteralPath $userDataRoot -Directory -ErrorAction SilentlyContinue |
-        Where-Object { $_.Name -eq "Default" -or $_.Name -like "Profile *" })
-    foreach ($profile in $profiles) {
-        foreach ($preferenceName in @("Preferences", "Secure Preferences")) {
-            $preferencePath = Join-Path $profile.FullName $preferenceName
-            if (-not (Test-Path -LiteralPath $preferencePath)) { continue }
-            try {
-                $preferences = Get-Content -LiteralPath $preferencePath -Raw | ConvertFrom-Json
-                $settings = $preferences.extensions.settings
-                if (-not $settings) { continue }
-                foreach ($property in $settings.PSObject.Properties) {
-                    $setting = $property.Value
-                    $storedPath = [string]$setting.path
-                    $manifestName = [string]$setting.manifest.name
-                    $normalizedStoredPath = ""
-                    if ($storedPath) {
-                        try { $normalizedStoredPath = [System.IO.Path]::GetFullPath($storedPath).TrimEnd("\") } catch {}
-                    }
-                    if ($normalizedStoredPath -eq $expectedPath -or $manifestName -eq "Codistan LinkedIn & Sales Navigator Capture") {
-                        $extensionId = [string]$property.Name
-                        $profileName = $profile.Name
-                        break
-                    }
-                }
-            } catch {
-                continue
-            }
-            if ($extensionId) { break }
+if (Test-Path -LiteralPath $markerPath) {
+    try {
+        $marker = Get-Content -LiteralPath $markerPath -Raw | ConvertFrom-Json
+        if ([string]$marker.browser_id -eq [string]$browser.Id) {
+            $extensionId = [string]$marker.linkedin_sales_navigator_extension_id
         }
-        if ($extensionId) { break }
+    } catch {}
+}
+
+if (-not $extensionId) {
+    $installation = Find-CodistanBrowserExtension `
+        -Browser $browser `
+        -ExtensionName "Codistan LinkedIn & Sales Navigator Capture" `
+        -ExpectedPath $expectedPath
+    if ($installation) {
+        $extensionId = [string]$installation.Id
+        $profileArgument = [string]$installation.BrowserArgument
     }
 }
 
 if ($extensionId) {
     $arguments = @()
-    if ($profileName -and $profileName -ne "Default") {
-        $arguments += "--profile-directory=$profileName"
-    }
+    if ($profileArgument) { $arguments += $profileArgument }
     $arguments += "--new-window"
     $arguments += "chrome-extension://$extensionId/sales-nav-options.html"
-    Start-Process -FilePath $chrome -ArgumentList $arguments | Out-Null
-    Write-Host "Opened Sales Navigator campaign settings."
+    Start-Process -FilePath ([string]$browser.Executable) -ArgumentList $arguments | Out-Null
+    Write-Host "Opened Sales Navigator campaign settings in $($browser.Name)."
     Write-Host "Register licensed lead-search URLs, run a manual campaign, and keep the no-confirmed-intent warning."
     exit 0
 }
 
-Start-Process -FilePath $chrome -ArgumentList @("--new-window", "chrome://extensions/") | Out-Null
-throw "The Codistan LinkedIn extension ID could not be located. Confirm the unpacked extension is loaded, then rerun this shortcut."
+Start-Process -FilePath ([string]$browser.Executable) -ArgumentList @("--new-window", [string]$browser.ExtensionsUrl) | Out-Null
+throw "The Codistan LinkedIn extension ID could not be located in $($browser.Name). Confirm the unpacked extension is loaded, then rerun this shortcut."
