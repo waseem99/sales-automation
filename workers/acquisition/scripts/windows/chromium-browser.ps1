@@ -7,6 +7,10 @@ function Get-OptionalPropertyValue {
         [AllowNull()][object]$DefaultValue = $null
     )
     if ($null -eq $InputObject) { return $DefaultValue }
+    if ($InputObject -is [System.Collections.IDictionary]) {
+        if ($InputObject.Contains($Name)) { return $InputObject[$Name] }
+        return $DefaultValue
+    }
     $property = $InputObject.PSObject.Properties[$Name]
     if ($null -eq $property) { return $DefaultValue }
     return $property.Value
@@ -35,83 +39,108 @@ function Get-CodistanDefaultBrowserHint {
     }
 }
 
+function New-CodistanBrowserCandidate {
+    param(
+        [Parameter(Mandatory = $true)][string]$Id,
+        [Parameter(Mandatory = $true)][string]$Name,
+        [Parameter(Mandatory = $true)][string[]]$ExecutablePaths,
+        [Parameter(Mandatory = $true)][string]$ExtensionsUrl,
+        [Parameter(Mandatory = $true)][string[]]$ProgIdPatterns,
+        [Parameter(Mandatory = $true)][string[]]$ProfileRoots
+    )
+    return [pscustomobject]@{
+        Id = $Id
+        Name = $Name
+        ExecutablePaths = @($ExecutablePaths | Where-Object { -not [string]::IsNullOrWhiteSpace([string]$_) })
+        ExtensionsUrl = $ExtensionsUrl
+        ProgIdPatterns = @($ProgIdPatterns)
+        ProfileRoots = @($ProfileRoots | Where-Object { -not [string]::IsNullOrWhiteSpace([string]$_) })
+    }
+}
+
 function Get-CodistanBrowserCandidates {
     $programFilesX86 = ${env:ProgramFiles(x86)}
+
+    $chromePaths = New-Object System.Collections.Generic.List[string]
+    [void]$chromePaths.Add((Join-Path $env:ProgramFiles "Google\Chrome\Application\chrome.exe"))
+    if (-not [string]::IsNullOrWhiteSpace($programFilesX86)) {
+        [void]$chromePaths.Add((Join-Path $programFilesX86 "Google\Chrome\Application\chrome.exe"))
+    }
+    [void]$chromePaths.Add((Join-Path $env:LOCALAPPDATA "Google\Chrome\Application\chrome.exe"))
+
+    $edgePaths = New-Object System.Collections.Generic.List[string]
+    [void]$edgePaths.Add((Join-Path $env:ProgramFiles "Microsoft\Edge\Application\msedge.exe"))
+    if (-not [string]::IsNullOrWhiteSpace($programFilesX86)) {
+        [void]$edgePaths.Add((Join-Path $programFilesX86 "Microsoft\Edge\Application\msedge.exe"))
+    }
+    [void]$edgePaths.Add((Join-Path $env:LOCALAPPDATA "Microsoft\Edge\Application\msedge.exe"))
+
+    $bravePaths = New-Object System.Collections.Generic.List[string]
+    [void]$bravePaths.Add((Join-Path $env:ProgramFiles "BraveSoftware\Brave-Browser\Application\brave.exe"))
+    if (-not [string]::IsNullOrWhiteSpace($programFilesX86)) {
+        [void]$bravePaths.Add((Join-Path $programFilesX86 "BraveSoftware\Brave-Browser\Application\brave.exe"))
+    }
+    [void]$bravePaths.Add((Join-Path $env:LOCALAPPDATA "BraveSoftware\Brave-Browser\Application\brave.exe"))
+
     $candidates = @(
-        [pscustomobject]@{
-            Id = "opera"
-            Name = "Opera"
-            ExecutablePaths = @(
+        (New-CodistanBrowserCandidate `
+            -Id "opera" `
+            -Name "Opera" `
+            -ExecutablePaths @(
                 (Join-Path $env:LOCALAPPDATA "Programs\Opera\opera.exe"),
                 (Join-Path $env:LOCALAPPDATA "Programs\Opera\launcher.exe"),
                 (Join-Path $env:ProgramFiles "Opera\opera.exe"),
                 (Join-Path $env:ProgramFiles "Opera\launcher.exe")
-            )
-            ExtensionsUrl = "opera://extensions/"
-            ProgIdPatterns = @("Opera")
-            ProfileRoots = @((Join-Path $env:APPDATA "Opera Software\Opera Stable"))
-        },
-        [pscustomobject]@{
-            Id = "opera_gx"
-            Name = "Opera GX"
-            ExecutablePaths = @(
+            ) `
+            -ExtensionsUrl "opera://extensions/" `
+            -ProgIdPatterns @("Opera") `
+            -ProfileRoots @((Join-Path $env:APPDATA "Opera Software\Opera Stable"))),
+        (New-CodistanBrowserCandidate `
+            -Id "opera_gx" `
+            -Name "Opera GX" `
+            -ExecutablePaths @(
                 (Join-Path $env:LOCALAPPDATA "Programs\Opera GX\opera.exe"),
                 (Join-Path $env:LOCALAPPDATA "Programs\Opera GX\launcher.exe")
-            )
-            ExtensionsUrl = "opera://extensions/"
-            ProgIdPatterns = @("Opera GX", "OperaGX")
-            ProfileRoots = @((Join-Path $env:APPDATA "Opera Software\Opera GX Stable"))
-        },
-        [pscustomobject]@{
-            Id = "chrome"
-            Name = "Google Chrome"
-            ExecutablePaths = @(
-                (Join-Path $env:ProgramFiles "Google\Chrome\Application\chrome.exe"),
-                (if ($programFilesX86) { Join-Path $programFilesX86 "Google\Chrome\Application\chrome.exe" } else { $null }),
-                (Join-Path $env:LOCALAPPDATA "Google\Chrome\Application\chrome.exe")
-            )
-            ExtensionsUrl = "chrome://extensions/"
-            ProgIdPatterns = @("ChromeHTML")
-            ProfileRoots = @((Join-Path $env:LOCALAPPDATA "Google\Chrome\User Data"))
-        },
-        [pscustomobject]@{
-            Id = "edge"
-            Name = "Microsoft Edge"
-            ExecutablePaths = @(
-                (Join-Path $env:ProgramFiles "Microsoft\Edge\Application\msedge.exe"),
-                (if ($programFilesX86) { Join-Path $programFilesX86 "Microsoft\Edge\Application\msedge.exe" } else { $null }),
-                (Join-Path $env:LOCALAPPDATA "Microsoft\Edge\Application\msedge.exe")
-            )
-            ExtensionsUrl = "edge://extensions/"
-            ProgIdPatterns = @("MSEdgeHTM")
-            ProfileRoots = @((Join-Path $env:LOCALAPPDATA "Microsoft\Edge\User Data"))
-        },
-        [pscustomobject]@{
-            Id = "brave"
-            Name = "Brave"
-            ExecutablePaths = @(
-                (Join-Path $env:ProgramFiles "BraveSoftware\Brave-Browser\Application\brave.exe"),
-                (if ($programFilesX86) { Join-Path $programFilesX86 "BraveSoftware\Brave-Browser\Application\brave.exe" } else { $null }),
-                (Join-Path $env:LOCALAPPDATA "BraveSoftware\Brave-Browser\Application\brave.exe")
-            )
-            ExtensionsUrl = "brave://extensions/"
-            ProgIdPatterns = @("BraveHTML")
-            ProfileRoots = @((Join-Path $env:LOCALAPPDATA "BraveSoftware\Brave-Browser\User Data"))
-        }
+            ) `
+            -ExtensionsUrl "opera://extensions/" `
+            -ProgIdPatterns @("Opera GX", "OperaGX") `
+            -ProfileRoots @((Join-Path $env:APPDATA "Opera Software\Opera GX Stable"))),
+        (New-CodistanBrowserCandidate `
+            -Id "chrome" `
+            -Name "Google Chrome" `
+            -ExecutablePaths @($chromePaths) `
+            -ExtensionsUrl "chrome://extensions/" `
+            -ProgIdPatterns @("ChromeHTML") `
+            -ProfileRoots @((Join-Path $env:LOCALAPPDATA "Google\Chrome\User Data"))),
+        (New-CodistanBrowserCandidate `
+            -Id "edge" `
+            -Name "Microsoft Edge" `
+            -ExecutablePaths @($edgePaths) `
+            -ExtensionsUrl "edge://extensions/" `
+            -ProgIdPatterns @("MSEdgeHTM") `
+            -ProfileRoots @((Join-Path $env:LOCALAPPDATA "Microsoft\Edge\User Data"))),
+        (New-CodistanBrowserCandidate `
+            -Id "brave" `
+            -Name "Brave" `
+            -ExecutablePaths @($bravePaths) `
+            -ExtensionsUrl "brave://extensions/" `
+            -ProgIdPatterns @("BraveHTML") `
+            -ProfileRoots @((Join-Path $env:LOCALAPPDATA "BraveSoftware\Brave-Browser\User Data")))
     )
 
-    $available = foreach ($candidate in $candidates) {
+    $available = New-Object System.Collections.Generic.List[object]
+    foreach ($candidate in $candidates) {
         $paths = @(Get-OptionalPropertyValue -InputObject $candidate -Name "ExecutablePaths" -DefaultValue @())
         $executable = @($paths | Where-Object { $_ -and (Test-Path -LiteralPath $_) }) | Select-Object -First 1
         if (-not $executable) { continue }
-        [pscustomobject]@{
+        [void]$available.Add([pscustomobject]@{
             Id = [string](Get-OptionalPropertyValue -InputObject $candidate -Name "Id" -DefaultValue "")
             Name = [string](Get-OptionalPropertyValue -InputObject $candidate -Name "Name" -DefaultValue "")
             Executable = [string]$executable
             ExtensionsUrl = [string](Get-OptionalPropertyValue -InputObject $candidate -Name "ExtensionsUrl" -DefaultValue "")
             ProgIdPatterns = @(Get-OptionalPropertyValue -InputObject $candidate -Name "ProgIdPatterns" -DefaultValue @())
             ProfileRoots = @((Get-OptionalPropertyValue -InputObject $candidate -Name "ProfileRoots" -DefaultValue @()) | Where-Object { $_ })
-        }
+        })
     }
     return @($available)
 }
@@ -150,7 +179,9 @@ function Get-CodistanChromiumBrowser {
     }
 
     foreach ($preferredId in @("opera", "opera_gx", "chrome", "edge", "brave")) {
-        $candidate = $available | Where-Object { [string](Get-OptionalPropertyValue -InputObject $_ -Name "Id" -DefaultValue "") -eq $preferredId } | Select-Object -First 1
+        $candidate = $available | Where-Object {
+            [string](Get-OptionalPropertyValue -InputObject $_ -Name "Id" -DefaultValue "") -eq $preferredId
+        } | Select-Object -First 1
         if ($candidate) { return $candidate }
     }
     return $available[0]
@@ -163,11 +194,11 @@ function Get-CodistanBrowserProfileDirectories {
         if (-not (Test-Path -LiteralPath $root)) { continue }
 
         if (Test-Path -LiteralPath (Join-Path $root "Preferences")) {
-            $profiles.Add([pscustomobject]@{
+            [void]$profiles.Add([pscustomobject]@{
                 Name = [System.IO.Path]::GetFileName($root)
                 Path = $root
                 BrowserArgument = ""
-            }) | Out-Null
+            })
         }
 
         foreach ($directory in @(Get-ChildItem -LiteralPath $root -Directory -ErrorAction SilentlyContinue)) {
@@ -175,11 +206,11 @@ function Get-CodistanBrowserProfileDirectories {
             if ($directoryName -ne "Default" -and $directoryName -notlike "Profile *") { continue }
             $directoryPath = [string](Get-OptionalPropertyValue -InputObject $directory -Name "FullName" -DefaultValue "")
             if ([string]::IsNullOrWhiteSpace($directoryPath)) { continue }
-            $profiles.Add([pscustomobject]@{
+            [void]$profiles.Add([pscustomobject]@{
                 Name = $directoryName
                 Path = $directoryPath
                 BrowserArgument = "--profile-directory=$directoryName"
-            }) | Out-Null
+            })
         }
     }
     return @($profiles)
