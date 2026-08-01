@@ -11,6 +11,7 @@ class WindowsManualStartTests(unittest.TestCase):
         cls.root = Path(__file__).resolve().parents[1]
         cls.installer = (cls.root / "scripts/windows/install-acquisition-v4.ps1").read_text(encoding="utf-8")
         cls.cleanup = (cls.root / "scripts/windows/cleanup-sales-automation-autostart.ps1").read_text(encoding="utf-8")
+        cls.start = (cls.root / "scripts/windows/start-acquisition-v4.ps1").read_text(encoding="utf-8")
         cls.stop = (cls.root / "scripts/windows/stop-sales-automation.ps1").read_text(encoding="utf-8")
         cls.stop_cmd = (cls.root / "STOP-SALES-AUTOMATION.cmd").read_text(encoding="utf-8")
         cls.cleanup_cmd = (cls.root / "CLEANUP-SALES-AUTOMATION-AUTOSTART.cmd").read_text(encoding="utf-8")
@@ -61,6 +62,15 @@ class WindowsManualStartTests(unittest.TestCase):
             self.assertIn(marker, self.cleanup)
         self.assertNotIn("$_.Execute", self.cleanup)
         self.assertNotIn("$_.Arguments", self.cleanup)
+
+    def test_legacy_collectors_are_recognized_without_killing_unrelated_port_owners(self) -> None:
+        for content in [self.start, self.stop]:
+            self.assertIn("Test-CodistanCollectorCommandLine", content)
+            self.assertIn("acquisition_v4\\.(?:supervisor|runtime|runtime_v5)", content)
+            self.assertIn("Get-NetTCPConnection", content)
+            self.assertIn("8765, 8775, 8785", content)
+        self.assertIn("unrelated process owns a collector port", self.start)
+        self.assertIn("Never terminate an unrelated port owner", self.stop)
 
     def test_stop_and_cleanup_preserve_operational_state(self) -> None:
         for content in [self.installer, self.cleanup, self.stop]:
