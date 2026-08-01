@@ -67,7 +67,7 @@ jobs:
         run: python -m unittest discover -s tests -p 'test_windows*.py' -v
 
   windows-runtime-smoke:
-    name: Install and run collectors on Windows
+    name: Install and run one-click pilot on Windows
     runs-on: windows-latest
     timeout-minutes: 15
 
@@ -84,7 +84,7 @@ jobs:
         with:
           python-version: '3.12'
 
-      - name: Exercise legacy cleanup, install, health and stop
+      - name: Exercise legacy cleanup, install, operational start, health and stop
         shell: powershell
         run: |
           $ErrorActionPreference = "Stop"
@@ -168,16 +168,32 @@ jobs:
               throw "Installed supervisor package was not found."
             }
 
-            $startCommand = Join-Path $installedRoot "START-ACQUISITION-V4.cmd"
-            Start-Process -FilePath $startCommand -WindowStyle Hidden | Out-Null
-            if (-not (Wait-Health -TimeoutSeconds 90)) {
-              throw "The installed collectors did not reach the exact safe health contract."
+            $operationalScript = Join-Path $installedRoot "scripts\windows\run-sales-automation-operational.ps1"
+            & $operationalScript `
+              -StateRoot $stateRoot `
+              -SkipBrowserSetup `
+              -SkipSourceLaunch `
+              -SkipLeadDesk
+
+            if (-not (Wait-Health -TimeoutSeconds 30)) {
+              throw "The one-click operational start did not leave all collectors on the exact safe health contract."
+            }
+
+            $operationalStatus = Join-Path $stateRoot "status\operational-status.json"
+            if (-not (Test-Path -LiteralPath $operationalStatus)) {
+              throw "The one-click operational status record was not written."
+            }
+            $statusValue = Get-Content -LiteralPath $operationalStatus -Raw | ConvertFrom-Json
+            if ([string]$statusValue.status -ne "running_and_capture_opened") {
+              throw "Unexpected operational status: $($statusValue.status)"
             }
 
             & (Join-Path $installedRoot "scripts\windows\stop-sales-automation.ps1") -StateRoot $stateRoot
             Start-Sleep -Seconds 2
             Assert-PortsFree
           } catch {
+            Write-Host "--- operational status ---"
+            Get-Content -LiteralPath (Join-Path $stateRoot "status\operational-status.json") -ErrorAction SilentlyContinue
             Write-Host "--- watchdog log ---"
             Get-Content -LiteralPath (Join-Path $stateRoot "logs\watchdog.log") -Tail 120 -ErrorAction SilentlyContinue
             Write-Host "--- runtime log ---"
