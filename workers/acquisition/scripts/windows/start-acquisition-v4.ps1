@@ -18,6 +18,12 @@ function Get-OptionalPropertyValue {
     return $property.Value
 }
 
+function Test-CodistanCollectorCommandLine {
+    param([string]$CommandLine)
+    if ([string]::IsNullOrWhiteSpace($CommandLine)) { return $false }
+    return $CommandLine -match '(?i)(?:-m\s+acquisition_v4\.(?:supervisor|runtime|runtime_v5)\b|acquisition_v4[\\/](?:supervisor|runtime|runtime_v5)\.py\b|Codistan[\\/]Acquisition.*(?:8765|8775|8785))'
+}
+
 $pythonBootstrap = Join-Path $PSScriptRoot "python-bootstrap.ps1"
 if (-not (Test-Path -LiteralPath $pythonBootstrap)) {
     throw "The Sales Automation Python bootstrap was not found. Reinstall Sales Automation."
@@ -27,8 +33,12 @@ $pythonCommand = Get-CodistanPythonCommand
 if (-not $pythonCommand) {
     throw "Python 3.12 or later is required. Run SETUP-AND-RUN-SALES-AUTOMATION.cmd once."
 }
-$pythonExe = [string]$pythonCommand.Executable
-$pythonArgs = @($pythonCommand.Arguments)
+$pythonExe = [string](Get-OptionalPropertyValue -InputObject $pythonCommand -Name "Executable" -DefaultValue "")
+$pythonArgs = @(Get-OptionalPropertyValue -InputObject $pythonCommand -Name "Arguments" -DefaultValue @())
+$pythonVersion = [string](Get-OptionalPropertyValue -InputObject $pythonCommand -Name "Version" -DefaultValue "")
+if ([string]::IsNullOrWhiteSpace($pythonExe)) {
+    throw "The Python bootstrap returned no executable. Re-run setup."
+}
 
 $packageRoot = Join-Path $InstallRoot "workers\acquisition"
 $env:PYTHONPATH = $packageRoot
@@ -45,7 +55,7 @@ $collectorPorts = @(8765, 8775, 8785)
 
 function Write-WatchdogLog([string]$Message) {
     $line = "{0} {1}" -f (Get-Date).ToString("o"), $Message
-    Add-Content -Path $watchdogLog -Value $line -Encoding UTF8
+    Add-Content -LiteralPath $watchdogLog -Value $line -Encoding UTF8
     Write-Host $Message
 }
 
@@ -84,8 +94,8 @@ try {
         exit 0
     }
 
-    Set-Content -Path $watchdogPidFile -Value $PID -Encoding ASCII
-    Write-WatchdogLog "Sales Automation watchdog started with PID $PID using Python $($pythonCommand.Version)."
+    Set-Content -LiteralPath $watchdogPidFile -Value $PID -Encoding ASCII
+    Write-WatchdogLog "Sales Automation watchdog started with PID $PID using Python $pythonVersion."
     Write-Host "State: $StateRoot"
     Write-Host "Upwork collector:          http://127.0.0.1:8765/health"
     Write-Host "LinkedIn collector:        http://127.0.0.1:8775/health"
@@ -110,24 +120,28 @@ try {
             $localPort = 0
             [void][int]::TryParse([string](Get-OptionalPropertyValue -InputObject $listener -Name "LocalPort" -DefaultValue 0), [ref]$localPort)
             $process = Get-CimInstance Win32_Process -Filter "ProcessId=$listenerProcessId" -ErrorAction SilentlyContinue
+            $commandLine = [string](Get-OptionalPropertyValue -InputObject $process -Name "CommandLine" -DefaultValue "")
+            $processName = [string](Get-OptionalPropertyValue -InputObject $process -Name "Name" -DefaultValue "unknown")
             $entry = [pscustomobject]@{
                 Port = $localPort
                 ProcessId = $listenerProcessId
-                CommandLine = [string](Get-OptionalPropertyValue -InputObject $process -Name "CommandLine" -DefaultValue "")
+                ProcessName = $processName
+                CommandLine = $commandLine
             }
-            if ($entry.CommandLine -match "acquisition_v4\.supervisor") { $managedListeners += $entry }
+            if (Test-CodistanCollectorCommandLine -CommandLine $commandLine) { $managedListeners += $entry }
             else { $foreignListeners += $entry }
         }
 
         if (@($foreignListeners).Count -gt 0) {
-            $summary = ($foreignListeners | ForEach-Object { "port $($_.Port), PID $($_.ProcessId)" }) -join "; "
-            Write-WatchdogLog "Cannot start Sales Automation because another process owns a collector port: $summary. Retrying in 30 seconds."
+            $summary = ($foreignListeners | ForEach-Object { "port $($_.Port), PID $($_.ProcessId), process $($_.ProcessName)" }) -join "; "
+            Write-WatchdogLog "Cannot start Sales Automation because an unrelated process owns a collector port: $summary. Retrying in 30 seconds."
             Start-Sleep -Seconds 30
             continue
         }
 
-        foreach ($listenerProcessId in @($managedListeners | Select-Object -ExpandProperty ProcessId -Unique)) {
-            Stop-Process -Id $listenerProcessId -Force -ErrorAction SilentlyContinue
+        foreach ($managed in @($managedListeners)) {
+            Write-WatchdogLog "Stopping stale managed collector on port $($managed.Port), PID $($managed.ProcessId)."
+            Stop-Process -Id $managed.ProcessId -Force -ErrorAction SilentlyContinue
         }
         if (Test-Path -LiteralPath $runtimePidFile) {
             $runtimeProcessId = 0
@@ -142,7 +156,7 @@ try {
         Start-Sleep -Seconds 2
 
         Write-WatchdogLog "Starting Sales Automation supervisor."
-        Add-Content -Path $runtimeLog -Value ("`r`n===== {0} supervisor start =====" -f (Get-Date).ToString("o")) -Encoding UTF8
+        Add-Content -LiteralPath $runtimeLog -Value ("`r`n===== {0} supervisor start =====" -f (Get-Date).ToString("o")) -Encoding UTF8
         & $pythonExe @pythonArgs -u -m acquisition_v4.supervisor `
             --state-root $StateRoot `
             --pid-file $runtimePidFile >> $runtimeLog 2>&1
