@@ -16,6 +16,9 @@ function Get-OptionalPropertyValue {
         [AllowNull()][object]$DefaultValue = $null
     )
     if ($null -eq $InputObject) { return $DefaultValue }
+    if ($InputObject -is [System.Collections.IDictionary]) {
+        if ($InputObject.Contains($Name)) { return $InputObject[$Name] }
+    }
     $property = $InputObject.PSObject.Properties[$Name]
     if ($null -eq $property) { return $DefaultValue }
     return $property.Value
@@ -41,7 +44,7 @@ function Get-OperationalHealth {
             $enriched = 0
             [void][int]::TryParse([string](Get-OptionalPropertyValue -InputObject $health -Name "accepted" -DefaultValue 0), [ref]$accepted)
             [void][int]::TryParse([string](Get-OptionalPropertyValue -InputObject $health -Name "enriched" -DefaultValue 0), [ref]$enriched)
-            $results[$entry.Key] = [ordered]@{
+            $results[$entry.Key] = [pscustomobject][ordered]@{
                 reachable = $true
                 ready = ((Get-OptionalPropertyValue -InputObject $health -Name "ready" -DefaultValue $false) -eq $true)
                 schema_version = [string](Get-OptionalPropertyValue -InputObject $health -Name "schema_version" -DefaultValue "")
@@ -50,9 +53,10 @@ function Get-OperationalHealth {
                 accepted = $accepted
                 enriched = $enriched
                 external_actions_enabled = Get-OptionalPropertyValue -InputObject $health -Name "external_actions_enabled" -DefaultValue $null
+                error = ""
             }
         } catch {
-            $results[$entry.Key] = [ordered]@{
+            $results[$entry.Key] = [pscustomobject][ordered]@{
                 reachable = $false
                 ready = $false
                 schema_version = ""
@@ -68,18 +72,42 @@ function Get-OperationalHealth {
     return $results
 }
 
+function Get-OperationalHealthFailures {
+    param([object]$Health)
+    $failures = New-Object System.Collections.Generic.List[string]
+    foreach ($source in $healthEndpoints.Keys) {
+        if ($null -eq $Health -or -not $Health.Contains($source)) {
+            [void]$failures.Add("${source}: result missing")
+            continue
+        }
+        $entry = $Health[$source]
+        if ((Get-OptionalPropertyValue -InputObject $entry -Name "reachable" -DefaultValue $false) -ne $true) {
+            $errorText = [string](Get-OptionalPropertyValue -InputObject $entry -Name "error" -DefaultValue "unreachable")
+            [void]$failures.Add("${source}: unreachable ($errorText)")
+            continue
+        }
+        if ((Get-OptionalPropertyValue -InputObject $entry -Name "ready" -DefaultValue $false) -ne $true) {
+            [void]$failures.Add("${source}: ready was not true")
+        }
+        $schema = [string](Get-OptionalPropertyValue -InputObject $entry -Name "schema_version" -DefaultValue "")
+        if ($schema -ne "codistan-acquisition-health.v1") {
+            [void]$failures.Add("${source}: schema '$schema'")
+        }
+        $reportedSource = [string](Get-OptionalPropertyValue -InputObject $entry -Name "source" -DefaultValue "")
+        if ($reportedSource -ne $source) {
+            [void]$failures.Add("${source}: endpoint reported '$reportedSource'")
+        }
+        $external = Get-OptionalPropertyValue -InputObject $entry -Name "external_actions_enabled" -DefaultValue $null
+        if ($external -ne $false) {
+            [void]$failures.Add("${source}: external_actions_enabled was not false")
+        }
+    }
+    return @($failures)
+}
+
 function Test-OperationalHealth {
     param([object]$Health)
-    foreach ($source in $healthEndpoints.Keys) {
-        if ($null -eq $Health -or -not $Health.Contains($source)) { return $false }
-        $entry = $Health[$source]
-        if ((Get-OptionalPropertyValue -InputObject $entry -Name "reachable" -DefaultValue $false) -ne $true) { return $false }
-        if ((Get-OptionalPropertyValue -InputObject $entry -Name "ready" -DefaultValue $false) -ne $true) { return $false }
-        if ([string](Get-OptionalPropertyValue -InputObject $entry -Name "schema_version" -DefaultValue "") -ne "codistan-acquisition-health.v1") { return $false }
-        if ([string](Get-OptionalPropertyValue -InputObject $entry -Name "source" -DefaultValue "") -ne $source) { return $false }
-        if ((Get-OptionalPropertyValue -InputObject $entry -Name "external_actions_enabled" -DefaultValue $null) -ne $false) { return $false }
-    }
-    return $true
+    return @(Get-OperationalHealthFailures -Health $Health).Count -eq 0
 }
 
 function Wait-OperationalHealth {
@@ -109,6 +137,7 @@ function Write-OperationalStatus {
         state_root = $StateRoot
         browser_setup_confirmed = Test-Path -LiteralPath (Join-Path $StateRoot "config\browser-extensions-confirmed.json")
         collectors = $Health
+        health_failures = @(Get-OperationalHealthFailures -Health $Health)
         external_actions_enabled = $false
     } | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath $statusPath -Encoding UTF8
     return $statusPath
@@ -144,7 +173,8 @@ if (-not (Test-OperationalHealth -Health $health)) {
 
 if (-not (Test-OperationalHealth -Health $health)) {
     $statusPath = Write-OperationalStatus -Health $health -Status "collector_start_failed"
-    throw "The three collectors did not become healthy. Review $statusPath and $StateRoot\logs\runtime.log."
+    $failureSummary = @(Get-OperationalHealthFailures -Health $health) -join "; "
+    throw "The three collectors did not become healthy: $failureSummary. Review $statusPath and $StateRoot\logs\runtime.log."
 }
 
 Write-Host "All three collectors are ready." -ForegroundColor Green
