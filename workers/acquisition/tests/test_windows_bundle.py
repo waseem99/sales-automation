@@ -61,14 +61,14 @@ class WindowsBundleTests(unittest.TestCase):
             "watchdog.pid", "watchdog.lock", "watchdog.log", "runtime.log",
             "Test-CollectorHealth", "while ($true)", "Restarting in 5 seconds",
             "acquisition_v4.supervisor", "Sales Navigator collector", "8765, 8775, 8785",
-            "Get-OptionalPropertyValue",
+            "Get-OptionalPropertyValue", "Test-CodistanCollectorCommandLine",
         ]:
             self.assertIn(marker, starter)
 
         for marker in [
             "watchdog.pid", "runtime.pid", "watchdog.lock", "8765, 8775, 8785",
-            "acquisition_v4\\.supervisor", "Operational state preserved at",
-            "Get-OptionalPropertyValue",
+            "Test-CodistanCollectorCommandLine", "acquisition_v4\\.(?:supervisor|runtime|runtime_v5)",
+            "Operational state preserved at", "Get-OptionalPropertyValue",
         ]:
             self.assertIn(marker, stopper)
 
