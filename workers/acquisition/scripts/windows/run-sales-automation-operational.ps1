@@ -95,6 +95,27 @@ function Write-OperationalStatus {
     return $statusPath
 }
 
+function Test-BrowserSetupCurrent {
+    $markerPath = Join-Path $StateRoot "config\browser-extensions-confirmed.json"
+    $upworkManifestPath = Join-Path $StateRoot "extensions\upwork\manifest.json"
+    $linkedinManifestPath = Join-Path $StateRoot "extensions\linkedin\manifest.json"
+    if (-not (Test-Path -LiteralPath $markerPath)) { return $false }
+    if (-not (Test-Path -LiteralPath $upworkManifestPath) -or -not (Test-Path -LiteralPath $linkedinManifestPath)) { return $false }
+    try {
+        $marker = Get-Content -LiteralPath $markerPath -Raw | ConvertFrom-Json
+        $upworkManifest = Get-Content -LiteralPath $upworkManifestPath -Raw | ConvertFrom-Json
+        $linkedinManifest = Get-Content -LiteralPath $linkedinManifestPath -Raw | ConvertFrom-Json
+        return (
+            $marker.confirmed -eq $true -and
+            [string]$marker.upwork_extension_version -eq [string]$upworkManifest.version -and
+            [string]$marker.linkedin_sales_navigator_extension_version -eq [string]$linkedinManifest.version -and
+            $marker.external_actions_enabled -eq $false
+        )
+    } catch {
+        return $false
+    }
+}
+
 $health = Get-OperationalHealth
 if (-not (Test-OperationalHealth -Health $health)) {
     Write-Host "Starting Sales Automation collectors..." -ForegroundColor Cyan
@@ -119,8 +140,7 @@ if ($RuntimeOnly) {
     exit 0
 }
 
-$browserMarker = Join-Path $StateRoot "config\browser-extensions-confirmed.json"
-if (-not $SkipBrowserSetup -and -not (Test-Path -LiteralPath $browserMarker)) {
+if (-not $SkipBrowserSetup -and -not (Test-BrowserSetupCurrent)) {
     & (Join-Path $commands "scripts\windows\setup-sales-automation-extensions.ps1") -StateRoot $StateRoot
 }
 
@@ -130,11 +150,13 @@ $pythonCommand = Get-CodistanPythonCommand
 if (-not $pythonCommand) {
     throw "Python is unavailable after installation. Run setup again."
 }
+$pythonExecutable = [string]$pythonCommand.Executable
+$pythonArguments = @($pythonCommand.Arguments)
 $previousPythonPath = $env:PYTHONPATH
 $env:PYTHONPATH = $commands
 try {
     $reviewCode = "from pathlib import Path; from acquisition_v4.review_v5 import write_review_outputs; write_review_outputs(Path(__import__('sys').argv[1]))"
-    & $pythonCommand.Executable @($pythonCommand.Arguments) -c $reviewCode $StateRoot | Out-Null
+    & $pythonExecutable @pythonArguments -c $reviewCode $StateRoot | Out-Null
     if ($LASTEXITCODE -ne 0) { throw "The local lead desk could not be generated." }
 } finally {
     $env:PYTHONPATH = $previousPythonPath
