@@ -86,4 +86,27 @@ $markerPath = Join-Path $configRoot "browser-extensions-confirmed.json"
     external_actions_enabled = $false
 } | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath $markerPath -Encoding UTF8
 
+$commands = Join-Path $StateRoot "app-current\workers\acquisition"
+$campaignCommand = Join-Path $commands "OPEN-SALES-NAVIGATOR-CAMPAIGNS.cmd"
+if (Test-Path -LiteralPath $campaignCommand) {
+    $desktop = [Environment]::GetFolderPath("Desktop")
+    $shortcutPath = Join-Path $desktop "Sales Navigator Campaigns.lnk"
+    $shell = New-Object -ComObject WScript.Shell
+    $shortcut = $shell.CreateShortcut($shortcutPath)
+    $shortcut.TargetPath = $campaignCommand
+    $shortcut.WorkingDirectory = $commands
+    $shortcut.WindowStyle = 1
+    $shortcut.Save()
+}
+
 Write-Host "Browser extension setup confirmed: $markerPath" -ForegroundColor Green
+Write-Host "A Sales Navigator Campaigns shortcut is available on the desktop."
+
+$campaignScript = Join-Path $commands "scripts\windows\open-sales-navigator-campaigns.ps1"
+if (Test-Path -LiteralPath $campaignScript) {
+    try {
+        & $campaignScript -StateRoot $StateRoot
+    } catch {
+        Write-Warning "Sales Navigator campaign settings were not opened automatically: $($_.Exception.Message)"
+    }
+}
