@@ -25,6 +25,8 @@ if (-not (Test-Path -LiteralPath $pythonBootstrap)) {
 }
 . $pythonBootstrap
 $pythonCommand = Ensure-CodistanPython
+$pythonExecutable = [string]$pythonCommand.Executable
+$pythonArguments = @($pythonCommand.Arguments)
 
 New-Item -ItemType Directory -Force -Path $StateRoot | Out-Null
 $configDirectory = Join-Path $StateRoot "config"
@@ -180,7 +182,7 @@ $previousPythonPath = $env:PYTHONPATH
 $env:PYTHONPATH = $commands
 try {
     $reviewCode = "from pathlib import Path; from acquisition_v4.review_v5 import write_review_outputs; write_review_outputs(Path(__import__('sys').argv[1]))"
-    & $pythonCommand.Executable @($pythonCommand.Arguments) -c $reviewCode $StateRoot | Out-Null
+    & $pythonExecutable @pythonArguments -c $reviewCode $StateRoot | Out-Null
     if ($LASTEXITCODE -ne 0) { throw "The initial local lead desk could not be generated." }
 } finally {
     $env:PYTHONPATH = $previousPythonPath
@@ -195,6 +197,7 @@ Write-Host "LinkedIn/Sales Navigator extension: $($release.components.linkedin_s
 Write-Host "Extensions: $extensionRoot"
 Write-Host "State preserved at: $StateRoot"
 Write-Host "Lead desk: $StateRoot\review\index.html"
+Write-Host "Sync sources: LinkedIn warm, Upwork warm and Sales Navigator cold campaigns"
 Write-Host "External actions remain disabled."
 if ($EnableAutoStart) {
     Write-Warning "Runtime-only Windows startup was explicitly enabled."
