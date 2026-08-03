@@ -9,7 +9,7 @@ Sales Navigator cold prospects without changing V4 source behavior.
 """
 
 from . import runtime as _runtime
-from .qualification_router import qualify_record
+from .qualification_router_v2 import qualify_record
 from .review_v5 import write_review_outputs
 
 _runtime.qualify_record = qualify_record
