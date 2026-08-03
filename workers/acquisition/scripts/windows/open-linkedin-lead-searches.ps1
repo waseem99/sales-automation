@@ -43,11 +43,14 @@ $queries = @(
     '("looking for" OR "seeking" OR "need recommendations for" OR "request for proposal" OR RFP) AND ("video production agency" OR "animation studio" OR "3D visualization studio" OR "motion graphics agency") NOT hiring NOT job NOT recruiter',
     '("looking for" OR "seeking" OR "need recommendations for" OR "request for proposal" OR RFP OR "project-based engagement") AND ("cybersecurity consultancy" OR "security assessment firm" OR "ISO 27001 consultant" OR "SOC 2 consultant" OR "penetration testing company") NOT hiring NOT job NOT recruiter'
 )
-$urls = $queries | ForEach-Object {
-    "https://www.linkedin.com/search/results/content/?keywords=$([uri]::EscapeDataString($_))&origin=GLOBAL_SEARCH_HEADER"
-}
-$chromeArguments = @("--new-window") + @($urls)
-Start-CodistanBrowser -Browser $browser -Arguments $chromeArguments
-$profileName = [string](Get-OptionalPropertyValue -InputObject $browser -Name "ProfileName" -DefaultValue "")
-$profileSuffix = $(if ($profileName) { ", profile $profileName" } else { "" })
-Write-Host "Opened five high-intent buyer-request LinkedIn searches in $($browser.Name)$profileSuffix."
+
+# Keep one visible LinkedIn tab. The LinkedIn extension's scheduled cycle runs
+# all five approved queries in temporary background tabs and closes each one
+# after capture, so the operator does not need five persistent tabs.
+$workspaceUrl = "https://www.linkedin.com/search/results/content/?keywords=$([uri]::EscapeDataString($queries[0]))&origin=GLOBAL_SEARCH_HEADER"
+Start-CodistanBrowser -Browser $browser -Arguments @($workspaceUrl)
+
+$profileDisplayName = [string](Get-OptionalPropertyValue -InputObject $browser -Name "ProfileDisplayName" -DefaultValue "")
+$profileDirectory = [string](Get-OptionalPropertyValue -InputObject $browser -Name "ProfileDirectoryName" -DefaultValue "")
+$profileLabel = if ($profileDisplayName) { $profileDisplayName } elseif ($profileDirectory) { $profileDirectory } else { "current profile" }
+Write-Host "Opened one governed LinkedIn buyer-intent workspace tab in $($browser.Name), profile $profileLabel."
