@@ -32,7 +32,16 @@ $browser = Get-CodistanChromiumBrowser `
     -PreferredProfileName $PreferredProfileName
 
 $selectedProfile = [string](Get-OptionalPropertyValue -InputObject $browser -Name "ProfileName" -DefaultValue "")
-$profileLabel = if ($selectedProfile) { $selectedProfile } else { "current/default profile" }
+$selectedProfileDisplay = [string](Get-OptionalPropertyValue -InputObject $browser -Name "ProfileDisplayName" -DefaultValue $selectedProfile)
+$profileLabel = "current/default profile"
+if (-not [string]::IsNullOrWhiteSpace($selectedProfileDisplay)) {
+    $profileLabel = $selectedProfileDisplay
+    if ($selectedProfile -and $selectedProfileDisplay -ne $selectedProfile) {
+        $profileLabel = "$selectedProfileDisplay [$selectedProfile]"
+    }
+} elseif ($selectedProfile) {
+    $profileLabel = $selectedProfile
+}
 
 function Test-ExpectedExtensionInstallation {
     param(
@@ -140,6 +149,11 @@ if ($canReuse) {
         -PreferredProfileName $selectedProfile
 }
 
+$upworkExtensionId = ""
+$linkedinExtensionId = ""
+if ($upworkInstallation) { $upworkExtensionId = [string]$upworkInstallation.Id }
+if ($linkedinInstallation) { $linkedinExtensionId = [string]$linkedinInstallation.Id }
+
 $configRoot = Join-Path $StateRoot "config"
 New-Item -ItemType Directory -Force -Path $configRoot | Out-Null
 $markerPath = Join-Path $configRoot "browser-extensions-confirmed.json"
@@ -153,11 +167,13 @@ $markerPath = Join-Path $configRoot "browser-extensions-confirmed.json"
     browser_executable = [string]$browser.Executable
     browser_extensions_url = [string]$browser.ExtensionsUrl
     browser_profile = $selectedProfile
+    browser_profile_directory = $selectedProfile
+    browser_profile_display_name = $selectedProfileDisplay
     browser_profile_argument = [string](Get-OptionalPropertyValue -InputObject $browser -Name "BrowserArgument" -DefaultValue "")
     upwork_extension_version = $upworkVersion
-    upwork_extension_id = $(if ($upworkInstallation) { [string]$upworkInstallation.Id } else { "" })
+    upwork_extension_id = $upworkExtensionId
     linkedin_sales_navigator_extension_version = $linkedinVersion
-    linkedin_sales_navigator_extension_id = $(if ($linkedinInstallation) { [string]$linkedinInstallation.Id } else { "" })
+    linkedin_sales_navigator_extension_id = $linkedinExtensionId
     upwork_extension_path = $upworkPath
     linkedin_extension_path = $linkedinPath
     external_actions_enabled = $false
