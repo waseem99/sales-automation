@@ -6,6 +6,7 @@ from pathlib import Path
 import signal
 import threading
 
+from .automation_controller import AutomationController
 from .runtime_v5 import CollectorServer, create_server
 
 DEFAULT_PORTS = {"upwork": 8765, "linkedin": 8775, "sales_navigator": 8785}
@@ -30,6 +31,8 @@ def main(argv: list[str] | None = None) -> int:
     pid_file = args.pid_file or (args.state_root / "runtime.pid")
     pid_file.parent.mkdir(parents=True, exist_ok=True)
     pid_file.write_text(str(os.getpid()), encoding="utf-8")
+
+    automation = AutomationController(args.state_root)
     servers: list[CollectorServer] = [
         create_server("upwork", args.state_root, args.upwork_port, args.upwork_parser_version),
         create_server("linkedin", args.state_root, args.linkedin_port, args.linkedin_parser_version),
@@ -46,18 +49,25 @@ def main(argv: list[str] | None = None) -> int:
 
     signal.signal(signal.SIGINT, stop)
     signal.signal(signal.SIGTERM, stop)
+
     for thread in threads:
         thread.start()
+    automation.start()
 
     print(f"Upwork collector:         http://127.0.0.1:{args.upwork_port}/health")
     print(f"LinkedIn collector:       http://127.0.0.1:{args.linkedin_port}/health")
     print(f"Sales Navigator collector:http://127.0.0.1:{args.sales_navigator_port}/health")
+    print("Capture automation:       http://127.0.0.1:8795/status")
     print(f"State root: {args.state_root}")
+
     try:
         while not stopping.wait(0.5):
             if not all(thread.is_alive() for thread in threads):
                 return 1
+            if automation.thread and not automation.thread.is_alive():
+                return 1
     finally:
+        automation.stop()
         for server in servers:
             server.shutdown()
         for server in servers:
