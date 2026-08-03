@@ -35,13 +35,13 @@ if (-not (Test-Path -LiteralPath $browserBootstrap)) { throw "The browser discov
 . $browserBootstrap
 $browser = Get-CodistanChromiumBrowser -StateRoot $StateRoot
 
-$urls = @(
-    "https://www.upwork.com/nx/find-work/9652811",
-    "https://www.upwork.com/nx/find-work/9652860",
-    "https://www.upwork.com/nx/find-work/9652877"
-)
-$chromeArguments = @("--new-window") + $urls
-Start-CodistanBrowser -Browser $browser -Arguments $chromeArguments
-$profileName = [string](Get-OptionalPropertyValue -InputObject $browser -Name "ProfileName" -DefaultValue "")
-$profileSuffix = $(if ($profileName) { ", profile $profileName" } else { "" })
-Write-Host "Opened the three approved Upwork searches in $($browser.Name)$profileSuffix."
+# Keep the operator workspace to one visible Upwork tab. The Upwork extension's
+# bounded scheduler continues rotating through all approved saved searches in
+# temporary background tabs and closes those tabs after capture.
+$workspaceUrl = "https://www.upwork.com/nx/find-work/9652811"
+Start-CodistanBrowser -Browser $browser -Arguments @($workspaceUrl)
+
+$profileDisplayName = [string](Get-OptionalPropertyValue -InputObject $browser -Name "ProfileDisplayName" -DefaultValue "")
+$profileDirectory = [string](Get-OptionalPropertyValue -InputObject $browser -Name "ProfileDirectoryName" -DefaultValue "")
+$profileLabel = if ($profileDisplayName) { $profileDisplayName } elseif ($profileDirectory) { $profileDirectory } else { "current profile" }
+Write-Host "Opened one governed Upwork workspace tab in $($browser.Name), profile $profileLabel."
