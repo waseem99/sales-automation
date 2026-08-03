@@ -33,6 +33,7 @@ def main(argv: list[str] | None = None) -> int:
     pid_file.write_text(str(os.getpid()), encoding="utf-8")
 
     automation = AutomationController(args.state_root)
+    automation.next_sales_nav_at = automation.next_combined_at
     servers: list[CollectorServer] = [
         create_server("upwork", args.state_root, args.upwork_port, args.upwork_parser_version),
         create_server("linkedin", args.state_root, args.linkedin_port, args.linkedin_parser_version),
