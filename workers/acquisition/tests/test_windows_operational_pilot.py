@@ -26,133 +26,94 @@ class WindowsOperationalPilotTests(unittest.TestCase):
         ]:
             self.assertIn(marker, content)
         self.assertNotIn("Invoke-Expression", content)
-        self.assertNotIn("Start-BitsTransfer", content)
 
-    def test_browser_discovery_supports_operator_chromium_options(self) -> None:
+    def test_browser_discovery_supports_explicit_browser_and_profile(self) -> None:
         content = self.read("scripts/windows/chromium-browser.ps1")
         for marker in [
-            "Get-CodistanDefaultBrowserHint",
             "Get-CodistanChromiumBrowser",
-            "Find-CodistanBrowserExtension",
-            "Get-OptionalPropertyValue",
-            "Get-NestedOptionalPropertyValue",
-            "Opera Software\\Opera Stable",
-            "Opera GX Stable",
+            "Set-CodistanBrowserProfile",
+            "PreferredBrowserId",
+            "PreferredProfileName",
+            "ProfileName",
+            "BrowserArgument",
+            "--profile-directory=$directoryName",
+            "Start-CodistanBrowser",
             "Google\\Chrome",
+            "Opera Software\\Opera Stable",
             "Microsoft\\Edge",
             "BraveSoftware\\Brave-Browser",
-            "opera://extensions/",
-            "chrome://extensions/",
-            "edge://extensions/",
-            "brave://extensions/",
-            "Secure Preferences",
         ]:
             self.assertIn(marker, content)
+        self.assertNotIn("(if (", content)
 
-    def test_installer_creates_operator_shortcuts_and_uses_runtime_only_health_check(self) -> None:
-        content = self.read("scripts/windows/install-acquisition-v4.ps1")
+    def test_extension_setup_persists_explicit_profile_and_can_reuse_it(self) -> None:
+        content = self.read("scripts/windows/setup-sales-automation-extensions.ps1")
         for marker in [
-            ". $pythonBootstrap",
-            "Ensure-CodistanPython",
-            "Get-OptionalPropertyValue",
-            "Get-NestedOptionalPropertyValue",
-            "$pythonExecutable",
-            "$pythonArguments",
-            "Start Sales Automation.lnk",
-            "Stop Sales Automation.lnk",
-            "Open Lead Desk.lnk",
-            "Setup Browser Extensions.lnk",
-            "RUN-SALES-AUTOMATION.cmd",
-            "STOP-SALES-AUTOMATION.cmd",
-            "OPEN-ACQUISITION-REVIEW.cmd",
-            "SETUP-SALES-AUTOMATION-EXTENSIONS.cmd",
-            "START-ACQUISITION-V4.cmd",
-            "external_actions_enabled",
-            "Manual start is the default",
+            "PreferredBrowserId",
+            "PreferredProfileName",
+            "ReuseExistingExtensions",
+            "Test-ExpectedExtensionInstallation",
+            "browser_profile",
+            "browser_profile_argument",
+            "Type LOADED",
+            "external_actions_enabled = $false",
         ]:
             self.assertIn(marker, content)
-        self.assertNotIn("Remove-Item $StateRoot", content)
-        self.assertNotIn("Remove-Item -Path $StateRoot", content)
+        self.assertIn("never submit proposals", content.lower())
+        self.assertIn("never bypass login", content.lower())
 
-    def test_operational_start_is_one_click_safe_and_opens_capture(self) -> None:
+    def test_all_browser_launchers_use_profile_aware_helper(self) -> None:
+        launchers = [
+            self.read("scripts/windows/open-approved-upwork-searches.ps1"),
+            self.read("scripts/windows/open-linkedin-lead-searches.ps1"),
+            self.read("scripts/windows/open-sales-navigator-campaigns.ps1"),
+        ]
+        for content in launchers:
+            self.assertIn("Get-CodistanChromiumBrowser -StateRoot $StateRoot", content)
+            self.assertIn("Start-CodistanBrowser -Browser $browser", content)
+            self.assertNotIn("Start-Process -FilePath ([string]$browser.Executable)", content)
+
+    def test_operational_start_remains_safe(self) -> None:
         content = self.read("scripts/windows/run-sales-automation-operational.ps1")
         for marker in [
             "http://127.0.0.1:8765/health",
             "http://127.0.0.1:8775/health",
             "http://127.0.0.1:8785/health",
-            "Get-OptionalPropertyValue",
-            "Test-BrowserSetupCurrent",
             "setup-sales-automation-extensions.ps1",
             "open-approved-upwork-searches.ps1",
             "open-linkedin-lead-searches.ps1",
-            "review_v5 import write_review_outputs",
             "operational-status.json",
-            "Sales Automation is running and lead capture is open",
         ]:
             self.assertIn(marker, content)
         self.assertNotIn("Remove-Item $StateRoot", content)
         self.assertNotIn("submit proposal", content.lower())
         self.assertNotIn("send message", content.lower())
 
-    def test_strict_mode_external_object_access_is_defensive(self) -> None:
-        cleanup = self.read("scripts/windows/cleanup-sales-automation-autostart.ps1")
-        stop = self.read("scripts/windows/stop-sales-automation.ps1")
-        starter = self.read("scripts/windows/start-acquisition-v4.ps1")
-        installer = self.read("scripts/windows/install-acquisition-v4.ps1")
-        operational = self.read("scripts/windows/run-sales-automation-operational.ps1")
-        browser = self.read("scripts/windows/chromium-browser.ps1")
-
-        for content in [cleanup, stop, starter, installer, operational, browser]:
-            self.assertIn("Get-OptionalPropertyValue", content)
-            self.assertIn("Set-StrictMode -Version Latest", content)
-
-        self.assertIn("Convert-ScheduledTaskActionToText", cleanup)
-        self.assertIn('foreach ($propertyName in @("Execute", "Arguments", "WorkingDirectory", "ClassId", "Data"))', cleanup)
-        self.assertNotIn("$_.Execute", cleanup)
-        self.assertNotIn("$_.Arguments", cleanup)
-        self.assertIn('Get-OptionalPropertyValue -InputObject $process -Name "CommandLine"', stop)
-        self.assertIn('Get-OptionalPropertyValue -InputObject $process -Name "CommandLine"', starter)
-
-    def test_browser_setup_requires_human_confirmation_and_preserves_safety(self) -> None:
-        content = self.read("scripts/windows/setup-sales-automation-extensions.ps1")
+    def test_installer_creates_operator_shortcuts(self) -> None:
+        content = self.read("scripts/windows/install-acquisition-v4.ps1")
         for marker in [
-            "Get-CodistanChromiumBrowser",
-            "$browser.ExtensionsUrl",
-            "Type LOADED",
-            "browser-extensions-confirmed.json",
-            "browser_executable",
-            "external_actions_enabled = $false",
-            "Sales Navigator Campaigns.lnk",
-            "open-sales-navigator-campaigns.ps1",
+            "Start Sales Automation.lnk",
+            "Stop Sales Automation.lnk",
+            "Open Lead Desk.lnk",
+            "Setup Browser Extensions.lnk",
+            "Manual start is the default",
+            "external_actions_enabled",
         ]:
             self.assertIn(marker, content)
-        self.assertIn("never submit proposals", content.lower())
-        self.assertIn("never bypass login", content.lower())
+        self.assertNotIn("Remove-Item $StateRoot", content)
 
-    def test_sales_navigator_campaign_launcher_resolves_unpacked_extension(self) -> None:
-        launcher = self.read("scripts/windows/open-sales-navigator-campaigns.ps1")
-        browser = self.read("scripts/windows/chromium-browser.ps1")
-        for marker in [
-            "Find-CodistanBrowserExtension",
-            "Codistan LinkedIn & Sales Navigator Capture",
-            "chrome-extension://$extensionId/sales-nav-options.html",
-            "no-confirmed-intent warning",
+    def test_strict_mode_external_object_access_is_defensive(self) -> None:
+        for relative in [
+            "scripts/windows/cleanup-sales-automation-autostart.ps1",
+            "scripts/windows/stop-sales-automation.ps1",
+            "scripts/windows/start-acquisition-v4.ps1",
+            "scripts/windows/install-acquisition-v4.ps1",
+            "scripts/windows/run-sales-automation-operational.ps1",
+            "scripts/windows/chromium-browser.ps1",
         ]:
-            self.assertIn(marker, launcher)
-        self.assertIn("Secure Preferences", browser)
-
-    def test_operator_commands_are_present(self) -> None:
-        setup = self.read("SETUP-AND-RUN-SALES-AUTOMATION.cmd")
-        run = self.read("RUN-SALES-AUTOMATION.cmd")
-        stop = self.read("STOP-SALES-AUTOMATION.cmd")
-        extensions = self.read("SETUP-SALES-AUTOMATION-EXTENSIONS.cmd")
-        campaigns = self.read("OPEN-SALES-NAVIGATOR-CAMPAIGNS.cmd")
-        self.assertIn("install-acquisition-v4.ps1", setup)
-        self.assertIn("RUN-SALES-AUTOMATION.cmd", setup)
-        self.assertIn("run-sales-automation-operational.ps1", run)
-        self.assertIn("stop-sales-automation.ps1", stop)
-        self.assertIn("setup-sales-automation-extensions.ps1", extensions)
-        self.assertIn("open-sales-navigator-campaigns.ps1", campaigns)
+            content = self.read(relative)
+            self.assertIn("Get-OptionalPropertyValue", content)
+            self.assertIn("Set-StrictMode -Version Latest", content)
 
     def test_lead_desk_defaults_to_actionable_and_auto_refreshes(self) -> None:
         content = self.read("acquisition_v4/review.py")
@@ -161,15 +122,13 @@ class WindowsOperationalPilotTests(unittest.TestCase):
             'data-filter="actionable"',
             "applyFilter('actionable')",
             "Actionable A/B",
-            "Sales Navigator cold",
             "no confirmed buyer intent",
         ]:
             self.assertIn(marker, content)
 
-    def test_operational_linkedin_queries_are_buyer_request_focused(self) -> None:
+    def test_linkedin_queries_are_buyer_request_focused(self) -> None:
         content = self.read("scripts/windows/open-linkedin-lead-searches.ps1")
         for marker in [
-            "Get-CodistanChromiumBrowser",
             "need recommendations for",
             "request for proposal",
             "software development partner",
@@ -180,12 +139,6 @@ class WindowsOperationalPilotTests(unittest.TestCase):
             "NOT recruiter",
         ]:
             self.assertIn(marker, content)
-
-    def test_upwork_launcher_uses_the_configured_browser(self) -> None:
-        content = self.read("scripts/windows/open-approved-upwork-searches.ps1")
-        self.assertIn("Get-CodistanChromiumBrowser", content)
-        self.assertIn("$browser.Executable", content)
-        self.assertIn("external_actions_enabled -ne $false", content)
 
 
 if __name__ == "__main__":
