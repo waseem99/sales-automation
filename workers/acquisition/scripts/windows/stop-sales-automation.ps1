@@ -90,5 +90,5 @@ if ($stopped.Count -eq 0) {
 } else {
     Write-Host "Stopped Sales Automation process IDs: $($stopped -join ', ')"
 }
-Write-Host "Codistan-managed browser tabs were closed where Chrome was running; unrelated tabs were untouched."
+Write-Host "Codistan-managed browser tabs were closed where Chrome was running; unrelated Chrome tabs were untouched."
 Write-Host "Operational state preserved at: $StateRoot"
