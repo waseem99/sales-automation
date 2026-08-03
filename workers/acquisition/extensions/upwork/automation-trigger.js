@@ -4,8 +4,6 @@
   const params = new URLSearchParams(location.search);
   const cycleId = String(params.get("cycle_id") || "").trim();
   const controllerPort = Number(params.get("controller_port") || 8795);
-  const nextExtensionId = String(params.get("next_extension_id") || "").trim();
-  const nextSource = String(params.get("next_source") || "").trim();
 
   async function message(payload) {
     return chrome.runtime.sendMessage(payload);
@@ -24,19 +22,6 @@
   async function makeTemporary() {
     const tab = await chrome.tabs.getCurrent().catch(() => null);
     if (tab?.id) await chrome.tabs.update(tab.id, {active: false}).catch(() => {});
-  }
-
-  async function openNext() {
-    if (!nextExtensionId || nextSource !== "linkedin") return;
-    const query = new URLSearchParams({
-      cycle_id: cycleId,
-      controller_port: String(controllerPort),
-      source: "linkedin"
-    });
-    await chrome.tabs.create({
-      url: `chrome-extension://${nextExtensionId}/automation-trigger.html?${query.toString()}`,
-      active: false
-    });
   }
 
   async function closeSelf() {
@@ -69,9 +54,12 @@
       detail_status: detail || null,
       last_error: [capture?.last_error, detail?.error].filter(Boolean).join("; ")
     };
-    const ok = capture?.ok !== false;
-    await report({source: "upwork", cycle_id: cycleId, ok, result});
-    await openNext();
+    await report({
+      source: "upwork",
+      cycle_id: cycleId,
+      ok: capture?.ok !== false,
+      result
+    });
   })().catch(async error => {
     await report({
       source: "upwork",
@@ -79,7 +67,6 @@
       ok: false,
       error: error instanceof Error ? error.message : String(error)
     }).catch(() => {});
-    await openNext().catch(() => {});
   }).finally(() => {
     setTimeout(() => closeSelf().catch(() => {}), 500);
   });
