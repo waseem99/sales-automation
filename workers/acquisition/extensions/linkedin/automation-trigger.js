@@ -43,6 +43,7 @@
       await message({type: "CODISTAN_SET_LINKEDIN_AUTOMATION", enabled: true});
       result = await message({type: "CODISTAN_RUN_LINKEDIN_SCHEDULED_SCAN_NOW"});
       await message({type: "CODISTAN_SET_LINKEDIN_AUTOMATION", enabled: false}).catch(() => {});
+      await message({type: "CODISTAN_SET_SALES_NAV_AUTOMATION", enabled: false}).catch(() => {});
     }
 
     await report({
