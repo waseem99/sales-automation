@@ -47,5 +47,7 @@ $urls = $queries | ForEach-Object {
     "https://www.linkedin.com/search/results/content/?keywords=$([uri]::EscapeDataString($_))&origin=GLOBAL_SEARCH_HEADER"
 }
 $chromeArguments = @("--new-window") + @($urls)
-Start-Process -FilePath ([string]$browser.Executable) -ArgumentList $chromeArguments | Out-Null
-Write-Host "Opened five high-intent buyer-request LinkedIn searches in $($browser.Name)."
+Start-CodistanBrowser -Browser $browser -Arguments $chromeArguments
+$profileName = [string](Get-OptionalPropertyValue -InputObject $browser -Name "ProfileName" -DefaultValue "")
+$profileSuffix = $(if ($profileName) { ", profile $profileName" } else { "" })
+Write-Host "Opened five high-intent buyer-request LinkedIn searches in $($browser.Name)$profileSuffix."
