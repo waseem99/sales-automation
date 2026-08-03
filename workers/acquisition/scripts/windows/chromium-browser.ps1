@@ -142,15 +142,54 @@ function Get-CodistanBrowserCandidates {
     return @($available)
 }
 
+function Get-CodistanProfileDisplayNameMap {
+    param([Parameter(Mandatory = $true)][string]$ProfileRoot)
+
+    $displayNames = @{}
+    $localStatePath = Join-Path $ProfileRoot "Local State"
+    if (-not (Test-Path -LiteralPath $localStatePath)) { return $displayNames }
+
+    try {
+        $localState = Get-Content -LiteralPath $localStatePath -Raw | ConvertFrom-Json
+        $infoCache = Get-NestedOptionalPropertyValue -InputObject $localState -Path @("profile", "info_cache") -DefaultValue $null
+        if ($null -eq $infoCache) { return $displayNames }
+
+        foreach ($property in $infoCache.PSObject.Properties) {
+            $directoryName = [string]$property.Name
+            $displayName = [string](Get-OptionalPropertyValue -InputObject $property.Value -Name "name" -DefaultValue "")
+            if ([string]::IsNullOrWhiteSpace($displayName)) {
+                $displayName = [string](Get-OptionalPropertyValue -InputObject $property.Value -Name "shortcut_name" -DefaultValue "")
+            }
+            if (-not [string]::IsNullOrWhiteSpace($directoryName) -and -not [string]::IsNullOrWhiteSpace($displayName)) {
+                $displayNames[$directoryName] = $displayName
+            }
+        }
+    } catch {}
+
+    return $displayNames
+}
+
 function Get-CodistanBrowserProfileDirectories {
     param([Parameter(Mandatory = $true)][object]$Browser)
+
     $profiles = @()
     foreach ($root in @(Get-OptionalPropertyValue -InputObject $Browser -Name "ProfileRoots" -DefaultValue @())) {
         if (-not (Test-Path -LiteralPath $root)) { continue }
 
+        $displayNames = Get-CodistanProfileDisplayNameMap -ProfileRoot $root
+
         if (Test-Path -LiteralPath (Join-Path $root "Preferences")) {
+            $directoryName = [System.IO.Path]::GetFileName($root)
+            $displayName = $directoryName
+            try {
+                $preferences = Get-Content -LiteralPath (Join-Path $root "Preferences") -Raw | ConvertFrom-Json
+                $preferenceName = [string](Get-NestedOptionalPropertyValue -InputObject $preferences -Path @("profile", "name") -DefaultValue "")
+                if (-not [string]::IsNullOrWhiteSpace($preferenceName)) { $displayName = $preferenceName }
+            } catch {}
             $profiles += [pscustomobject]@{
-                Name = [System.IO.Path]::GetFileName($root)
+                Name = $directoryName
+                DirectoryName = $directoryName
+                DisplayName = $displayName
                 Path = $root
                 BrowserArgument = ""
             }
@@ -161,8 +200,16 @@ function Get-CodistanBrowserProfileDirectories {
             if ($directoryName -ne "Default" -and $directoryName -notlike "Profile *") { continue }
             $directoryPath = [string](Get-OptionalPropertyValue -InputObject $directory -Name "FullName" -DefaultValue "")
             if ([string]::IsNullOrWhiteSpace($directoryPath)) { continue }
+
+            $displayName = $directoryName
+            if ($displayNames.Contains($directoryName)) {
+                $displayName = [string]$displayNames[$directoryName]
+            }
+
             $profiles += [pscustomobject]@{
                 Name = $directoryName
+                DirectoryName = $directoryName
+                DisplayName = $displayName
                 Path = $directoryPath
                 BrowserArgument = "--profile-directory=$directoryName"
             }
@@ -178,14 +225,47 @@ function Set-CodistanBrowserProfile {
         [switch]$RequireProfile
     )
 
+    $profiles = @(Get-CodistanBrowserProfileDirectories -Browser $Browser)
     $selectedProfile = $null
+
     if (-not [string]::IsNullOrWhiteSpace($ProfileName)) {
-        $selectedProfile = @(Get-CodistanBrowserProfileDirectories -Browser $Browser) | Where-Object {
-            [string](Get-OptionalPropertyValue -InputObject $_ -Name "Name" -DefaultValue "") -eq $ProfileName
+        $selectedProfile = $profiles | Where-Object {
+            $directoryName = [string](Get-OptionalPropertyValue -InputObject $_ -Name "DirectoryName" -DefaultValue "")
+            $displayName = [string](Get-OptionalPropertyValue -InputObject $_ -Name "DisplayName" -DefaultValue "")
+            $directoryName -ieq $ProfileName -or $displayName -ieq $ProfileName
         } | Select-Object -First 1
-        if (-not $selectedProfile -and $RequireProfile) {
-            throw "The requested browser profile '$ProfileName' was not found in $([string](Get-OptionalPropertyValue -InputObject $Browser -Name 'Name' -DefaultValue 'the selected browser'))."
+
+        if (-not $selectedProfile -and $ProfileName -match '^(?i:profile|person)\s*1$') {
+            $selectedProfile = $profiles | Where-Object {
+                [string](Get-OptionalPropertyValue -InputObject $_ -Name "DirectoryName" -DefaultValue "") -eq "Default"
+            } | Select-Object -First 1
         }
+
+        if (-not $selectedProfile -and $profiles.Count -eq 1) {
+            $selectedProfile = $profiles[0]
+        }
+
+        if (-not $selectedProfile -and $RequireProfile) {
+            $browserName = [string](Get-OptionalPropertyValue -InputObject $Browser -Name "Name" -DefaultValue "the selected browser")
+            $availableProfiles = @($profiles | ForEach-Object {
+                $directoryName = [string](Get-OptionalPropertyValue -InputObject $_ -Name "DirectoryName" -DefaultValue "")
+                $displayName = [string](Get-OptionalPropertyValue -InputObject $_ -Name "DisplayName" -DefaultValue "")
+                if ($displayName -and $displayName -ne $directoryName) { return "$displayName [$directoryName]" }
+                return $directoryName
+            })
+            throw "The requested browser profile '$ProfileName' was not found in $browserName. Available profiles: $($availableProfiles -join ', ')."
+        }
+    }
+
+    $profileDirectoryName = ""
+    $profileDisplayName = ""
+    $profilePath = ""
+    $browserArgument = ""
+    if ($selectedProfile) {
+        $profileDirectoryName = [string](Get-OptionalPropertyValue -InputObject $selectedProfile -Name "DirectoryName" -DefaultValue "")
+        $profileDisplayName = [string](Get-OptionalPropertyValue -InputObject $selectedProfile -Name "DisplayName" -DefaultValue $profileDirectoryName)
+        $profilePath = [string](Get-OptionalPropertyValue -InputObject $selectedProfile -Name "Path" -DefaultValue "")
+        $browserArgument = [string](Get-OptionalPropertyValue -InputObject $selectedProfile -Name "BrowserArgument" -DefaultValue "")
     }
 
     return [pscustomobject]@{
@@ -195,9 +275,11 @@ function Set-CodistanBrowserProfile {
         ExtensionsUrl = [string](Get-OptionalPropertyValue -InputObject $Browser -Name "ExtensionsUrl" -DefaultValue "")
         ProgIdPatterns = @(Get-OptionalPropertyValue -InputObject $Browser -Name "ProgIdPatterns" -DefaultValue @())
         ProfileRoots = @(Get-OptionalPropertyValue -InputObject $Browser -Name "ProfileRoots" -DefaultValue @())
-        ProfileName = $(if ($selectedProfile) { [string]$selectedProfile.Name } else { "" })
-        ProfilePath = $(if ($selectedProfile) { [string]$selectedProfile.Path } else { "" })
-        BrowserArgument = $(if ($selectedProfile) { [string]$selectedProfile.BrowserArgument } else { "" })
+        ProfileName = $profileDirectoryName
+        ProfileDirectoryName = $profileDirectoryName
+        ProfileDisplayName = $profileDisplayName
+        ProfilePath = $profilePath
+        BrowserArgument = $browserArgument
     }
 }
 
@@ -220,7 +302,8 @@ function Get-CodistanChromiumBrowser {
         if (-not $preferred) {
             throw "The requested browser '$PreferredBrowserId' is not installed or available."
         }
-        return Set-CodistanBrowserProfile -Browser $preferred -ProfileName $PreferredProfileName -RequireProfile:($PreferredProfileName -ne "")
+        $requirePreferredProfile = -not [string]::IsNullOrWhiteSpace($PreferredProfileName)
+        return Set-CodistanBrowserProfile -Browser $preferred -ProfileName $PreferredProfileName -RequireProfile:$requirePreferredProfile
     }
 
     if ($StateRoot) {
@@ -230,13 +313,17 @@ function Get-CodistanChromiumBrowser {
                 $marker = Get-Content -LiteralPath $markerPath -Raw | ConvertFrom-Json
                 $configuredId = [string](Get-OptionalPropertyValue -InputObject $marker -Name "browser_id" -DefaultValue "")
                 $configuredExecutable = [string](Get-OptionalPropertyValue -InputObject $marker -Name "browser_executable" -DefaultValue "")
-                $configuredProfile = [string](Get-OptionalPropertyValue -InputObject $marker -Name "browser_profile" -DefaultValue "")
+                $configuredProfile = [string](Get-OptionalPropertyValue -InputObject $marker -Name "browser_profile_directory" -DefaultValue "")
+                if ([string]::IsNullOrWhiteSpace($configuredProfile)) {
+                    $configuredProfile = [string](Get-OptionalPropertyValue -InputObject $marker -Name "browser_profile" -DefaultValue "")
+                }
                 $configured = $available | Where-Object {
                     [string](Get-OptionalPropertyValue -InputObject $_ -Name "Id" -DefaultValue "") -eq $configuredId -and
                     [string](Get-OptionalPropertyValue -InputObject $_ -Name "Executable" -DefaultValue "") -eq $configuredExecutable
                 } | Select-Object -First 1
                 if ($configured) {
-                    return Set-CodistanBrowserProfile -Browser $configured -ProfileName $configuredProfile -RequireProfile:($configuredProfile -ne "")
+                    $requireConfiguredProfile = -not [string]::IsNullOrWhiteSpace($configuredProfile)
+                    return Set-CodistanBrowserProfile -Browser $configured -ProfileName $configuredProfile -RequireProfile:$requireConfiguredProfile
                 }
             } catch {}
         }
@@ -276,8 +363,11 @@ function Find-CodistanBrowserExtension {
     }
 
     foreach ($profile in @(Get-CodistanBrowserProfileDirectories -Browser $Browser)) {
-        $profileName = [string](Get-OptionalPropertyValue -InputObject $profile -Name "Name" -DefaultValue "")
-        if (-not [string]::IsNullOrWhiteSpace($PreferredProfileName) -and $profileName -ne $PreferredProfileName) { continue }
+        $profileDirectoryName = [string](Get-OptionalPropertyValue -InputObject $profile -Name "DirectoryName" -DefaultValue "")
+        $profileDisplayName = [string](Get-OptionalPropertyValue -InputObject $profile -Name "DisplayName" -DefaultValue $profileDirectoryName)
+        if (-not [string]::IsNullOrWhiteSpace($PreferredProfileName)) {
+            if ($profileDirectoryName -ine $PreferredProfileName -and $profileDisplayName -ine $PreferredProfileName) { continue }
+        }
         $profilePath = [string](Get-OptionalPropertyValue -InputObject $profile -Name "Path" -DefaultValue "")
         if ([string]::IsNullOrWhiteSpace($profilePath)) { continue }
         foreach ($preferenceName in @("Preferences", "Secure Preferences")) {
@@ -300,7 +390,9 @@ function Find-CodistanBrowserExtension {
                     if ($manifestName -eq $ExtensionName -or ($normalizedExpectedPath -and $normalizedStoredPath -eq $normalizedExpectedPath)) {
                         return [pscustomobject]@{
                             Id = [string]$property.Name
-                            ProfileName = $profileName
+                            ProfileName = $profileDirectoryName
+                            ProfileDirectoryName = $profileDirectoryName
+                            ProfileDisplayName = $profileDisplayName
                             ProfilePath = $profilePath
                             BrowserArgument = [string](Get-OptionalPropertyValue -InputObject $profile -Name "BrowserArgument" -DefaultValue "")
                             StoredPath = $storedPath
