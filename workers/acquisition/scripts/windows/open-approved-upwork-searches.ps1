@@ -41,5 +41,7 @@ $urls = @(
     "https://www.upwork.com/nx/find-work/9652877"
 )
 $chromeArguments = @("--new-window") + $urls
-Start-Process -FilePath ([string]$browser.Executable) -ArgumentList $chromeArguments | Out-Null
-Write-Host "Opened the three approved Upwork searches in $($browser.Name)."
+Start-CodistanBrowser -Browser $browser -Arguments $chromeArguments
+$profileName = [string](Get-OptionalPropertyValue -InputObject $browser -Name "ProfileName" -DefaultValue "")
+$profileSuffix = $(if ($profileName) { ", profile $profileName" } else { "" })
+Write-Host "Opened the three approved Upwork searches in $($browser.Name)$profileSuffix."
