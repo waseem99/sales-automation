@@ -27,14 +27,18 @@ class WindowsOperationalPilotTests(unittest.TestCase):
             self.assertIn(marker, content)
         self.assertNotIn("Invoke-Expression", content)
 
-    def test_browser_discovery_supports_explicit_browser_and_profile(self) -> None:
+    def test_browser_discovery_supports_display_and_internal_profiles(self) -> None:
         content = self.read("scripts/windows/chromium-browser.ps1")
         for marker in [
             "Get-CodistanChromiumBrowser",
             "Set-CodistanBrowserProfile",
+            "Get-CodistanProfileDisplayNameMap",
+            'Join-Path $ProfileRoot "Local State"',
             "PreferredBrowserId",
             "PreferredProfileName",
             "ProfileName",
+            "ProfileDirectoryName",
+            "ProfileDisplayName",
             "BrowserArgument",
             "--profile-directory=$directoryName",
             "Start-CodistanBrowser",
@@ -54,6 +58,8 @@ class WindowsOperationalPilotTests(unittest.TestCase):
             "ReuseExistingExtensions",
             "Test-ExpectedExtensionInstallation",
             "browser_profile",
+            "browser_profile_directory",
+            "browser_profile_display_name",
             "browser_profile_argument",
             "Type LOADED",
             "external_actions_enabled = $false",
