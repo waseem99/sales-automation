@@ -19,17 +19,19 @@ const reviewDocument = fs.readFileSync(path.join(repoRoot, 'docs/sales-automatio
 
 assert.deepEqual(linkedinManifest.permissions, ['tabs', 'storage', 'scripting', 'alarms']);
 assert.deepEqual(upworkManifest.permissions, ['tabs', 'storage', 'alarms', 'scripting']);
-assert.equal(linkedinManifest.version, '1.6.1');
-assert.equal(upworkManifest.version, '1.1.1');
+assert.equal(linkedinManifest.version, '1.6.2');
+assert.equal(upworkManifest.version, '1.1.2');
 assert.deepEqual(linkedinManifest.host_permissions, [
   'https://www.linkedin.com/*',
   'https://sales.linkedin.com/*',
   'http://127.0.0.1:8775/*',
   'http://127.0.0.1:8785/*',
+  'http://127.0.0.1:8795/*',
 ]);
 assert.deepEqual(upworkManifest.host_permissions, [
   'https://www.upwork.com/*',
   'http://127.0.0.1:8765/*',
+  'http://127.0.0.1:8795/*',
 ]);
 
 const prohibitedPermissions = [
@@ -86,7 +88,7 @@ for (const [file, source] of sourceByFile) {
   assert(!/WebAssembly\.(?:compile|instantiate)\s*\(/i.test(source), `${relative(file)} loads executable WebAssembly`);
 }
 
-const captureFiles = extensionFiles.filter((file) => /(?:content|sales-nav|background|evidence|scroll|resolver|adapter)\.js$/i.test(file));
+const captureFiles = extensionFiles.filter((file) => /(?:content|sales-nav|background|evidence|scroll|resolver|adapter|detail|automation-trigger)\.js$/i.test(file));
 for (const file of captureFiles) {
   if (file.endsWith('parser-hardening.js')) continue;
   const source = fs.readFileSync(file, 'utf8').toLowerCase();
