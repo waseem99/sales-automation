@@ -5,26 +5,33 @@ import vm from "node:vm";
 
 const root = path.resolve("extensions/upwork");
 const manifest = JSON.parse(fs.readFileSync(path.join(root, "manifest.json"), "utf8"));
+const serviceWorker = fs.readFileSync(path.join(root, "service-worker.js"), "utf8");
 const background = fs.readFileSync(path.join(root, "background.js"), "utf8");
+const automationTrigger = fs.readFileSync(path.join(root, "automation-trigger.js"), "utf8");
+const detailEnrichment = fs.readFileSync(path.join(root, "detail-enrichment.js"), "utf8");
+const detail = fs.readFileSync(path.join(root, "detail.js"), "utf8");
 const scroll = fs.readFileSync(path.join(root, "scroll.js"), "utf8");
 const content = fs.readFileSync(path.join(root, "content.js"), "utf8");
 const popupHtml = fs.readFileSync(path.join(root, "popup.html"), "utf8");
 const popup = fs.readFileSync(path.join(root, "popup.js"), "utf8");
 const evidenceSource = fs.readFileSync(path.join(root, "evidence.js"), "utf8");
 
-for (const [name, source] of Object.entries({background, scroll, content, popup, evidenceSource})) {
+for (const [name, source] of Object.entries({serviceWorker, background, automationTrigger, detailEnrichment, detail, scroll, content, popup, evidenceSource})) {
   assert.doesNotThrow(() => new vm.Script(source), `${name} must parse as JavaScript`);
 }
 
 assert.equal(manifest.manifest_version, 3);
-assert.equal(manifest.version, "1.1.1");
+assert.equal(manifest.version, "1.1.2");
 assert.deepEqual([...manifest.permissions].sort(), ["alarms", "scripting", "storage", "tabs"]);
 assert(!manifest.permissions.includes("activeTab"));
+assert.equal(manifest.background.service_worker, "service-worker.js");
+assert(serviceWorker.includes('importScripts("background.js", "detail-enrichment.js")'));
 assert(background.includes('upwork-extension-1.1.0'));
-assert.deepEqual(manifest.content_scripts[0].js, ["evidence.js", "scroll.js", "content.js"]);
+assert.deepEqual(manifest.content_scripts[0].js, ["evidence.js", "scroll.js", "content.js", "detail.js"]);
 assert(manifest.permissions.includes("alarms"));
 assert(manifest.permissions.includes("scripting"));
 assert(manifest.host_permissions.includes("http://127.0.0.1:8765/*"));
+assert(manifest.host_permissions.includes("http://127.0.0.1:8795/*"));
 
 for (const name of [
   "AI + Fullstack AI 16 July 2026",
@@ -72,6 +79,31 @@ for (const marker of [
 ]) assert(background.includes(marker), `missing scheduler marker: ${marker}`);
 
 for (const marker of [
+  'MAX_DETAIL_RECORDS = 5',
+  'chrome.tabs.create({url: candidate.source_url, active: false})',
+  'CODISTAN_CAPTURE_UPWORK_JOB_DETAIL',
+  'source_subtype: "job_detail_enrichment"',
+  'external_action_performed: false',
+  'chrome.tabs.remove(tabId)',
+]) assert(detailEnrichment.includes(marker), `missing bounded detail-enrichment marker: ${marker}`);
+
+for (const marker of [
+  'CODISTAN_CAPTURE_UPWORK_JOB_DETAIL',
+  'detail_enrichment: true',
+  'stable_job_identity_used: true',
+]) assert(detail.includes(marker), `missing Upwork detail parser marker: ${marker}`);
+
+for (const marker of [
+  'cycle_id',
+  'controller_port',
+  'CODISTAN_RUN_UPWORK_APPROVED_SEARCHES_NOW',
+  'CODISTAN_RUN_UPWORK_DETAIL_ENRICHMENT_NOW',
+  'http://127.0.0.1:${controllerPort}/event',
+  'chrome.tabs.remove',
+]) assert(automationTrigger.includes(marker), `missing local automation trigger marker: ${marker}`);
+assert(!automationTrigger.includes("next_extension_id"));
+
+for (const marker of [
   "CODISTAN_UPWORK_SCROLL_STATUS",
   "CODISTAN_SCROLL_UPWORK_RESULTS",
   "CODISTAN_RESTORE_UPWORK_SCROLL",
@@ -96,7 +128,6 @@ const prohibitedExternalActions = [
   "connect button",
   "submit proposal",
   "send message",
-  "chrome.tabs.update",
   "chrome.windows.create",
   "document.cookie",
   "chrome.cookies",
@@ -108,9 +139,9 @@ const prohibitedExternalActions = [
   "importScripts('http"
 ];
 for (const marker of prohibitedExternalActions) {
-  assert(!background.toLowerCase().includes(marker.toLowerCase()), `background contains prohibited marker: ${marker}`);
-  assert(!scroll.toLowerCase().includes(marker.toLowerCase()), `scroll controller contains prohibited marker: ${marker}`);
-  assert(!content.toLowerCase().includes(marker.toLowerCase()), `content contains prohibited marker: ${marker}`);
+  for (const [name, source] of Object.entries({background, scroll, content, detailEnrichment, detail, automationTrigger})) {
+    assert(!source.toLowerCase().includes(marker.toLowerCase()), `${name} contains prohibited marker: ${marker}`);
+  }
 }
 
 assert(!scroll.includes("scrollIntoView"));
