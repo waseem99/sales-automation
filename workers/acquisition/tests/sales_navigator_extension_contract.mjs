@@ -17,7 +17,7 @@ for (const [name, source] of Object.entries({entry, background, catalogue, conte
   assert.doesNotThrow(() => new vm.Script(source), `${name} must parse as JavaScript`);
 }
 
-assert.equal(manifest.version, "1.6.1");
+assert.equal(manifest.version, "1.6.2");
 assert.equal(manifest.background.service_worker, "background-entry.js");
 assert(entry.includes('sales-nav-catalogue.js'));
 assert(entry.includes('sales-nav-background.js'));
@@ -27,6 +27,7 @@ assert(!manifest.permissions.includes("activeTab"));
 assert(manifest.host_permissions.includes("https://www.linkedin.com/*"));
 assert(manifest.host_permissions.includes("https://sales.linkedin.com/*"));
 assert(manifest.host_permissions.includes("http://127.0.0.1:8785/*"));
+assert(manifest.host_permissions.includes("http://127.0.0.1:8795/*"));
 assert.deepEqual(manifest.content_scripts[1].js, ["parser-hardening.js", "sales-nav.js"]);
 assert.equal(manifest.options_page, "sales-nav-options.html");
 
