@@ -73,6 +73,7 @@ class WindowsOperationalPilotTests(unittest.TestCase):
             self.read("scripts/windows/open-approved-upwork-searches.ps1"),
             self.read("scripts/windows/open-linkedin-lead-searches.ps1"),
             self.read("scripts/windows/open-sales-navigator-campaigns.ps1"),
+            self.read("scripts/windows/open-acquisition-review.ps1"),
         ]
         for content in launchers:
             self.assertIn("Get-CodistanChromiumBrowser -StateRoot $StateRoot", content)
@@ -104,6 +105,7 @@ class WindowsOperationalPilotTests(unittest.TestCase):
         governance_html = self.read("extensions/linkedin/workspace-governance.html")
         upwork = self.read("scripts/windows/open-approved-upwork-searches.ps1")
         linkedin = self.read("scripts/windows/open-linkedin-lead-searches.ps1")
+        lead_desk = self.read("scripts/windows/open-acquisition-review.ps1")
         stopper = self.read("scripts/windows/stop-sales-automation.ps1")
 
         self.assertIn("run-sales-automation-governed.ps1", command)
@@ -148,6 +150,9 @@ class WindowsOperationalPilotTests(unittest.TestCase):
         self.assertEqual(linkedin.count("Start-CodistanBrowser -Browser $browser"), 1)
         self.assertIn("one visible Upwork tab", upwork)
         self.assertIn("one visible LinkedIn tab", linkedin)
+        self.assertIn("Start-CodistanBrowser -Browser $browser", lead_desk)
+        self.assertIn("-Mode Dedupe -Quiet", lead_desk)
+        self.assertIn("one governed Codistan Lead Desk tab", lead_desk)
         self.assertIn("-Mode Close -Quiet", stopper)
         self.assertIn("unrelated Chrome tabs were untouched", stopper)
 
@@ -173,6 +178,7 @@ class WindowsOperationalPilotTests(unittest.TestCase):
             "scripts/windows/run-sales-automation-operational.ps1",
             "scripts/windows/chromium-browser.ps1",
             "scripts/windows/govern-sales-automation-workspace.ps1",
+            "scripts/windows/open-acquisition-review.ps1",
         ]:
             content = self.read(relative)
             self.assertIn("Get-OptionalPropertyValue", content)
