@@ -78,6 +78,7 @@ class WindowsOperationalPilotTests(unittest.TestCase):
             self.assertIn("Get-CodistanChromiumBrowser -StateRoot $StateRoot", content)
             self.assertIn("Start-CodistanBrowser -Browser $browser", content)
             self.assertNotIn("Start-Process -FilePath ([string]$browser.Executable)", content)
+            self.assertNotIn('"--new-window"', content)
 
     def test_operational_start_remains_safe(self) -> None:
         content = self.read("scripts/windows/run-sales-automation-operational.ps1")
@@ -94,6 +95,61 @@ class WindowsOperationalPilotTests(unittest.TestCase):
         self.assertNotIn("Remove-Item $StateRoot", content)
         self.assertNotIn("submit proposal", content.lower())
         self.assertNotIn("send message", content.lower())
+
+    def test_governed_start_opens_three_managed_tabs_and_preserves_other_browsing(self) -> None:
+        command = self.read("RUN-SALES-AUTOMATION.cmd")
+        governed = self.read("scripts/windows/run-sales-automation-governed.ps1")
+        governance = self.read("scripts/windows/govern-sales-automation-workspace.ps1")
+        governance_js = self.read("extensions/linkedin/workspace-governance.js")
+        governance_html = self.read("extensions/linkedin/workspace-governance.html")
+        upwork = self.read("scripts/windows/open-approved-upwork-searches.ps1")
+        linkedin = self.read("scripts/windows/open-linkedin-lead-searches.ps1")
+        stopper = self.read("scripts/windows/stop-sales-automation.ps1")
+
+        self.assertIn("run-sales-automation-governed.ps1", command)
+        for marker in [
+            "-SkipSourceLaunch",
+            "-SkipLeadDesk",
+            "open-approved-upwork-searches.ps1",
+            "open-linkedin-lead-searches.ps1",
+            "review\\index.html",
+            "govern-sales-automation-workspace.ps1",
+            "1 Upwork workspace tab",
+            "1 LinkedIn buyer-intent workspace tab",
+            "1 Lead Desk tab",
+            "Unrelated Chrome tabs remain untouched",
+        ]:
+            self.assertIn(marker, governed)
+
+        for marker in [
+            'ValidateSet("Dedupe", "Close")',
+            "workspace-governance.html",
+            "linkedin_sales_navigator_extension_id",
+            "leadDeskUrl",
+            "Unrelated Chrome tabs were untouched",
+        ]:
+            self.assertIn(marker, governance)
+
+        for marker in [
+            "APPROVED_UPWORK_SEARCH_IDS",
+            "MANAGED_LINKEDIN_QUERIES",
+            "chrome.tabs.query",
+            "chrome.tabs.remove",
+            "chooseRetainedTab",
+            "unrelated_tabs_untouched: true",
+            'mode === "close"',
+            'return "lead_desk"',
+            'return "sales_nav_campaigns"',
+        ]:
+            self.assertIn(marker, governance_js)
+        self.assertIn("Unrelated browser tabs are never changed", governance_html)
+
+        self.assertEqual(upwork.count("Start-CodistanBrowser -Browser $browser"), 1)
+        self.assertEqual(linkedin.count("Start-CodistanBrowser -Browser $browser"), 1)
+        self.assertIn("one visible Upwork tab", upwork)
+        self.assertIn("one visible LinkedIn tab", linkedin)
+        self.assertIn("-Mode Close -Quiet", stopper)
+        self.assertIn("unrelated Chrome tabs were untouched", stopper)
 
     def test_installer_creates_operator_shortcuts(self) -> None:
         content = self.read("scripts/windows/install-acquisition-v4.ps1")
@@ -116,6 +172,7 @@ class WindowsOperationalPilotTests(unittest.TestCase):
             "scripts/windows/install-acquisition-v4.ps1",
             "scripts/windows/run-sales-automation-operational.ps1",
             "scripts/windows/chromium-browser.ps1",
+            "scripts/windows/govern-sales-automation-workspace.ps1",
         ]:
             content = self.read(relative)
             self.assertIn("Get-OptionalPropertyValue", content)
