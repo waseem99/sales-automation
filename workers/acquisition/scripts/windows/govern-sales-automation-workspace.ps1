@@ -76,6 +76,6 @@ if (-not $Quiet) {
     if ($Mode -eq "Close") {
         Write-Host "Closed Codistan-managed workspace tabs; unrelated Chrome tabs were untouched."
     } else {
-        Write-Host "Browser workspace governed: one Upwork tab, one LinkedIn tab and one Lead Desk tab; unrelated Chrome tabs were untouched."
+        Write-Host "Browser workspace governed: one Upwork tab, one LinkedIn tab and one Lead Desk tab; Unrelated Chrome tabs were untouched."
     }
 }
