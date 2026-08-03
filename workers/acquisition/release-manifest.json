@@ -2,16 +2,23 @@
   "schema_version": "codistan-sales-automation-release.v1",
   "product": "Codistan Sales Automation",
   "application": "Prospect Desk",
-  "release_version": "1.0.0-rc.1",
+  "release_version": "1.0.0-rc.2",
   "release_status": "live_validation",
   "built_from": "issue-226-consolidated-release",
   "components": {
     "local_runtime": "0.3.0",
-    "upwork_extension": "1.1.0",
-    "linkedin_sales_navigator_extension": "1.5.0",
+    "upwork_extension": "1.1.2",
+    "linkedin_sales_navigator_extension": "1.6.2",
     "bd_workflow": "bd-workflow.v1",
     "outreach_workbench": "outreach-workbench.v1",
     "commercial_readiness": "commercial-readiness.v1",
+    "commercial_catalogue": "commercial-catalogue.v1",
+    "campaign_governance": "campaign-governance.v1",
+    "decision_scoring": "decision-score.v1",
+    "seller_queues": "seller-queues.v1",
+    "seller_funnel": "seller-funnel.v1",
+    "sync_health": "sync-health.v1",
+    "extension_privacy": "extension-privacy.v1",
     "combined_pilot_acceptance": "codistan-sales-automation-acceptance.v1"
   },
   "collectors": [
@@ -20,16 +27,24 @@
     {"source": "sales_navigator", "port": 8785, "workspace": "/leads/sales-navigator"}
   ],
   "active_capabilities": [
+    "manual-start-by-default Windows lifecycle with opt-in autostart",
+    "sequential local capture controller with immediate run and fifteen-minute cadence",
     "bounded scheduled Upwork saved-search capture",
+    "bounded top-five Upwork job-detail enrichment",
     "bounded scheduled LinkedIn warm-requirement capture",
-    "registered Sales Navigator cold campaigns",
-    "local persistence, deduplication and enrichment",
-    "Prospect Desk synchronization",
-    "identity, evidence and campaign-fit stages",
+    "registered Sales Navigator cold campaigns with twelve-hour cadence and no-confirmed-intent provenance",
+    "Lead Desk capture status, run-now and pause-resume controls",
+    "evidence-weighted service-route classification with ambiguity fail-closed to research",
+    "local persistence, deduplication, replay-safe outbox and enrichment",
+    "Prospect Desk synchronization and redacted sync health visibility",
+    "identity, evidence, campaign governance and offer-version stages",
+    "versioned decision scoring and seller work queues",
+    "structured seller feedback and reconciled funnel analytics",
     "Upwork buyer-account intelligence",
     "BD ownership, tasks, stages and next-best-action",
     "human-controlled outreach review and exact sent-version logging",
-    "commercial offer readiness enforcement before cold outreach approval",
+    "commercial offer readiness enforcement before outreach approval",
+    "least-privilege extension permissions and retention governance",
     "combined technical and human commercial pilot acceptance report"
   ],
   "offer_release_policy": {
@@ -38,10 +53,11 @@
     "warm_opportunity_responses": "allowed_with_human_review_and_verified_capability_only"
   },
   "live_validation_required": [
+    "real Windows clean-install, upgrade, restart and rollback evidence",
     "real Upwork saved-search pilot",
     "real LinkedIn warm-post pilot",
     "licensed Sales Navigator pilot",
-    "Prospect Desk deployment and three-source synchronization",
+    "Prospect Desk deployment and repeated three-source synchronization",
     "human review of commercial quality and outreach usefulness",
     "combined pilot report reaches commercial_gate_passed"
   ],
@@ -73,19 +89,25 @@
       "capability": "cold outreach for the FinTech Backend Operations Platform",
       "reason": "Exact workflows, demo, integrations, pilot pricing, proof and approved security/compliance statements are incomplete.",
       "reactivation_criteria": "Commercial readiness profile is reviewed and changed from research_only by the offer owner."
+    },
+    {
+      "capability": "account buying-committee expansion",
+      "reason": "Issue #275 requires sufficient real outcome data before implementation begins.",
+      "reactivation_criteria": "Controlled pilot funnel data demonstrates the specific contact-role and duplication gaps to solve."
     }
   ],
   "state_contract": {
     "root": "%LOCALAPPDATA%\\Codistan\\Acquisition",
     "preserve": [
-      "records",
+      "records and original source evidence",
       "seen and deduplication fingerprints",
-      "status and diagnostics",
-      "review outputs",
+      "status and redacted diagnostics",
+      "review outputs and seller funnel events",
+      "capture automation status and control token",
       "Prospect Desk sync configuration",
-      "sync fingerprints and retry state",
-      "campaign configuration",
-      "BD and outreach history",
+      "outbox, reconciliation, dead-letter and replay state",
+      "campaign and offer-version configuration",
+      "BD, scoring and outreach history",
       "human commercial review evidence",
       "app-previous rollback package"
     ],

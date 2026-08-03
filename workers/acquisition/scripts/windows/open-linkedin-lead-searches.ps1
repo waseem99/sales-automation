@@ -1,50 +1,56 @@
 param(
-    [string]$InstallRoot = (Resolve-Path (Join-Path $PSScriptRoot "..\..\..\..")).Path
+    [string]$InstallRoot = (Resolve-Path (Join-Path $PSScriptRoot "..\..\..\..")).Path,
+    [string]$StateRoot = (Join-Path $env:LOCALAPPDATA "Codistan\Acquisition")
 )
 
 $ErrorActionPreference = "Stop"
+Set-StrictMode -Version Latest
+
 $healthUrl = "http://127.0.0.1:8775/health"
 try {
     $health = Invoke-RestMethod -Uri $healthUrl -TimeoutSec 2
-    if ($health.schema_version -ne "codistan-acquisition-health.v1" -or $health.source -ne "linkedin") {
-        throw "Port 8775 is occupied by a legacy LinkedIn service rather than Acquisition V4."
+    if ($health.schema_version -ne "codistan-acquisition-health.v1" -or $health.source -ne "linkedin" -or $health.external_actions_enabled -ne $false) {
+        throw "Port 8775 is not the safe Sales Automation LinkedIn collector."
     }
 } catch {
     $startCommand = Join-Path $InstallRoot "workers\acquisition\START-ACQUISITION-V4.cmd"
-    if (-not (Test-Path $startCommand)) { throw "The Acquisition V4 start command was not found." }
-    Start-Process -FilePath $startCommand -WindowStyle Minimized
+    if (-not (Test-Path $startCommand)) { throw "The Sales Automation start command was not found." }
+    Start-Process -FilePath $startCommand -WindowStyle Minimized | Out-Null
     $ready = $false
-    for ($attempt = 0; $attempt -lt 15; $attempt++) {
+    for ($attempt = 0; $attempt -lt 30; $attempt++) {
         Start-Sleep -Seconds 1
         try {
             $health = Invoke-RestMethod -Uri $healthUrl -TimeoutSec 2
-            if ($health.schema_version -eq "codistan-acquisition-health.v1" -and $health.source -eq "linkedin") {
+            if ($health.schema_version -eq "codistan-acquisition-health.v1" -and $health.source -eq "linkedin" -and $health.external_actions_enabled -eq $false) {
                 $ready = $true
                 break
             }
         } catch {}
     }
-    if (-not $ready) { throw "The LinkedIn Acquisition V4 collector did not become healthy on port 8775. Stop the legacy LinkedIn V3 service first." }
+    if (-not $ready) { throw "The LinkedIn collector did not become healthy on port 8775." }
 }
 
-$chromeCandidates = @(
-    "$env:ProgramFiles\Google\Chrome\Application\chrome.exe",
-    "${env:ProgramFiles(x86)}\Google\Chrome\Application\chrome.exe",
-    "$env:LOCALAPPDATA\Google\Chrome\Application\chrome.exe"
-)
-$chrome = $chromeCandidates | Where-Object { $_ -and (Test-Path $_) } | Select-Object -First 1
-if (-not $chrome) { throw "Google Chrome was not found." }
+$browserBootstrap = Join-Path $PSScriptRoot "chromium-browser.ps1"
+if (-not (Test-Path -LiteralPath $browserBootstrap)) { throw "The browser discovery module was not found." }
+. $browserBootstrap
+$browser = Get-CodistanChromiumBrowser -StateRoot $StateRoot
 
+# These searches bias toward buyer-authored vendor/agency requests and away from employment posts.
 $queries = @(
-    '"looking for" AND ("software development agency" OR "development partner") NOT hiring NOT job NOT role',
-    '("looking for" OR "seeking") AND ("AI automation partner" OR "AI agency") NOT hiring NOT job NOT role',
-    '("looking for" OR "seeking" OR "request for proposal") AND "digital marketing agency" NOT hiring NOT job',
-    '("looking for" OR "seeking") AND ("video production agency" OR "animation studio") NOT hiring NOT job',
-    '("looking for" OR "seeking" OR "calling") AND ("cybersecurity consultant" OR "security firm" OR "project-based engagements") NOT hiring NOT job'
+    '("looking for" OR "seeking" OR "need recommendations for" OR "request for proposal" OR RFP) AND ("software development agency" OR "software development partner" OR "MVP development agency" OR "web app development agency") NOT hiring NOT "job opening" NOT recruiter NOT "join our team"',
+    '("looking for" OR "seeking" OR "need recommendations for" OR "request for proposal" OR RFP) AND ("AI automation agency" OR "AI development partner" OR "AI implementation partner" OR "generative AI consultancy") NOT hiring NOT job NOT recruiter',
+    '("looking for" OR "seeking" OR "need recommendations for" OR "request for proposal" OR RFP) AND ("digital marketing agency" OR "performance marketing agency" OR "SEO agency" OR "social media agency") NOT hiring NOT job NOT recruiter',
+    '("looking for" OR "seeking" OR "need recommendations for" OR "request for proposal" OR RFP) AND ("video production agency" OR "animation studio" OR "3D visualization studio" OR "motion graphics agency") NOT hiring NOT job NOT recruiter',
+    '("looking for" OR "seeking" OR "need recommendations for" OR "request for proposal" OR RFP OR "project-based engagement") AND ("cybersecurity consultancy" OR "security assessment firm" OR "ISO 27001 consultant" OR "SOC 2 consultant" OR "penetration testing company") NOT hiring NOT job NOT recruiter'
 )
-$urls = $queries | ForEach-Object {
-    "https://www.linkedin.com/search/results/content/?keywords=$([uri]::EscapeDataString($_))&origin=GLOBAL_SEARCH_HEADER"
-}
-$chromeArguments = @("--new-window") + @($urls)
-Start-Process -FilePath $chrome -ArgumentList $chromeArguments
-Write-Host "Opened buyer-intent LinkedIn searches in normal Chrome."
+
+# Keep one visible LinkedIn tab. The LinkedIn extension's scheduled cycle runs
+# all five approved queries in temporary background tabs and closes each one
+# after capture, so the operator does not need five persistent tabs.
+$workspaceUrl = "https://www.linkedin.com/search/results/content/?keywords=$([uri]::EscapeDataString($queries[0]))&origin=GLOBAL_SEARCH_HEADER"
+Start-CodistanBrowser -Browser $browser -Arguments @($workspaceUrl)
+
+$profileDisplayName = [string](Get-OptionalPropertyValue -InputObject $browser -Name "ProfileDisplayName" -DefaultValue "")
+$profileDirectory = [string](Get-OptionalPropertyValue -InputObject $browser -Name "ProfileDirectoryName" -DefaultValue "")
+$profileLabel = if ($profileDisplayName) { $profileDisplayName } elseif ($profileDirectory) { $profileDirectory } else { "current profile" }
+Write-Host "Opened one governed LinkedIn buyer-intent workspace tab in $($browser.Name), profile $profileLabel."

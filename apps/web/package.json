@@ -27,9 +27,11 @@
     "@sales-automation/bd-workflow": "workspace:*",
     "@sales-automation/engagement-guidance": "workspace:*",
     "@sales-automation/evaluator": "workspace:*",
+    "@sales-automation/funnel-analytics": "workspace:*",
     "@sales-automation/prospect-discovery": "workspace:*",
     "@sales-automation/shared": "workspace:*",
-    "@sales-automation/storage": "workspace:*"
+    "@sales-automation/storage": "workspace:*",
+    "@sales-automation/sync-health": "workspace:*"
   },
   "devDependencies": {
     "@sales-automation/fixtures": "workspace:*",

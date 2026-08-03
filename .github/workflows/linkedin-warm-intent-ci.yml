@@ -1,0 +1,68 @@
+name: LinkedIn Warm Intent CI
+
+on:
+  pull_request:
+    branches:
+      - agent/campaign-governance-268
+    paths:
+      - '.github/workflows/linkedin-warm-intent-ci.yml'
+      - 'workers/acquisition/acquisition_v4/linkedin_intent.py'
+      - 'workers/acquisition/acquisition_v4/qualification.py'
+      - 'workers/acquisition/tests/test_linkedin_intent.py'
+      - 'workers/acquisition/tests/test_qualification.py'
+      - 'workers/acquisition/tests/test_review.py'
+      - 'workers/acquisition/tests/fixtures/linkedin_intent_cases.json'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: linkedin-warm-intent-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  validate:
+    name: Classify buyer demand and reject LinkedIn negatives
+    runs-on: ubuntu-latest
+    timeout-minutes: 18
+
+    defaults:
+      run:
+        working-directory: workers/acquisition
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Compile acquisition runtime
+        run: python -m compileall -q acquisition_v4 tests
+
+      - name: Test all LinkedIn intent categories and negative filters
+        env: &test_env
+          PYTHONPATH: .:tests
+        run: python -m unittest test_linkedin_intent -v
+
+      - name: Test qualification compatibility
+        env: *test_env
+        run: python -m unittest test_qualification -v
+
+      - name: Test review queue compatibility
+        env: *test_env
+        run: python -m unittest test_review -v
+
+      - name: Enforce evidence and human-action boundary
+        shell: bash
+        run: |
+          grep -q 'original_source_classification_preserved' acquisition_v4/linkedin_intent.py
+          grep -q 'canonical_url' acquisition_v4/linkedin_intent.py
+          grep -q 'evidence_hash' acquisition_v4/linkedin_intent.py
+          grep -q 'external_action_automated.*False' acquisition_v4/linkedin_intent.py
+          ! grep -R "external_action_automated.*True\|external_action_performed.*True\|automatic.*send" \
+            acquisition_v4/linkedin_intent.py \
+            acquisition_v4/qualification.py

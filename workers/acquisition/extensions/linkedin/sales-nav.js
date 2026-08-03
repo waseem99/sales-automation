@@ -1,6 +1,11 @@
 (() => {
   "use strict";
 
+  const hardening = globalThis.CodistanLinkedInParserHardening;
+  if (!hardening) return;
+
+  const PARSER_VERSION = "sales-navigator-dom-1.1.0";
+  const monitor = hardening.createDomMonitor(document);
   const LEAD_LINK_SELECTORS = [
     'a[href*="/sales/lead/"]',
     'a[href*="/in/"]'
@@ -9,34 +14,39 @@
     '[data-x-search-result]',
     '[data-scroll-into-view]',
     'li.artdeco-list__item',
+    '[role="listitem"]',
     'li',
     'article'
   ];
   const NAME_SELECTORS = [
     '[data-anonymize="person-name"]',
     '.artdeco-entity-lockup__title',
-    '[class*="entity-lockup__title"]'
+    '[class*="entity-lockup__title"]',
+    '[data-test-id*="person-name"]'
   ];
   const HEADLINE_SELECTORS = [
     '[data-anonymize="headline"]',
     '.artdeco-entity-lockup__subtitle',
-    '[class*="entity-lockup__subtitle"]'
+    '[class*="entity-lockup__subtitle"]',
+    '[data-test-id*="headline"]'
   ];
   const COMPANY_SELECTORS = [
     '[data-anonymize="company-name"]',
     'a[href*="/sales/company/"]',
     'a[href*="/company/"]',
     '.artdeco-entity-lockup__caption',
-    '[class*="entity-lockup__caption"]'
+    '[class*="entity-lockup__caption"]',
+    '[data-test-id*="company-name"]'
   ];
   const LOCATION_SELECTORS = [
     '[data-anonymize="location"]',
     '.artdeco-entity-lockup__metadata',
-    '[class*="entity-lockup__metadata"]'
+    '[class*="entity-lockup__metadata"]',
+    '[data-test-id*="location"]'
   ];
 
-  function normalize(value) {
-    return String(value || "").replace(/\s+/g, " ").trim();
+  function normalize(value, limit = 20000) {
+    return hardening.normalizeText(value, limit);
   }
 
   function visible(element) {
@@ -50,7 +60,7 @@
     for (const selector of selectors) {
       for (const node of root.querySelectorAll(selector)) {
         if (!visible(node)) continue;
-        const value = normalize(node.innerText || node.textContent);
+        const value = normalize(node.innerText || node.textContent, 1000);
         if (value) return value;
       }
     }
@@ -58,18 +68,7 @@
   }
 
   function canonicalLeadUrl(value) {
-    try {
-      const url = new URL(value, location.href);
-      if (!["linkedin.com", "www.linkedin.com", "sales.linkedin.com"].includes(url.hostname)) return "";
-      if (!url.pathname.startsWith("/sales/lead/") && !url.pathname.startsWith("/in/")) return "";
-      url.protocol = "https:";
-      url.hostname = "www.linkedin.com";
-      url.search = "";
-      url.hash = "";
-      return url.toString().replace(/\/$/, "");
-    } catch (_error) {
-      return "";
-    }
+    return hardening.canonicalLeadUrl(value);
   }
 
   function nativeId(url) {
@@ -119,18 +118,28 @@
     return anchors;
   }
 
+  function increment(map, key) {
+    map[key] = Number(map[key] || 0) + 1;
+  }
+
   function extractVisibleProspects(limit = 30) {
     const records = [];
     const seen = new Set();
     const anchors = visibleLeadAnchors();
     const diagnostics = {
+      parser_version: PARSER_VERSION,
+      hardening_version: hardening.VERSION,
       visible_lead_links: anchors.length,
       readable_cards: 0,
       captured_prospects: 0,
       missing_name: 0,
       missing_headline: 0,
       missing_company: 0,
-      duplicate_profiles: 0
+      partial_parse_rejections: 0,
+      duplicate_profiles: 0,
+      rejection_reasons: {},
+      layout_signature: hardening.layoutSignature(document, {cards: CARD_SELECTORS, names: NAME_SELECTORS, headlines: HEADLINE_SELECTORS, companies: COMPANY_SELECTORS}),
+      dom_mutations: monitor.snapshot()
     };
 
     for (const {anchor, url} of anchors) {
@@ -139,18 +148,20 @@
         continue;
       }
       const card = cardForAnchor(anchor);
-      const cardText = normalize(card.innerText || card.textContent).slice(0, 12000);
-      if (cardText.length < 25) continue;
+      const cardText = normalize(card.innerText || card.textContent, 12000);
+      if (cardText.length < 25) {
+        increment(diagnostics.rejection_reasons, "missing_readable_card");
+        continue;
+      }
       diagnostics.readable_cards += 1;
 
-      const name = firstText(card, NAME_SELECTORS) || normalize(anchor.innerText || anchor.textContent);
+      const name = firstText(card, NAME_SELECTORS) || normalize(anchor.innerText || anchor.textContent, 300);
       const headline = firstText(card, HEADLINE_SELECTORS);
       const company = firstText(card, COMPANY_SELECTORS);
       const locationText = firstText(card, LOCATION_SELECTORS);
       if (!name) diagnostics.missing_name += 1;
       if (!headline) diagnostics.missing_headline += 1;
       if (!company) diagnostics.missing_company += 1;
-      if (!name || (!headline && !company)) continue;
 
       const relationship = relationshipFrom(cardText);
       const mutualConnections = mutualConnectionsFrom(cardText);
@@ -168,8 +179,7 @@
         `Visible Sales Navigator card: ${cardText}`
       ].filter(Boolean).join(" | ").slice(0, 20000);
 
-      seen.add(url);
-      records.push({
+      const record = {
         source_url: url,
         source_native_id: nativeId(url),
         title,
@@ -192,13 +202,32 @@
           teamlink,
           recent_activity: recentActivity,
           visible_card_text: cardText,
-          extraction_version: "sales-navigator-dom-1.0.0"
+          source_classification: "cold_no_confirmed_intent",
+          buyer_intent_confirmed: false,
+          extraction_version: PARSER_VERSION,
+          parser_hardening_version: hardening.VERSION,
+          parser_status: "pending"
         }
-      });
+      };
+      const assessment = hardening.evaluateSalesNavigatorRecord(record);
+      record.raw_evidence.parser_status = assessment.status;
+      record.raw_evidence.parser_diagnostics = assessment;
+      if (assessment.status !== "complete") {
+        diagnostics.partial_parse_rejections += 1;
+        for (const field of assessment.missing_critical_fields) increment(diagnostics.rejection_reasons, `missing_${field}`);
+        continue;
+      }
+
+      seen.add(url);
+      records.push(record);
       if (records.length >= limit) break;
     }
-    diagnostics.captured_prospects = records.length;
-    return {records, diagnostics};
+
+    const deduped = hardening.dedupeRecords(records);
+    diagnostics.duplicate_profiles += deduped.duplicates;
+    diagnostics.captured_prospects = deduped.records.length;
+    diagnostics.dom_mutations = monitor.snapshot();
+    return {records: deduped.records, diagnostics: hardening.sanitize(diagnostics)};
   }
 
   function candidateScrollers() {
@@ -259,11 +288,19 @@
           before_height: beforeHeight,
           after_height: afterHeight,
           at_end: after + clientHeight >= afterHeight - 40,
-          scroller: scrollerDescriptor(scroller)
+          scroller: scrollerDescriptor(scroller),
+          parser_diagnostics: hardening.sanitize({parser_version: PARSER_VERSION, dom_mutations: monitor.snapshot()})
         };
       }
     }
-    return {ok: true, moved: false, at_end: true, reason: "no_movable_scroll_container", scroller: scrollerDescriptor(scrollers[0])};
+    return {
+      ok: true,
+      moved: false,
+      at_end: true,
+      reason: "no_movable_scroll_container",
+      scroller: scrollerDescriptor(scrollers[0]),
+      parser_diagnostics: hardening.sanitize({parser_version: PARSER_VERSION, dom_mutations: monitor.snapshot()})
+    };
   }
 
   chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
@@ -276,21 +313,21 @@
       }
       if (message.type === "CODISTAN_SALES_NAV_SCROLL_STATUS") {
         const scroller = candidateScrollers()[0] || document.scrollingElement;
-        sendResponse({ok: true, top: scrollTopOf(scroller), scroller: scrollerDescriptor(scroller)});
+        sendResponse({ok: true, top: scrollTopOf(scroller), scroller: scrollerDescriptor(scroller), parser_version: PARSER_VERSION});
         return true;
       }
       if (message.type === "CODISTAN_SCROLL_SALES_NAV_RESULTS") {
-        scrollResults(message.wait_ms).then(sendResponse).catch(error => sendResponse({ok: false, error: error instanceof Error ? error.message : String(error)}));
+        scrollResults(message.wait_ms).then(sendResponse).catch(error => sendResponse({ok: false, error: hardening.safeError(error), parser_version: PARSER_VERSION}));
         return true;
       }
       if (message.type === "CODISTAN_RESTORE_SALES_NAV_SCROLL") {
         const scroller = candidateScrollers()[0] || document.scrollingElement;
         setScrollTop(scroller, Number(message.top || 0));
-        sendResponse({ok: true});
+        sendResponse({ok: true, parser_version: PARSER_VERSION});
         return true;
       }
     } catch (error) {
-      sendResponse({ok: false, error: error instanceof Error ? error.message : String(error)});
+      sendResponse({ok: false, error: hardening.safeError(error), parser_version: PARSER_VERSION});
       return true;
     }
     return false;

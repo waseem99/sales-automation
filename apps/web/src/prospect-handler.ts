@@ -12,6 +12,14 @@ import {
   type BdTaskStatus,
 } from '@sales-automation/bd-workflow';
 import type { ProspectDiscoveryResult, ProspectDiscoveryRunStore } from '@sales-automation/prospect-discovery';
+import {
+  buildSellerQueueView,
+  createSellerQueuePreferences,
+  decodeSellerQueuePreferenceCookie,
+  encodeSellerQueuePreferenceCookie,
+  readCookieValue,
+  SELLER_QUEUE_PREFERENCE_COOKIE,
+} from '@sales-automation/seller-queues';
 import type {
   ContactAccuracy,
   PipelineStatus,
@@ -118,14 +126,80 @@ export async function handleProspectDashboardRequest(
     }
 
     if (method === 'GET' && (pathname === '/' || pathname === '/prospects')) {
-      const records = context.repository.listLeads();
+      const allRecords = context.repository.listLeads();
+      const savedCookie = readCookieValue(header(request.headers, 'cookie'), SELLER_QUEUE_PREFERENCE_COOKIE);
+      const saved = decodeSellerQueuePreferenceCookie(savedCookie, context.sessionSecret, actor);
+      const generatedAt = now(context);
+      const preferences = createSellerQueuePreferences({
+        userId: actor,
+        activeQueue: url.searchParams.get('queue') ?? saved?.activeQueue ?? 'follow_up_pending',
+        sort: url.searchParams.get('sort') ?? saved?.sort ?? 'priority_desc',
+        filters: {
+          serviceCategory: url.searchParams.has('service') ? url.searchParams.get('service') : saved?.filters.serviceCategory,
+          pipelineStatus: url.searchParams.has('status') ? url.searchParams.get('status') : saved?.filters.pipelineStatus,
+          owner: url.searchParams.has('owner') ? url.searchParams.get('owner') : saved?.filters.owner,
+          query: url.searchParams.has('q') ? url.searchParams.get('q') : saved?.filters.query,
+        },
+        savedAt: generatedAt,
+      });
+      const sellerQueue = buildSellerQueueView(allRecords, {
+        activeQueue: preferences.activeQueue,
+        sort: preferences.sort,
+        filters: preferences.filters,
+        generatedAt,
+      });
       const selectedId = url.searchParams.get('leadId') ?? undefined;
-      return html(renderProspectDashboardPage({
-        records,
-        selected: selectedId ? context.repository.getLead(selectedId) : records[0],
+      const selected = selectedId
+        ? sellerQueue.records.find((record) => record.lead.id === selectedId)
+        : sellerQueue.records[0];
+      const response = html(renderProspectDashboardPage({
+        records: sellerQueue.records,
+        selected,
         runs: context.runStore.listRuns(20),
-        generatedAt: now(context),
+        generatedAt,
+        sellerQueue,
+        sellerUserId: actor,
       }));
+      response.headers['set-cookie'] = `${SELLER_QUEUE_PREFERENCE_COOKIE}=${encodeURIComponent(encodeSellerQueuePreferenceCookie(preferences, context.sessionSecret))}; Path=/; HttpOnly; SameSite=Strict; Max-Age=2592000${context.secureCookies ? "; Secure" : ""}`;
+      return response;
+    }
+
+    if (method === 'GET' && pathname === '/api/seller-queues') {
+      const generatedAt = now(context);
+      const savedCookie = readCookieValue(header(request.headers, 'cookie'), SELLER_QUEUE_PREFERENCE_COOKIE);
+      const saved = decodeSellerQueuePreferenceCookie(savedCookie, context.sessionSecret, actor)
+        ?? createSellerQueuePreferences({userId: actor, activeQueue: 'follow_up_pending', sort: 'priority_desc', savedAt: generatedAt});
+      const sellerQueue = buildSellerQueueView(context.repository.listLeads(), {
+        activeQueue: saved.activeQueue,
+        sort: saved.sort,
+        filters: saved.filters,
+        generatedAt,
+      });
+      return json({
+        version: sellerQueue.version,
+        activeQueue: sellerQueue.activeQueue,
+        sort: sellerQueue.sort,
+        filters: sellerQueue.filters,
+        queues: sellerQueue.queues,
+        leadIds: sellerQueue.records.map((record) => record.lead.id),
+        countsReconciled: sellerQueue.countsReconciled,
+        humanReviewRequired: true,
+        externalActionAutomated: false,
+      });
+    }
+
+    if (method === 'POST' && pathname === '/api/seller-queue-preferences') {
+      const payload = asObject(request.body);
+      const preferences = createSellerQueuePreferences({
+        userId: actor,
+        activeQueue: payload.activeQueue,
+        sort: payload.sort,
+        filters: payload.filters,
+        savedAt: now(context),
+      });
+      const response = json({ok: true, preferences, externalActionAutomated: false}, 201);
+      response.headers['set-cookie'] = `${SELLER_QUEUE_PREFERENCE_COOKIE}=${encodeURIComponent(encodeSellerQueuePreferenceCookie(preferences, context.sessionSecret))}; Path=/; HttpOnly; SameSite=Strict; Max-Age=2592000${context.secureCookies ? "; Secure" : ""}`;
+      return response;
     }
 
     if (method === 'GET' && pathname === '/api/prospects') {

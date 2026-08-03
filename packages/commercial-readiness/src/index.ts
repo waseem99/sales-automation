@@ -1,16 +1,28 @@
 import type { Lead } from '@sales-automation/shared';
 
-export const COMMERCIAL_READINESS_VERSION = 'commercial-readiness.v1';
+export const COMMERCIAL_READINESS_VERSION = 'commercial-readiness.v2';
 
-export type OfferReadinessStatus = 'research_only' | 'outreach_ready_limited' | 'outreach_ready' | 'on_hold';
-export type CommercialApprovalMode = 'warm_response' | 'cold_campaign' | 'research_only';
+export type OfferReadinessStatus =
+  | 'draft'
+  | 'research_only'
+  | 'pilot_ready'
+  | 'outreach_ready_limited'
+  | 'outreach_ready'
+  | 'retired';
+export type CommercialApprovalMode = 'warm_response' | 'cold_campaign' | 'pilot_only' | 'research_only';
+export type CommercialReadinessAction = 'qualification' | 'draft' | 'approval';
+export type QualificationDisposition = 'blocked' | 'research_only' | 'pilot_only' | 'actionable';
+export type ApprovedRoute = 'direct_buyer' | 'channel_partner' | 'delivery_partner' | 'referral_partner';
 
 export interface OfferReadinessProfile {
   offerId: string;
+  offerVersion: number;
+  readinessVersion: number;
   offerName: string;
   owner: string;
   status: OfferReadinessStatus;
-  approvedRoutes: Array<'direct_buyer' | 'channel_partner' | 'delivery_partner' | 'referral_partner'>;
+  statusReason: string;
+  approvedRoutes: ApprovedRoute[];
   requiredBeforeOutreach: string[];
   approvedClaims: string[];
   prohibitedClaims: string[];
@@ -19,13 +31,30 @@ export interface OfferReadinessProfile {
   lastReviewedAt: string;
 }
 
+export interface OfferReadinessPin {
+  commercialReadinessVersion: typeof COMMERCIAL_READINESS_VERSION;
+  offerId: string;
+  offerVersion: number;
+  readinessVersion: number;
+  readinessStatus: OfferReadinessStatus;
+  pinnedAt: string;
+}
+
 export interface CommercialReadinessDecision {
   version: typeof COMMERCIAL_READINESS_VERSION;
+  qualificationAllowed: boolean;
+  actionableQualificationAllowed: boolean;
+  draftAllowed: boolean;
   approvalAllowed: boolean;
+  allowedActions: CommercialReadinessAction[];
+  qualificationDisposition: QualificationDisposition;
   mode: CommercialApprovalMode;
   offerId?: string;
+  offerVersion?: number;
+  readinessVersion?: number;
   offerName?: string;
-  status: OfferReadinessStatus | 'warm_opportunity' | 'missing_offer';
+  canonicalOfferName?: string;
+  status: OfferReadinessStatus | 'missing_offer' | 'invalid_offer_version';
   reasons: string[];
   blockers: string[];
   approvedClaims: string[];
@@ -34,14 +63,90 @@ export interface CommercialReadinessDecision {
   humanReviewRequired: true;
 }
 
+export interface OfferReadinessAuditEvent {
+  id: string;
+  offerId: string;
+  offerVersion: number;
+  priorStatus: OfferReadinessStatus;
+  newStatus: OfferReadinessStatus;
+  priorReadinessVersion: number;
+  newReadinessVersion: number;
+  actor: string;
+  reason: string;
+  occurredAt: string;
+}
+
 const REVIEWED_AT = '2026-07-27T00:00:00.000Z';
+
+const STATUS_POLICY: Record<OfferReadinessStatus, {
+  qualificationAllowed: boolean;
+  actionableQualificationAllowed: boolean;
+  draftAllowed: boolean;
+  approvalAllowed: boolean;
+  disposition: QualificationDisposition;
+}> = {
+  draft: {
+    qualificationAllowed: true,
+    actionableQualificationAllowed: false,
+    draftAllowed: false,
+    approvalAllowed: false,
+    disposition: 'research_only',
+  },
+  research_only: {
+    qualificationAllowed: true,
+    actionableQualificationAllowed: false,
+    draftAllowed: false,
+    approvalAllowed: false,
+    disposition: 'research_only',
+  },
+  pilot_ready: {
+    qualificationAllowed: true,
+    actionableQualificationAllowed: false,
+    draftAllowed: true,
+    approvalAllowed: false,
+    disposition: 'pilot_only',
+  },
+  outreach_ready_limited: {
+    qualificationAllowed: true,
+    actionableQualificationAllowed: true,
+    draftAllowed: true,
+    approvalAllowed: true,
+    disposition: 'actionable',
+  },
+  outreach_ready: {
+    qualificationAllowed: true,
+    actionableQualificationAllowed: true,
+    draftAllowed: true,
+    approvalAllowed: true,
+    disposition: 'actionable',
+  },
+  retired: {
+    qualificationAllowed: false,
+    actionableQualificationAllowed: false,
+    draftAllowed: false,
+    approvalAllowed: false,
+    disposition: 'blocked',
+  },
+};
+
+const ALLOWED_TRANSITIONS: Record<OfferReadinessStatus, OfferReadinessStatus[]> = {
+  draft: ['research_only', 'pilot_ready', 'retired'],
+  research_only: ['draft', 'pilot_ready', 'retired'],
+  pilot_ready: ['research_only', 'outreach_ready_limited', 'outreach_ready', 'retired'],
+  outreach_ready_limited: ['research_only', 'pilot_ready', 'outreach_ready', 'retired'],
+  outreach_ready: ['research_only', 'pilot_ready', 'outreach_ready_limited', 'retired'],
+  retired: ['draft'],
+};
 
 export const OFFER_READINESS: Record<string, OfferReadinessProfile> = {
   fintech_operations_platform: {
     offerId: 'fintech_operations_platform',
+    offerVersion: 1,
+    readinessVersion: 1,
     offerName: 'FinTech Backend Operations Platform',
     owner: 'Waseem',
     status: 'research_only',
+    statusReason: 'The product scope, pilot proof, pricing and regulated-domain claims are not approved for outreach.',
     approvedRoutes: ['direct_buyer', 'channel_partner', 'referral_partner'],
     requiredBeforeOutreach: [
       'Define the exact operational workflows, user roles and measurable pilot outcome.',
@@ -70,9 +175,12 @@ export const OFFER_READINESS: Record<string, OfferReadinessProfile> = {
   },
   managed_software_ai_delivery: {
     offerId: 'managed_software_ai_delivery',
+    offerVersion: 1,
+    readinessVersion: 1,
     offerName: 'Managed Software and AI Delivery Partnership',
     owner: 'Waseem',
     status: 'outreach_ready_limited',
+    statusReason: 'Human-reviewed outreach is allowed within verified capability, proof, capacity and commercial limits.',
     approvedRoutes: ['direct_buyer', 'channel_partner', 'delivery_partner', 'referral_partner'],
     requiredBeforeOutreach: [
       'Confirm that the proposed delivery lane matches currently available Codistan capability.',
@@ -101,67 +209,223 @@ export const OFFER_READINESS: Record<string, OfferReadinessProfile> = {
 
 export function evaluateCommercialReadiness(lead: Lead): CommercialReadinessDecision {
   const warm = lead.opportunityStatus === 'live_opportunity' || lead.prospectStage === 'warm_lead';
-  const offerId = offerIdFromLead(lead);
-  const profile = offerId ? OFFER_READINESS[offerId] : undefined;
-
-  if (warm) {
-    return {
-      version: COMMERCIAL_READINESS_VERSION,
-      approvalAllowed: true,
-      mode: 'warm_response',
-      offerId,
-      offerName: profile?.offerName,
-      status: 'warm_opportunity',
-      reasons: [
-        'A separate warm-demand record exists, so a human may respond to the verified requirement.',
-        profile?.status === 'research_only'
-          ? 'The associated product offer is research-only; the response must stay within verified service capability and must not present the product as ready.'
-          : 'Any offer-specific commitments still require human verification.',
-      ],
-      blockers: [],
-      approvedClaims: profile?.approvedClaims ?? [],
-      prohibitedClaims: profile?.prohibitedClaims ?? ['Do not make unsupported capability, proof, pricing or delivery claims.'],
-      proofLimitations: profile?.proofLimitations ?? [],
-      humanReviewRequired: true,
-    };
+  const context = offerContextFromLead(lead);
+  if (!context.offerId) {
+    return missingOfferDecision('The record has no resolved offer ID and cannot create an actionable qualification, draft or approval.');
   }
-
-  if (!offerId) {
-    return blocked('missing_offer', undefined, undefined, [
-      'The cold prospect has no resolved offer ID. Complete campaign and offer mapping before approving outreach.',
-    ]);
-  }
-
+  const profile = OFFER_READINESS[context.offerId];
   if (!profile) {
-    return blocked('missing_offer', offerId, undefined, [
-      `Offer ${offerId} has no approved commercial-readiness profile.`,
-    ]);
+    return missingOfferDecision(`Offer ${context.offerId} has no approved commercial-readiness profile.`, context.offerId);
+  }
+  return evaluateOfferReadinessProfile(profile, {
+    warm,
+    route: context.route,
+    observedOfferVersion: context.offerVersion,
+  });
+}
+
+export function evaluateOfferReadinessProfile(
+  profile: OfferReadinessProfile,
+  input: {warm?: boolean; route?: ApprovedRoute; observedOfferVersion?: number} = {},
+): CommercialReadinessDecision {
+  if (input.observedOfferVersion !== undefined && input.observedOfferVersion !== profile.offerVersion) {
+    return decisionFromProfile(profile, {
+      qualificationAllowed: true,
+      actionableQualificationAllowed: false,
+      draftAllowed: false,
+      approvalAllowed: false,
+      disposition: 'research_only',
+    }, input.warm === true, [
+      `The record is pinned to offer version ${input.observedOfferVersion}, but the approved profile is version ${profile.offerVersion}. Create a fresh recommendation before drafting or approval.`,
+    ], 'invalid_offer_version');
   }
 
-  if (profile.status === 'research_only' || profile.status === 'on_hold') {
-    return blocked(profile.status, profile.offerId, profile.offerName, profile.requiredBeforeOutreach, profile);
-  }
+  const policy = STATUS_POLICY[profile.status];
+  const routeBlocked = Boolean(input.route && !profile.approvedRoutes.includes(input.route));
+  const blockers = [
+    ...(policy.approvalAllowed ? [] : [profile.statusReason, ...profile.requiredBeforeOutreach]),
+    ...(routeBlocked && input.route ? [`The ${input.route.replaceAll('_', ' ')} route is not approved for this offer.`] : []),
+  ];
+  const effectivePolicy = routeBlocked
+    ? {
+        qualificationAllowed: true,
+        actionableQualificationAllowed: false,
+        draftAllowed: false,
+        approvalAllowed: false,
+        disposition: 'research_only' as const,
+      }
+    : policy;
+  return decisionFromProfile(profile, effectivePolicy, input.warm === true, blockers, profile.status);
+}
 
-  const route = routeFromLead(lead);
-  if (route && !profile.approvedRoutes.includes(route)) {
-    return blocked(profile.status, profile.offerId, profile.offerName, [
-      `The ${route.replaceAll('_', ' ')} route is not approved for this offer.`,
-    ], profile);
-  }
+export function applyCommercialReadinessToQualification(lead: Lead): Lead {
+  const decision = evaluateCommercialReadiness(lead);
+  const raw = asRecord(lead.rawPayload);
+  const campaignMatches = Array.isArray(raw.campaignMatches)
+    ? raw.campaignMatches.map((value) => enrichRecommendation(asRecord(value), decision))
+    : [];
+  const primaryCampaignMatch = Object.keys(asRecord(raw.primaryCampaignMatch)).length > 0
+    ? enrichRecommendation(asRecord(raw.primaryCampaignMatch), decision)
+    : null;
+  const pipelineStatus = !decision.actionableQualificationAllowed && lead.pipelineStatus === 'draft_ready'
+    ? 'needs_human_review'
+    : lead.pipelineStatus;
+  return {
+    ...lead,
+    pipelineStatus,
+    rawPayload: {
+      ...raw,
+      campaignMatches,
+      primaryCampaignMatch,
+      commercialReadinessVersion: COMMERCIAL_READINESS_VERSION,
+      commercialReadinessDecision: decision,
+    },
+  };
+}
 
+export function assertCommerciallyReadyForDraft(lead: Lead): CommercialReadinessDecision {
+  const decision = evaluateCommercialReadiness(lead);
+  if (!decision.draftAllowed) {
+    throw new Error(`Commercial draft blocked: ${decision.blockers.join(' ') || 'The offer is not approved for drafting.'}`);
+  }
+  return decision;
+}
+
+export function assertCommerciallyReadyForApproval(lead: Lead): CommercialReadinessDecision {
+  const decision = evaluateCommercialReadiness(lead);
+  if (!decision.approvalAllowed) {
+    throw new Error(`Commercial approval blocked: ${decision.blockers.join(' ') || 'The offer is not approved for outreach.'}`);
+  }
+  return decision;
+}
+
+export function createOfferReadinessPin(
+  decision: CommercialReadinessDecision,
+  pinnedAt = new Date().toISOString(),
+): OfferReadinessPin {
+  if (!decision.offerId || !decision.offerVersion || !decision.readinessVersion || !isReadinessStatus(decision.status)) {
+    throw new Error('Offer readiness pin cannot be created without a valid offer ID, offer version and readiness state.');
+  }
+  return {
+    commercialReadinessVersion: COMMERCIAL_READINESS_VERSION,
+    offerId: decision.offerId,
+    offerVersion: decision.offerVersion,
+    readinessVersion: decision.readinessVersion,
+    readinessStatus: decision.status,
+    pinnedAt: validIso(pinnedAt, 'pinnedAt'),
+  };
+}
+
+export function assertOfferReadinessPinCurrent(
+  pin: OfferReadinessPin | undefined,
+  decision: CommercialReadinessDecision,
+  action: 'draft' | 'approval',
+): OfferReadinessPin {
+  if (!pin) throw new Error('Offer readiness pin is missing. Create a fresh draft from the current approved offer version.');
+  if (pin.commercialReadinessVersion !== COMMERCIAL_READINESS_VERSION) {
+    throw new Error('Offer readiness pin uses an unsupported policy version. Create a fresh draft.');
+  }
+  if (!decision.offerId || !decision.offerVersion || !decision.readinessVersion || !isReadinessStatus(decision.status)) {
+    throw new Error('Current offer readiness evidence is incomplete.');
+  }
+  if (
+    pin.offerId !== decision.offerId
+    || pin.offerVersion !== decision.offerVersion
+    || pin.readinessVersion !== decision.readinessVersion
+    || pin.readinessStatus !== decision.status
+  ) {
+    throw new Error('Offer readiness or offer version changed after the draft was created. Create a fresh draft before continuing.');
+  }
+  if (action === 'draft' && !decision.draftAllowed) throw new Error('Commercial draft blocked by the current offer readiness state.');
+  if (action === 'approval' && !decision.approvalAllowed) throw new Error('Commercial approval blocked by the current offer readiness state.');
+  return pin;
+}
+
+export function transitionOfferReadiness(
+  profile: OfferReadinessProfile,
+  nextStatus: OfferReadinessStatus,
+  input: {actor: string; reason: string; occurredAt?: string},
+): {profile: OfferReadinessProfile; auditEvent: OfferReadinessAuditEvent} {
+  const actor = requiredText(input.actor, 'actor');
+  const reason = requiredText(input.reason, 'reason');
+  const occurredAt = validIso(input.occurredAt ?? new Date().toISOString(), 'occurredAt');
+  if (profile.status === nextStatus) throw new Error('Offer readiness transition must change the status.');
+  if (!ALLOWED_TRANSITIONS[profile.status].includes(nextStatus)) {
+    throw new Error(`Invalid offer readiness transition: ${profile.status} -> ${nextStatus}.`);
+  }
+  const newReadinessVersion = profile.readinessVersion + 1;
+  const auditEvent: OfferReadinessAuditEvent = {
+    id: `offer-readiness-${profile.offerId}-v${profile.offerVersion}-r${newReadinessVersion}`,
+    offerId: profile.offerId,
+    offerVersion: profile.offerVersion,
+    priorStatus: profile.status,
+    newStatus: nextStatus,
+    priorReadinessVersion: profile.readinessVersion,
+    newReadinessVersion,
+    actor,
+    reason,
+    occurredAt,
+  };
+  return {
+    profile: {
+      ...profile,
+      status: nextStatus,
+      statusReason: reason,
+      readinessVersion: newReadinessVersion,
+      lastReviewedAt: occurredAt,
+    },
+    auditEvent,
+  };
+}
+
+function decisionFromProfile(
+  profile: OfferReadinessProfile,
+  policy: {
+    qualificationAllowed: boolean;
+    actionableQualificationAllowed: boolean;
+    draftAllowed: boolean;
+    approvalAllowed: boolean;
+    disposition: QualificationDisposition;
+  },
+  warm: boolean,
+  blockers: string[],
+  status: CommercialReadinessDecision['status'],
+): CommercialReadinessDecision {
+  const allowedActions: CommercialReadinessAction[] = [];
+  if (policy.qualificationAllowed) allowedActions.push('qualification');
+  if (policy.draftAllowed) allowedActions.push('draft');
+  if (policy.approvalAllowed) allowedActions.push('approval');
+  const mode: CommercialApprovalMode = policy.approvalAllowed
+    ? (warm ? 'warm_response' : 'cold_campaign')
+    : profile.status === 'pilot_ready'
+      ? 'pilot_only'
+      : 'research_only';
+  const reasons = [
+    `Offer ${profile.offerId} is pinned to immutable version ${profile.offerVersion} and readiness revision ${profile.readinessVersion}.`,
+    profile.statusReason,
+    policy.actionableQualificationAllowed
+      ? 'The record may be treated as commercially actionable after human review.'
+      : policy.draftAllowed
+        ? 'The record may support pilot preparation, but it is not approved for external outreach.'
+        : 'The record remains research-only and cannot produce an outreach-ready draft or approval.',
+  ];
   return {
     version: COMMERCIAL_READINESS_VERSION,
-    approvalAllowed: true,
-    mode: 'cold_campaign',
+    qualificationAllowed: policy.qualificationAllowed,
+    actionableQualificationAllowed: policy.actionableQualificationAllowed,
+    draftAllowed: policy.draftAllowed,
+    approvalAllowed: policy.approvalAllowed,
+    allowedActions,
+    qualificationDisposition: policy.disposition,
+    mode,
     offerId: profile.offerId,
-    offerName: profile.offerName,
-    status: profile.status,
-    reasons: [
-      profile.status === 'outreach_ready_limited'
-        ? 'Cold outreach may be approved only within the documented claims, proof and capacity limits.'
-        : 'The offer is approved for human-reviewed cold outreach.',
-    ],
-    blockers: [],
+    offerVersion: profile.offerVersion,
+    readinessVersion: profile.readinessVersion,
+    offerName: `${profile.offerName} · v${profile.offerVersion}`,
+    canonicalOfferName: profile.offerName,
+    status,
+    reasons,
+    blockers: unique(blockers),
     approvedClaims: profile.approvedClaims,
     prohibitedClaims: profile.prohibitedClaims,
     proofLimitations: profile.proofLimitations,
@@ -169,57 +433,87 @@ export function evaluateCommercialReadiness(lead: Lead): CommercialReadinessDeci
   };
 }
 
-export function assertCommerciallyReadyForApproval(lead: Lead): CommercialReadinessDecision {
-  const decision = evaluateCommercialReadiness(lead);
-  if (!decision.approvalAllowed) {
-    throw new Error(`Commercial approval blocked: ${decision.blockers.join(' ')}`);
-  }
-  return decision;
-}
-
-function blocked(
-  status: CommercialReadinessDecision['status'],
-  offerId: string | undefined,
-  offerName: string | undefined,
-  blockers: string[],
-  profile?: OfferReadinessProfile,
-): CommercialReadinessDecision {
+function missingOfferDecision(message: string, offerId?: string): CommercialReadinessDecision {
   return {
     version: COMMERCIAL_READINESS_VERSION,
+    qualificationAllowed: true,
+    actionableQualificationAllowed: false,
+    draftAllowed: false,
     approvalAllowed: false,
+    allowedActions: ['qualification'],
+    qualificationDisposition: 'research_only',
     mode: 'research_only',
     offerId,
-    offerName,
-    status,
-    reasons: ['Research and offer completion may continue, but external outreach approval is blocked.'],
-    blockers,
-    approvedClaims: profile?.approvedClaims ?? [],
-    prohibitedClaims: profile?.prohibitedClaims ?? ['Do not approve cold outreach without an approved offer.'],
-    proofLimitations: profile?.proofLimitations ?? [],
+    status: 'missing_offer',
+    reasons: ['Research may continue, but actionable qualification, drafting and approval are blocked.'],
+    blockers: [message],
+    approvedClaims: [],
+    prohibitedClaims: ['Do not approve outreach without a versioned, approved offer-readiness profile.'],
+    proofLimitations: [],
     humanReviewRequired: true,
   };
 }
 
-function offerIdFromLead(lead: Lead): string | undefined {
-  const raw = asRecord(lead.rawPayload);
-  const primary = asRecord(raw.primaryCampaignMatch);
-  const direct = text(primary.offerId);
-  if (direct) return direct;
-  const matches = Array.isArray(raw.campaignMatches) ? raw.campaignMatches : [];
-  for (const match of matches) {
-    const offerId = text(asRecord(match).offerId);
-    if (offerId) return offerId;
-  }
-  return undefined;
+function enrichRecommendation(
+  recommendation: Record<string, unknown>,
+  decision: CommercialReadinessDecision,
+): Record<string, unknown> {
+  const sameOffer = !decision.offerId || text(recommendation.offerId) === decision.offerId;
+  if (!sameOffer) return recommendation;
+  const originalDisposition = text(recommendation.disposition);
+  const downgraded = !decision.actionableQualificationAllowed && ['priority_a', 'priority_b'].includes(originalDisposition ?? '');
+  return {
+    ...recommendation,
+    offerVersion: decision.offerVersion ?? null,
+    readinessVersion: decision.readinessVersion ?? null,
+    commercialReadinessVersion: COMMERCIAL_READINESS_VERSION,
+    commercialReadinessStatus: decision.status,
+    qualificationActionable: decision.actionableQualificationAllowed,
+    readinessBlockers: decision.blockers,
+    disposition: downgraded ? 'research' : recommendation.disposition,
+    risks: unique([
+      ...stringArray(recommendation.risks),
+      ...(!decision.actionableQualificationAllowed ? decision.blockers : []),
+    ]),
+    nextResearchAction: downgraded
+      ? decision.blockers[0] ?? 'Complete offer readiness before treating this recommendation as actionable.'
+      : recommendation.nextResearchAction,
+  };
 }
 
-function routeFromLead(lead: Lead): OfferReadinessProfile['approvedRoutes'][number] | undefined {
+function offerContextFromLead(lead: Lead): {offerId?: string; offerVersion?: number; route?: ApprovedRoute} {
   const raw = asRecord(lead.rawPayload);
   const primary = asRecord(raw.primaryCampaignMatch);
-  const value = text(primary.route);
-  return ['direct_buyer', 'channel_partner', 'delivery_partner', 'referral_partner'].includes(value ?? '')
-    ? value as OfferReadinessProfile['approvedRoutes'][number]
-    : undefined;
+  const direct = contextFromMatch(primary);
+  if (direct.offerId) return direct;
+  const matches = Array.isArray(raw.campaignMatches) ? raw.campaignMatches : [];
+  for (const match of matches) {
+    const candidate = contextFromMatch(asRecord(match));
+    if (candidate.offerId) return candidate;
+  }
+  return {};
+}
+
+function contextFromMatch(value: Record<string, unknown>): {offerId?: string; offerVersion?: number; route?: ApprovedRoute} {
+  const route = text(value.route);
+  const version = positiveInteger(value.offerVersion);
+  return {
+    offerId: text(value.offerId),
+    offerVersion: version,
+    route: isApprovedRoute(route) ? route : undefined,
+  };
+}
+
+function isApprovedRoute(value: string | undefined): value is ApprovedRoute {
+  return ['direct_buyer', 'channel_partner', 'delivery_partner', 'referral_partner'].includes(value ?? '');
+}
+
+function isReadinessStatus(value: CommercialReadinessDecision['status']): value is OfferReadinessStatus {
+  return ['draft', 'research_only', 'pilot_ready', 'outreach_ready_limited', 'outreach_ready', 'retired'].includes(value);
+}
+
+function positiveInteger(value: unknown): number | undefined {
+  return typeof value === 'number' && Number.isInteger(value) && value > 0 ? value : undefined;
 }
 
 function asRecord(value: unknown): Record<string, unknown> {
@@ -228,4 +522,24 @@ function asRecord(value: unknown): Record<string, unknown> {
 
 function text(value: unknown): string | undefined {
   return typeof value === 'string' && value.trim() ? value.trim() : undefined;
+}
+
+function stringArray(value: unknown): string[] {
+  return Array.isArray(value) ? value.map(String).map((item) => item.trim()).filter(Boolean) : [];
+}
+
+function unique(values: string[]): string[] {
+  return [...new Set(values.map((value) => value.trim()).filter(Boolean))];
+}
+
+function requiredText(value: string, field: string): string {
+  const normalized = value.trim();
+  if (!normalized) throw new Error(`${field} is required.`);
+  return normalized;
+}
+
+function validIso(value: string, field: string): string {
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) throw new Error(`${field} must be a valid date.`);
+  return parsed.toISOString();
 }

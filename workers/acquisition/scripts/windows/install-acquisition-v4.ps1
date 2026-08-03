@@ -1,45 +1,67 @@
 param(
     [string]$InstallRoot = (Resolve-Path (Join-Path $PSScriptRoot "..\..\..\..")).Path,
-    [string]$StateRoot = (Join-Path $env:LOCALAPPDATA "Codistan\Acquisition")
+    [string]$StateRoot = (Join-Path $env:LOCALAPPDATA "Codistan\Acquisition"),
+    [switch]$EnableAutoStart
 )
 
 $ErrorActionPreference = "Stop"
+Set-StrictMode -Version Latest
+
+function Get-OptionalPropertyValue {
+    param(
+        [AllowNull()][object]$InputObject,
+        [Parameter(Mandatory = $true)][string]$Name,
+        [AllowNull()][object]$DefaultValue = $null
+    )
+    if ($null -eq $InputObject) { return $DefaultValue }
+    $property = $InputObject.PSObject.Properties[$Name]
+    if ($null -eq $property) { return $DefaultValue }
+    return $property.Value
+}
+
+function Get-NestedOptionalPropertyValue {
+    param(
+        [AllowNull()][object]$InputObject,
+        [Parameter(Mandatory = $true)][string[]]$Path,
+        [AllowNull()][object]$DefaultValue = $null
+    )
+    $current = $InputObject
+    foreach ($segment in $Path) {
+        $current = Get-OptionalPropertyValue -InputObject $current -Name $segment -DefaultValue $null
+        if ($null -eq $current) { return $DefaultValue }
+    }
+    return $current
+}
+
 $sourceRoot = Join-Path $InstallRoot "workers\acquisition"
-if (-not (Test-Path (Join-Path $sourceRoot "acquisition_v4\supervisor.py"))) {
+if (-not (Test-Path -LiteralPath (Join-Path $sourceRoot "acquisition_v4\supervisor.py"))) {
     throw "The Sales Automation source package was not found."
 }
-if (-not (Test-Path (Join-Path $sourceRoot "release-manifest.json"))) {
+if (-not (Test-Path -LiteralPath (Join-Path $sourceRoot "release-manifest.json"))) {
     throw "The Sales Automation release manifest was not found."
 }
-$release = Get-Content (Join-Path $sourceRoot "release-manifest.json") -Raw | ConvertFrom-Json
-if ([string]$release.product -ne "Codistan Sales Automation" -or [string]$release.application -ne "Prospect Desk") {
-    throw "The release manifest does not identify Codistan Sales Automation and Prospect Desk."
+$release = Get-Content -LiteralPath (Join-Path $sourceRoot "release-manifest.json") -Raw | ConvertFrom-Json
+$releaseProduct = [string](Get-OptionalPropertyValue -InputObject $release -Name "product" -DefaultValue "")
+$releaseApplication = [string](Get-OptionalPropertyValue -InputObject $release -Name "application" -DefaultValue "")
+$releaseVersion = [string](Get-OptionalPropertyValue -InputObject $release -Name "release_version" -DefaultValue "")
+$runtimeVersion = [string](Get-NestedOptionalPropertyValue -InputObject $release -Path @("components", "local_runtime") -DefaultValue "")
+$upworkExtensionVersion = [string](Get-NestedOptionalPropertyValue -InputObject $release -Path @("components", "upwork_extension") -DefaultValue "")
+$linkedinExtensionVersion = [string](Get-NestedOptionalPropertyValue -InputObject $release -Path @("components", "linkedin_sales_navigator_extension") -DefaultValue "")
+if ($releaseProduct -ne "Codistan Sales Automation" -or $releaseApplication -ne "Prospect Desk" -or [string]::IsNullOrWhiteSpace($runtimeVersion)) {
+    throw "The release manifest does not identify a complete Codistan Sales Automation / Prospect Desk package."
 }
 
-function Find-Python312 {
-    $py = Get-Command py.exe -ErrorAction SilentlyContinue
-    if ($py) {
-        & $py.Source -3.12 -c "import sys; assert sys.version_info >= (3, 12)" 2>$null
-        if ($LASTEXITCODE -eq 0) { return @($py.Source, "-3.12") }
-    }
-    $python = Get-Command python.exe -ErrorAction SilentlyContinue
-    if ($python) {
-        & $python.Source -c "import sys; assert sys.version_info >= (3, 12)" 2>$null
-        if ($LASTEXITCODE -eq 0) { return @($python.Source) }
-    }
-    return $null
+$pythonBootstrap = Join-Path $sourceRoot "scripts\windows\python-bootstrap.ps1"
+if (-not (Test-Path -LiteralPath $pythonBootstrap)) {
+    throw "The Sales Automation Python bootstrap was not found."
 }
-
-$pythonCommand = Find-Python312
-if (-not $pythonCommand) {
-    $winget = Get-Command winget.exe -ErrorAction SilentlyContinue
-    if (-not $winget) { throw "Python 3.12 is required and winget is unavailable." }
-    Write-Host "Installing Python 3.12 for the current user..."
-    & $winget.Source install --exact --id Python.Python.3.12 --scope user --accept-package-agreements --accept-source-agreements
-    if ($LASTEXITCODE -ne 0) { throw "Python 3.12 installation failed." }
-    $env:Path = [Environment]::GetEnvironmentVariable("Path", "User") + ";" + [Environment]::GetEnvironmentVariable("Path", "Machine")
-    $pythonCommand = Find-Python312
-    if (-not $pythonCommand) { throw "Python 3.12 was installed but is not available yet. Sign out and rerun START-HERE-SALES-AUTOMATION.cmd." }
+. $pythonBootstrap
+$pythonCommand = Ensure-CodistanPython
+$pythonExecutable = [string](Get-OptionalPropertyValue -InputObject $pythonCommand -Name "Executable" -DefaultValue "")
+$pythonArguments = @(Get-OptionalPropertyValue -InputObject $pythonCommand -Name "Arguments" -DefaultValue @())
+$pythonVersion = [string](Get-OptionalPropertyValue -InputObject $pythonCommand -Name "Version" -DefaultValue "")
+if ([string]::IsNullOrWhiteSpace($pythonExecutable)) {
+    throw "Python 3.12 or later could not be resolved after bootstrap."
 }
 
 New-Item -ItemType Directory -Force -Path $StateRoot | Out-Null
@@ -47,7 +69,7 @@ $configDirectory = Join-Path $StateRoot "config"
 $configPath = Join-Path $configDirectory "prospect-desk-sync.json"
 New-Item -ItemType Directory -Force -Path $configDirectory | Out-Null
 $enabledSources = @("linkedin", "upwork", "sales_navigator")
-if (-not (Test-Path $configPath)) {
+if (-not (Test-Path -LiteralPath $configPath)) {
     [ordered]@{
         version = 1
         enabled = $false
@@ -55,61 +77,79 @@ if (-not (Test-Path $configPath)) {
         token = ""
         sources = $enabledSources
         interval_seconds = 60
-    } | ConvertTo-Json -Depth 5 | Set-Content -Path $configPath -Encoding UTF8
+    } | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath $configPath -Encoding UTF8
 } else {
     try {
-        $existingConfig = Get-Content $configPath -Raw | ConvertFrom-Json
+        $existingConfig = Get-Content -LiteralPath $configPath -Raw | ConvertFrom-Json
+        $existingEnabled = Get-OptionalPropertyValue -InputObject $existingConfig -Name "enabled" -DefaultValue $false
+        $existingEndpoint = [string](Get-OptionalPropertyValue -InputObject $existingConfig -Name "endpoint" -DefaultValue "")
+        $existingToken = [string](Get-OptionalPropertyValue -InputObject $existingConfig -Name "token" -DefaultValue "")
+        $existingInterval = Get-OptionalPropertyValue -InputObject $existingConfig -Name "interval_seconds" -DefaultValue 60
+        $intervalSeconds = 60
+        if (-not [int]::TryParse([string]$existingInterval, [ref]$intervalSeconds) -or $intervalSeconds -lt 15) {
+            $intervalSeconds = 60
+        }
         $migratedConfig = [ordered]@{
             version = 1
-            enabled = ($existingConfig.enabled -eq $true)
-            endpoint = if ($existingConfig.endpoint) { [string]$existingConfig.endpoint } else { "" }
-            token = if ($existingConfig.token) { [string]$existingConfig.token } else { "" }
+            enabled = ($existingEnabled -eq $true)
+            endpoint = $existingEndpoint
+            token = $existingToken
             sources = $enabledSources
-            interval_seconds = if ($existingConfig.interval_seconds) { [int]$existingConfig.interval_seconds } else { 60 }
+            interval_seconds = $intervalSeconds
         }
-        $migratedConfig | ConvertTo-Json -Depth 5 | Set-Content -Path $configPath -Encoding UTF8
+        $migratedConfig | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath $configPath -Encoding UTF8
     } catch {
-        throw "The existing Prospect Desk sync configuration is invalid. Run Configure Prospect Desk Sync again or remove $configPath before reinstalling."
+        throw "The existing Prospect Desk sync configuration is invalid. Run Configure Prospect Desk Sync again or repair $configPath before reinstalling."
     }
 }
 
-$watchdogPidFile = Join-Path $StateRoot "watchdog.pid"
-if (Test-Path $watchdogPidFile) {
-    $watchdogProcessId = 0
-    [void][int]::TryParse((Get-Content $watchdogPidFile -Raw).Trim(), [ref]$watchdogProcessId)
-    if ($watchdogProcessId -gt 0) { Stop-Process -Id $watchdogProcessId -Force -ErrorAction SilentlyContinue }
-    Remove-Item $watchdogPidFile -Force -ErrorAction SilentlyContinue
-    Start-Sleep -Seconds 1
+$operationalConfigPath = Join-Path $configDirectory "operational-pilot.json"
+if (-not (Test-Path -LiteralPath $operationalConfigPath)) {
+    [ordered]@{
+        schema_version = "codistan-sales-automation-operational-pilot.v1"
+        open_lead_desk_on_start = $true
+        open_upwork_searches_on_start = $true
+        open_linkedin_searches_on_start = $true
+        sales_navigator_requires_registered_campaign = $true
+        external_actions_enabled = $false
+        created_at = (Get-Date).ToUniversalTime().ToString("o")
+    } | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath $operationalConfigPath -Encoding UTF8
 }
-$pidFile = Join-Path $StateRoot "runtime.pid"
-if (Test-Path $pidFile) {
-    $runtimeProcessId = 0
-    [void][int]::TryParse((Get-Content $pidFile -Raw).Trim(), [ref]$runtimeProcessId)
-    if ($runtimeProcessId -gt 0) { Stop-Process -Id $runtimeProcessId -Force -ErrorAction SilentlyContinue }
-    Remove-Item $pidFile -Force -ErrorAction SilentlyContinue
-}
-Get-NetTCPConnection -State Listen -LocalPort 8765,8775,8785 -ErrorAction SilentlyContinue |
-    Select-Object -ExpandProperty OwningProcess -Unique |
-    ForEach-Object { Stop-Process -Id $_ -Force -ErrorAction SilentlyContinue }
+
+$cleanupAutoStartScript = Join-Path $sourceRoot "scripts\windows\cleanup-sales-automation-autostart.ps1"
+$stopScript = Join-Path $sourceRoot "scripts\windows\stop-sales-automation.ps1"
+if (-not (Test-Path -LiteralPath $cleanupAutoStartScript)) { throw "The Sales Automation auto-start cleanup command was not found." }
+if (-not (Test-Path -LiteralPath $stopScript)) { throw "The Sales Automation stop command was not found." }
+
+# Upgrades remove legacy sign-in launch registrations before changing application files.
+# The cleanup command is deliberately scoped to known Sales Automation/Acquisition entries.
+& $cleanupAutoStartScript -StateRoot $StateRoot
+& $stopScript -StateRoot $StateRoot
 Start-Sleep -Seconds 1
 
 $appCurrent = Join-Path $StateRoot "app-current"
 $appPrevious = Join-Path $StateRoot "app-previous"
-if (Test-Path $appPrevious) { Remove-Item $appPrevious -Recurse -Force }
-if (Test-Path $appCurrent) { Move-Item $appCurrent $appPrevious }
+if (Test-Path -LiteralPath $appPrevious) { Remove-Item -LiteralPath $appPrevious -Recurse -Force }
+if (Test-Path -LiteralPath $appCurrent) { Move-Item -LiteralPath $appCurrent -Destination $appPrevious }
 New-Item -ItemType Directory -Force -Path (Join-Path $appCurrent "workers") | Out-Null
 Copy-Item -Path $sourceRoot -Destination (Join-Path $appCurrent "workers\acquisition") -Recurse -Force
-Get-ChildItem (Join-Path $appCurrent "workers\acquisition") -Directory -Recurse -Filter __pycache__ -ErrorAction SilentlyContinue | Remove-Item -Recurse -Force
+Get-ChildItem -LiteralPath (Join-Path $appCurrent "workers\acquisition") -Directory -Recurse -Filter __pycache__ -ErrorAction SilentlyContinue | Remove-Item -Recurse -Force
 
 $extensionRoot = Join-Path $StateRoot "extensions"
 foreach ($source in @("upwork", "linkedin")) {
     $target = Join-Path $extensionRoot $source
-    if (Test-Path $target) { Remove-Item $target -Recurse -Force }
+    if (Test-Path -LiteralPath $target) { Remove-Item -LiteralPath $target -Recurse -Force }
     New-Item -ItemType Directory -Force -Path $target | Out-Null
     Copy-Item -Path (Join-Path $appCurrent "workers\acquisition\extensions\$source\*") -Destination $target -Recurse -Force
 }
 
-function New-Shortcut([string]$Path, [string]$Target, [string]$WorkingDirectory, [int]$WindowStyle = 7) {
+function New-Shortcut {
+    param(
+        [string]$Path,
+        [string]$Target,
+        [string]$WorkingDirectory,
+        [int]$WindowStyle = 1
+    )
     $shell = New-Object -ComObject WScript.Shell
     $shortcut = $shell.CreateShortcut($Path)
     $shortcut.TargetPath = $Target
@@ -121,58 +161,113 @@ function New-Shortcut([string]$Path, [string]$Target, [string]$WorkingDirectory,
 $commands = Join-Path $appCurrent "workers\acquisition"
 $desktop = [Environment]::GetFolderPath("Desktop")
 $startup = [Environment]::GetFolderPath("Startup")
-$shortcutMap = @{
-    "Start Sales Automation.lnk" = "START-SALES-AUTOMATION.cmd"
-    "Check Sales Automation Release.lnk" = "CHECK-SALES-AUTOMATION-RELEASE.cmd"
-    "Check Sales Automation Pilot.lnk" = "CHECK-SALES-AUTOMATION-PILOT.cmd"
-    "Diagnose Sales Automation.lnk" = "DIAGNOSE-SALES-AUTOMATION.cmd"
-    "Rollback Sales Automation.lnk" = "ROLLBACK-SALES-AUTOMATION.cmd"
-    "Configure Prospect Desk Sync.lnk" = "CONFIGURE-PROSPECT-DESK-SYNC.cmd"
-    "Open Upwork Searches.lnk" = "OPEN-UPWORK-SEARCHES.cmd"
-    "Open LinkedIn Lead Searches.lnk" = "OPEN-LINKEDIN-LEAD-SEARCHES.cmd"
-    "Open Acquisition Review.lnk" = "OPEN-ACQUISITION-REVIEW.cmd"
-    "Check Sales Navigator Pilot.lnk" = "CHECK-SALES-NAVIGATOR-PILOT.cmd"
-    "Start Acquisition V5.lnk" = "START-ACQUISITION-V4.cmd"
-    "Check Acquisition V5.lnk" = "CHECK-ACQUISITION-V4.cmd"
-    "Diagnose Acquisition V5.lnk" = "DIAGNOSE-ACQUISITION-V4.cmd"
-    "Rollback Acquisition V5.lnk" = "ROLLBACK-ACQUISITION-V4.cmd"
+$legacyDesktopShortcutNames = @(
+    "Run Sales Automation.lnk",
+    "Start Sales Automation.lnk",
+    "Stop Sales Automation.lnk",
+    "Open Lead Desk.lnk",
+    "Setup Browser Extensions.lnk",
+    "Sales Navigator Campaigns.lnk",
+    "Check Sales Automation Release.lnk",
+    "Check Sales Automation Pilot.lnk",
+    "Diagnose Sales Automation.lnk",
+    "Rollback Sales Automation.lnk",
+    "Configure Prospect Desk Sync.lnk",
+    "Open Upwork Searches.lnk",
+    "Open LinkedIn Lead Searches.lnk",
+    "Open Acquisition Review.lnk",
+    "Check Sales Navigator Pilot.lnk",
+    "Start Acquisition V5.lnk",
+    "Check Acquisition V5.lnk",
+    "Diagnose Acquisition V5.lnk",
+    "Rollback Acquisition V5.lnk"
+)
+foreach ($shortcutName in $legacyDesktopShortcutNames) {
+    Remove-Item -LiteralPath (Join-Path $desktop $shortcutName) -Force -ErrorAction SilentlyContinue
 }
-foreach ($entry in $shortcutMap.GetEnumerator()) {
-    New-Shortcut (Join-Path $desktop $entry.Key) (Join-Path $commands $entry.Value) $commands
-}
-New-Shortcut (Join-Path $startup "Codistan Sales Automation.lnk") (Join-Path $commands "START-SALES-AUTOMATION.cmd") $commands
 
-Start-Process -FilePath (Join-Path $commands "START-SALES-AUTOMATION.cmd") -WindowStyle Minimized
+New-Shortcut (Join-Path $desktop "Start Sales Automation.lnk") (Join-Path $commands "RUN-SALES-AUTOMATION.cmd") $commands 1
+New-Shortcut (Join-Path $desktop "Stop Sales Automation.lnk") (Join-Path $commands "STOP-SALES-AUTOMATION.cmd") $commands 1
+New-Shortcut (Join-Path $desktop "Open Lead Desk.lnk") (Join-Path $commands "OPEN-ACQUISITION-REVIEW.cmd") $commands 1
+New-Shortcut (Join-Path $desktop "Setup Browser Extensions.lnk") (Join-Path $commands "SETUP-SALES-AUTOMATION-EXTENSIONS.cmd") $commands 1
+
+if ($EnableAutoStart) {
+    # Autostart is runtime-only. Browser searches and the lead desk remain a deliberate operator action.
+    New-Shortcut (Join-Path $startup "Codistan Sales Automation.lnk") (Join-Path $commands "START-SALES-AUTOMATION.cmd") $commands 7
+}
+
+# Start only for the bounded installation health check. The runtime is stopped again
+# before a successful install returns, so normal operation always begins through the Start shortcut.
+Start-Process -FilePath (Join-Path $commands "START-ACQUISITION-V4.cmd") -WindowStyle Minimized
 $healthy = $false
-for ($attempt = 0; $attempt -lt 25; $attempt++) {
+for ($attempt = 0; $attempt -lt 60; $attempt++) {
     Start-Sleep -Seconds 1
     try {
         $upwork = Invoke-RestMethod -Uri "http://127.0.0.1:8765/health" -TimeoutSec 2
         $linkedin = Invoke-RestMethod -Uri "http://127.0.0.1:8775/health" -TimeoutSec 2
         $salesNavigator = Invoke-RestMethod -Uri "http://127.0.0.1:8785/health" -TimeoutSec 2
-        $versionMatches = ([string]$upwork.runtime_version -eq [string]$release.components.local_runtime) -and ([string]$linkedin.runtime_version -eq [string]$release.components.local_runtime) -and ([string]$salesNavigator.runtime_version -eq [string]$release.components.local_runtime)
-        $safe = ($upwork.external_actions_enabled -eq $false) -and ($linkedin.external_actions_enabled -eq $false) -and ($salesNavigator.external_actions_enabled -eq $false)
-        if ($upwork.ready -and $linkedin.ready -and $salesNavigator.ready -and $versionMatches -and $safe) { $healthy = $true; break }
+        $versionMatches = (
+            [string](Get-OptionalPropertyValue -InputObject $upwork -Name "runtime_version" -DefaultValue "") -eq $runtimeVersion -and
+            [string](Get-OptionalPropertyValue -InputObject $linkedin -Name "runtime_version" -DefaultValue "") -eq $runtimeVersion -and
+            [string](Get-OptionalPropertyValue -InputObject $salesNavigator -Name "runtime_version" -DefaultValue "") -eq $runtimeVersion
+        )
+        $safe = (
+            (Get-OptionalPropertyValue -InputObject $upwork -Name "external_actions_enabled" -DefaultValue $null) -eq $false -and
+            (Get-OptionalPropertyValue -InputObject $linkedin -Name "external_actions_enabled" -DefaultValue $null) -eq $false -and
+            (Get-OptionalPropertyValue -InputObject $salesNavigator -Name "external_actions_enabled" -DefaultValue $null) -eq $false
+        )
+        $ready = (
+            (Get-OptionalPropertyValue -InputObject $upwork -Name "ready" -DefaultValue $false) -eq $true -and
+            (Get-OptionalPropertyValue -InputObject $linkedin -Name "ready" -DefaultValue $false) -eq $true -and
+            (Get-OptionalPropertyValue -InputObject $salesNavigator -Name "ready" -DefaultValue $false) -eq $true
+        )
+        if ($ready -and $versionMatches -and $safe) { $healthy = $true; break }
     } catch {}
 }
+
+$installedStopScript = Join-Path $commands "scripts\windows\stop-sales-automation.ps1"
+& $installedStopScript -StateRoot $StateRoot
+
 if (-not $healthy) {
-    if (Test-Path $appPrevious) {
-        if (Test-Path $appCurrent) { Remove-Item $appCurrent -Recurse -Force }
-        Move-Item $appPrevious $appCurrent
+    if (Test-Path -LiteralPath $appPrevious) {
+        if (Test-Path -LiteralPath $appCurrent) { Remove-Item -LiteralPath $appCurrent -Recurse -Force }
+        Move-Item -LiteralPath $appPrevious -Destination $appCurrent
     }
-    throw "The installed collectors did not satisfy the Sales Automation release contract. The previous application folder was restored where available."
+    throw "The installed collectors did not satisfy the Sales Automation runtime contract. The previous application folder was restored where available."
+}
+
+$previousPythonPath = $env:PYTHONPATH
+$env:PYTHONPATH = $commands
+try {
+    $reviewCode = "from pathlib import Path; from acquisition_v4.review_v5 import write_review_outputs; write_review_outputs(Path(__import__('sys').argv[1]))"
+    & $pythonExecutable @pythonArguments -c $reviewCode $StateRoot | Out-Null
+    if ($LASTEXITCODE -ne 0) { throw "The initial local lead desk could not be generated." }
+} finally {
+    $env:PYTHONPATH = $previousPythonPath
 }
 
 Write-Host ""
-Write-Host "$($release.product) / $($release.application) $($release.release_version) installed and healthy."
-Write-Host "Runtime: $($release.components.local_runtime)"
-Write-Host "Upwork extension: $($release.components.upwork_extension)"
-Write-Host "LinkedIn/Sales Navigator extension: $($release.components.linkedin_sales_navigator_extension)"
-Write-Host "Commercial readiness: $($release.components.commercial_readiness)"
+Write-Host "$releaseProduct / $releaseApplication $releaseVersion installed and healthy." -ForegroundColor Green
+Write-Host "Python: $pythonVersion"
+Write-Host "Runtime: $runtimeVersion"
+Write-Host "Upwork extension: $upworkExtensionVersion"
+Write-Host "LinkedIn/Sales Navigator extension: $linkedinExtensionVersion"
 Write-Host "Extensions: $extensionRoot"
 Write-Host "State preserved at: $StateRoot"
-Write-Host "Prospect Desk sync config: $configPath"
+Write-Host "Lead desk: $StateRoot\review\index.html"
 Write-Host "Sync sources: LinkedIn warm, Upwork warm and Sales Navigator cold campaigns"
 Write-Host "External actions remain disabled."
-Write-Host "Load or reload both unpacked extensions in chrome://extensions/."
-Write-Host "Run Check Sales Automation Release before capture and Check Sales Automation Pilot before any release merge."
+if ($EnableAutoStart) {
+    Write-Warning "Runtime-only Windows startup was explicitly enabled."
+} else {
+    Write-Host "Manual start is the default."
+}
+Write-Host ""
+Write-Host "Desktop shortcuts created:" -ForegroundColor Cyan
+Write-Host "  Start Sales Automation"
+Write-Host "  Stop Sales Automation"
+Write-Host "  Open Lead Desk"
+Write-Host "  Setup Browser Extensions"
+Write-Host ""
+Write-Host "The installation health check is complete and the runtime is stopped."
+Write-Host "Run the Start Sales Automation shortcut to start collectors, open approved searches and open the lead desk."

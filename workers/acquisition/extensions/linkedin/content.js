@@ -2,8 +2,11 @@
   "use strict";
 
   const signal = globalThis.CodistanLinkedInSignal;
-  if (!signal) return;
+  const hardening = globalThis.CodistanLinkedInParserHardening;
+  if (!signal || !hardening) return;
 
+  const PARSER_VERSION = "linkedin-dom-1.2.0";
+  const monitor = hardening.createDomMonitor(document);
   const POST_SELECTORS = [
     '[data-codistan-opportunity-card="true"]',
     'div[data-view-name="feed-full-update"]',
@@ -29,7 +32,9 @@
     '.feed-shared-text',
     '.entity-result__summary',
     '.break-words',
-    '[data-test-id*="post-text"]'
+    '[data-test-id*="post-text"]',
+    '[class*="document"] [class*="description"]',
+    '[class*="carousel"] [class*="description"]'
   ];
   const ACTOR_NAME_SELECTORS = [
     '.update-components-actor__name',
@@ -76,7 +81,7 @@
 
   function textFrom(root, selectors) {
     const node = firstVisible(root, selectors);
-    return signal.normalizeText(node?.innerText || node?.textContent || "");
+    return hardening.normalizeText(node?.innerText || node?.textContent || "", 20000);
   }
 
   function findOriginalRoot(post) {
@@ -116,7 +121,7 @@
   function canonicalFromValue(value) {
     for (const variant of decodedVariants(value)) {
       const canonical = signal.canonicalPostUrl(variant, looseActivityUrn(variant));
-      if (canonical) return canonical;
+      if (canonical) return hardening.canonicalPostUrl(canonical);
     }
     return "";
   }
@@ -125,7 +130,7 @@
     const values = [];
     const nodes = [];
     if (root instanceof Element) nodes.push(root);
-    for (const node of root.querySelectorAll('*')) {
+    for (const node of root.querySelectorAll("*")) {
       nodes.push(node);
       if (nodes.length >= limit) break;
     }
@@ -139,15 +144,7 @@
   }
 
   function currentIndividualPostUrl() {
-    try {
-      const url = new URL(window.location.href);
-      if (url.pathname.startsWith('/posts/') || url.pathname.startsWith('/feed/update/') || url.pathname.startsWith('/pulse/')) {
-        return signal.canonicalPostUrl(url.href);
-      }
-    } catch (_error) {
-      // Ignore malformed location values.
-    }
-    return "";
+    return hardening.canonicalPostUrl(window.location.href);
   }
 
   function activityUrn(root) {
@@ -156,8 +153,7 @@
       const urn = looseActivityUrn(value);
       if (urn) return urn;
     }
-    const htmlUrn = looseActivityUrn(String(root.outerHTML || "").slice(0, 600000));
-    return htmlUrn || "";
+    return looseActivityUrn(String(root.outerHTML || "").slice(0, 600000));
   }
 
   function candidateScopes(post) {
@@ -172,12 +168,12 @@
 
   function timestampCandidate(root) {
     for (const scope of candidateScopes(root)) {
-      for (const anchor of scope.querySelectorAll('a[href]')) {
-        const href = String(anchor.href || anchor.getAttribute('href') || "");
+      for (const anchor of scope.querySelectorAll("a[href]")) {
+        const href = String(anchor.href || anchor.getAttribute("href") || "");
         const canonical = canonicalFromValue(href);
         if (canonical) return canonical;
-        const text = signal.normalizeText(anchor.innerText || anchor.textContent || "");
-        const label = signal.normalizeText(anchor.getAttribute('aria-label') || anchor.getAttribute('title') || "");
+        const text = hardening.normalizeText(anchor.innerText || anchor.textContent || "", 120);
+        const label = hardening.normalizeText(anchor.getAttribute("aria-label") || anchor.getAttribute("title") || "", 200);
         if ((AGE_TEXT.test(text) || /\b(?:ago|post)\b/i.test(label)) && href) {
           const indirect = canonicalFromValue(href);
           if (indirect) return indirect;
@@ -203,12 +199,12 @@
       if (fallbackTimestamp) return fallbackTimestamp;
     }
     const urn = knownUrn || activityUrn(root) || activityUrn(fallbackRoot);
-    return urn ? signal.canonicalPostUrl('', urn) : "";
+    return urn ? hardening.canonicalPostUrl(signal.canonicalPostUrl("", urn)) : "";
   }
 
   function actor(root) {
     const link = firstVisible(root, ACTOR_LINK_SELECTORS);
-    const name = textFrom(root, ACTOR_NAME_SELECTORS) || signal.normalizeText(link?.textContent || "");
+    const name = textFrom(root, ACTOR_NAME_SELECTORS) || hardening.normalizeText(link?.textContent || "", 300);
     let profileUrl = "";
     try {
       if (link?.href) {
@@ -234,12 +230,12 @@
       for (const selector of BODY_SELECTORS) {
         for (const node of candidateRoot.querySelectorAll(selector)) {
           if (!isVisible(node)) continue;
-          const value = signal.normalizeText(node.innerText || node.textContent || "");
+          const value = hardening.normalizeText(node.innerText || node.textContent || "", 20000);
           if (value.length >= 35) candidates.push(value);
         }
       }
-      const fallback = signal.normalizeText(candidateRoot.innerText || candidateRoot.textContent || "");
-      if (fallback.length >= 35 && fallback.length <= 9000) candidates.push(fallback);
+      const fallback = hardening.normalizeText(candidateRoot.innerText || candidateRoot.textContent || "", 20000);
+      if (fallback.length >= 35 && fallback.length <= 15000) candidates.push(fallback);
     };
     collect(root);
     if (root !== fallbackRoot) collect(fallbackRoot);
@@ -260,11 +256,17 @@
     return nodes;
   }
 
+  function increment(map, key) {
+    map[key] = Number(map[key] || 0) + 1;
+  }
+
   function extractVisiblePosts(limit = 20) {
     const posts = [];
     const candidateUrls = [];
     const seenUrls = new Set();
     const diagnostics = {
+      parser_version: PARSER_VERSION,
+      hardening_version: hardening.VERSION,
       visible_post_containers: 0,
       adapter_marked_containers: 0,
       posts_with_readable_text: 0,
@@ -273,8 +275,11 @@
       containers_with_activity_id: 0,
       containers_with_permalink_hint: 0,
       missing_canonical_url: 0,
+      partial_parse_rejections: 0,
       duplicate_urls: 0,
-      rejection_reasons: {}
+      rejection_reasons: {},
+      layout_signature: hardening.layoutSignature(document, {posts: POST_SELECTORS, bodies: BODY_SELECTORS, actors: ACTOR_NAME_SELECTORS}),
+      dom_mutations: monitor.snapshot()
     };
 
     const nodes = visiblePostNodes();
@@ -284,12 +289,14 @@
     for (const post of nodes) {
       const originalRoot = findOriginalRoot(post);
       const body = visibleBody(originalRoot, post);
-      if (!body) continue;
+      if (!body) {
+        increment(diagnostics.rejection_reasons, "missing_readable_body");
+        continue;
+      }
       diagnostics.posts_with_readable_text += 1;
       const classification = signal.classifyOpportunity(body);
       if (!classification.candidate) {
-        const reason = classification.reject_reason || 'unknown_rejection';
-        diagnostics.rejection_reasons[reason] = Number(diagnostics.rejection_reasons[reason] || 0) + 1;
+        increment(diagnostics.rejection_reasons, classification.reject_reason || "unknown_rejection");
         continue;
       }
       diagnostics.classified_candidates += 1;
@@ -298,6 +305,7 @@
       const sourceUrl = postUrl(originalRoot, post, knownUrn);
       if (!sourceUrl) {
         diagnostics.missing_canonical_url += 1;
+        increment(diagnostics.rejection_reasons, "missing_canonical_url");
         continue;
       }
       diagnostics.containers_with_permalink_hint += 1;
@@ -306,13 +314,14 @@
         diagnostics.duplicate_urls += 1;
         continue;
       }
+
       const originalAuthor = actor(originalRoot);
       const reposter = originalRoot === post ? null : actor(post);
       const urn = looseActivityUrn(sourceUrl) || knownUrn;
       const postedAge = textFrom(originalRoot, TIME_SELECTORS) || textFrom(post, TIME_SELECTORS);
+      const age = hardening.localizedAge(postedAge);
       const title = body.length > 140 ? `${body.slice(0, 137)}...` : body;
-      seenUrls.add(sourceUrl);
-      posts.push({
+      const record = {
         source_url: sourceUrl,
         source_native_id: urn || sourceUrl,
         title,
@@ -330,15 +339,37 @@
           original_author_profile_url: originalAuthor.profile_url,
           reposter_name: reposter?.name || "",
           reposter_profile_url: reposter?.profile_url || "",
+          is_repost: Boolean(reposter),
+          localized_post_age: age,
           classifier_version: "linkedin-direct-requirement-1.0.1",
-          extraction_version: "linkedin-dom-1.1.0"
+          extraction_version: PARSER_VERSION,
+          parser_hardening_version: hardening.VERSION,
+          parser_status: "pending"
         }
-      });
+      };
+      const assessment = hardening.evaluateLinkedInRecord(record);
+      record.raw_evidence.parser_status = assessment.status;
+      record.raw_evidence.parser_diagnostics = assessment;
+      if (assessment.status !== "complete") {
+        diagnostics.partial_parse_rejections += 1;
+        for (const field of assessment.missing_critical_fields) increment(diagnostics.rejection_reasons, `missing_${field}`);
+        continue;
+      }
+      seenUrls.add(sourceUrl);
+      posts.push(record);
       if (currentIndividualPostUrl() && posts.length >= 1) break;
       if (posts.length >= limit) break;
     }
+
+    const deduped = hardening.dedupeRecords(posts);
+    diagnostics.duplicate_urls += deduped.duplicates;
     diagnostics.candidate_urls = candidateUrls.length;
-    return {records: posts, candidate_urls: candidateUrls.slice(0, limit), diagnostics};
+    diagnostics.dom_mutations = monitor.snapshot();
+    return {
+      records: deduped.records,
+      candidate_urls: candidateUrls.slice(0, limit),
+      diagnostics: hardening.sanitize(diagnostics)
+    };
   }
 
   chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
@@ -357,7 +388,7 @@
         }
       });
     } catch (error) {
-      sendResponse({ok: false, error: error instanceof Error ? error.message : String(error)});
+      sendResponse({ok: false, error: hardening.safeError(error), parser_version: PARSER_VERSION});
     }
     return true;
   });

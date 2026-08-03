@@ -1,0 +1,70 @@
+name: Synchronization Health CI
+
+on:
+  pull_request:
+    branches:
+      - agent/funnel-analytics-273
+    paths:
+      - '.github/workflows/sync-health-ci.yml'
+      - 'package.json'
+      - 'pnpm-lock.yaml'
+      - 'packages/sync-health/**'
+      - 'packages/neon-state/src/sync-health-store.ts'
+      - 'apps/web/package.json'
+      - 'apps/web/src/sync-health-view.ts'
+      - 'api/sync-health.ts'
+      - 'api/acquisition-ingest.ts'
+      - 'vercel/acquisition-sync-health-runtime.ts'
+      - 'workers/acquisition/acquisition_v4/sync_health.py'
+      - 'workers/acquisition/sync_health_report.py'
+      - 'workers/acquisition/tests/test_sync_health.py'
+      - 'workers/acquisition/tests/sync_health_visibility_contract.ts'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: sync-health-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  validate:
+    name: Validate sync health, dead-letter and replay visibility
+    runs-on: ubuntu-latest
+    timeout-minutes: 32
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install standalone pnpm
+        run: npm install --global --force @pnpm/exe@9.15.9
+      - name: Install workspace dependencies
+        run: pnpm install --no-frozen-lockfile
+      - name: Build production workspace
+        run: pnpm build
+      - name: Test sync health package
+        run: pnpm --filter @sales-automation/sync-health test
+      - name: Type-check sync health package
+        run: pnpm --filter @sales-automation/sync-health typecheck
+      - name: Test local outbox health and replay controls
+        env:
+          PYTHONPATH: workers/acquisition
+        run: python -m unittest workers/acquisition/tests/test_sync_health.py
+      - name: Validate API, runtime, dashboard and redaction contracts
+        run: pnpm exec tsx workers/acquisition/tests/sync_health_visibility_contract.ts
+      - name: Type-check Vercel and web integration
+        run: pnpm typecheck:vercel
+      - name: Enforce secret, state and human-action boundaries
+        shell: bash
+        run: |
+          ! grep -R "externalActionAutomated: true\|external_action_automated.*True\|automatic sending enabled" \
+            packages/sync-health api/sync-health.ts vercel/acquisition-sync-health-runtime.ts workers/acquisition/acquisition_v4/sync_health.py workers/acquisition/sync_health_report.py
+          ! grep -R "sendLinkedInMessage\|submitUpworkProposal\|sendEmailAutomatically\|connectionRequest" \
+            packages/sync-health api/sync-health.ts vercel/acquisition-sync-health-runtime.ts workers/acquisition/acquisition_v4/sync_health.py
+          ! grep -R "Remove-Item.*Codistan.*Acquisition\|rmdir.*Codistan.*Acquisition\|shutil.rmtree" \
+            packages/sync-health api/sync-health.ts vercel/acquisition-sync-health-runtime.ts workers/acquisition/acquisition_v4/sync_health.py workers/acquisition/sync_health_report.py

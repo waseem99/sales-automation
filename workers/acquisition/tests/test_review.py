@@ -30,7 +30,9 @@ class ReviewTests(unittest.TestCase):
             self.assertEqual(queue["summary"]["priority_a"], 1)
             html = Path(output["html_path"]).read_text(encoding="utf-8")
             self.assertIn("https://www.linkedin.com/feed/update/urn:li:activity:1", html)
-            self.assertIn("Every external action remains manual", html)
+            self.assertIn("every external action remains manual", html.lower())
+            self.assertIn('data-filter="actionable"', html)
+            self.assertIn("applyFilter('actionable')", html)
 
 
 if __name__ == "__main__":

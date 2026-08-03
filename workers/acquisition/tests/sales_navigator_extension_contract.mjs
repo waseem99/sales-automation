@@ -17,18 +17,18 @@ for (const [name, source] of Object.entries({entry, background, catalogue, conte
   assert.doesNotThrow(() => new vm.Script(source), `${name} must parse as JavaScript`);
 }
 
-assert.equal(manifest.version, "1.5.0");
+assert.equal(manifest.version, "1.6.2");
 assert.equal(manifest.background.service_worker, "background-entry.js");
 assert(entry.includes('sales-nav-catalogue.js'));
 assert(entry.includes('sales-nav-background.js'));
 assert(entry.indexOf('sales-nav-catalogue.js') < entry.indexOf('sales-nav-background.js'));
-assert(manifest.permissions.includes("alarms"));
-assert(manifest.permissions.includes("tabs"));
-assert(manifest.permissions.includes("storage"));
+assert.deepEqual([...manifest.permissions].sort(), ["alarms", "scripting", "storage", "tabs"]);
+assert(!manifest.permissions.includes("activeTab"));
 assert(manifest.host_permissions.includes("https://www.linkedin.com/*"));
 assert(manifest.host_permissions.includes("https://sales.linkedin.com/*"));
 assert(manifest.host_permissions.includes("http://127.0.0.1:8785/*"));
-assert.deepEqual(manifest.content_scripts[1].js, ["sales-nav.js"]);
+assert(manifest.host_permissions.includes("http://127.0.0.1:8795/*"));
+assert.deepEqual(manifest.content_scripts[1].js, ["parser-hardening.js", "sales-nav.js"]);
 assert.equal(manifest.options_page, "sales-nav-options.html");
 
 for (const marker of [
@@ -81,7 +81,7 @@ for (const marker of [
   'CODISTAN_CAPTURE_VISIBLE_SALES_NAVIGATOR_LEADS',
   'CODISTAN_SCROLL_SALES_NAV_RESULTS',
   'CODISTAN_RESTORE_SALES_NAV_SCROLL',
-  'sales-navigator-dom-1.0.0',
+  'sales-navigator-dom-1.1.0',
 ]) assert(content.includes(marker), `missing Sales Navigator DOM marker: ${marker}`);
 
 for (const marker of [
@@ -138,7 +138,9 @@ for (const prohibited of [
   'sendinmail(', 'sendlinkedinmessage(', 'connectrequest(', 'createconnectionrequest(',
   'savelead(', 'followlead(', 'sendemail(', 'submitproposal(',
   'external_action_performed: true', 'chrome.tabs.update',
-]) assert(!externalSurface.includes(prohibited.toLowerCase()), `Sales Navigator extension contains prohibited action marker: ${prohibited}`);
+  'chrome.cookies', 'document.cookie', 'localstorage.getitem', 'sessionstorage.getitem',
+  'eval(', 'new function(', 'importscripts("http', "importscripts('http",
+]) assert(!externalSurface.includes(prohibited.toLowerCase()), `Sales Navigator extension contains prohibited action/privacy marker: ${prohibited}`);
 
 assert(background.includes('chrome.tabs.sendMessage'));
 assert(!content.includes('scrollIntoView'));

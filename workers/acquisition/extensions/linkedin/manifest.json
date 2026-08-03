@@ -1,14 +1,15 @@
 {
   "manifest_version": 3,
   "name": "Codistan LinkedIn & Sales Navigator Capture",
-  "version": "1.5.0",
-  "description": "Capture warm LinkedIn requirements and run route-specific Sales Navigator campaigns for direct buyers, channel partners and delivery partners.",
-  "permissions": ["activeTab", "tabs", "storage", "scripting", "alarms"],
+  "version": "1.6.2",
+  "description": "Capture warm LinkedIn requirements and run route-specific Sales Navigator campaigns under the local sequential capture controller.",
+  "permissions": ["tabs", "storage", "scripting", "alarms"],
   "host_permissions": [
     "https://www.linkedin.com/*",
     "https://sales.linkedin.com/*",
     "http://127.0.0.1:8775/*",
-    "http://127.0.0.1:8785/*"
+    "http://127.0.0.1:8785/*",
+    "http://127.0.0.1:8795/*"
   ],
   "background": {
     "service_worker": "background-entry.js"
@@ -22,12 +23,12 @@
     {
       "matches": ["https://www.linkedin.com/*"],
       "exclude_globs": ["*://www.linkedin.com/sales/*"],
-      "js": ["signal.js", "dom-adapter.js", "search-resolver.js", "content.js"],
+      "js": ["parser-hardening.js", "signal.js", "dom-adapter.js", "search-resolver.js", "content.js"],
       "run_at": "document_idle"
     },
     {
       "matches": ["https://www.linkedin.com/sales/*", "https://sales.linkedin.com/*"],
-      "js": ["sales-nav.js"],
+      "js": ["parser-hardening.js", "sales-nav.js"],
       "run_at": "document_idle"
     }
   ]
