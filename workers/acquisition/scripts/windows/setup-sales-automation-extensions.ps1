@@ -1,5 +1,8 @@
 param(
-    [string]$StateRoot = (Join-Path $env:LOCALAPPDATA "Codistan\Acquisition")
+    [string]$StateRoot = (Join-Path $env:LOCALAPPDATA "Codistan\Acquisition"),
+    [string]$PreferredBrowserId = "",
+    [string]$PreferredProfileName = "",
+    [switch]$ReuseExistingExtensions
 )
 
 $ErrorActionPreference = "Stop"
@@ -23,13 +26,61 @@ if (-not (Test-Path -LiteralPath $browserBootstrap)) {
     throw "The Sales Automation browser discovery module was not found."
 }
 . $browserBootstrap
-$browser = Get-CodistanChromiumBrowser -StateRoot $StateRoot
+$browser = Get-CodistanChromiumBrowser `
+    -StateRoot $StateRoot `
+    -PreferredBrowserId $PreferredBrowserId `
+    -PreferredProfileName $PreferredProfileName
+
+$selectedProfile = [string](Get-OptionalPropertyValue -InputObject $browser -Name "ProfileName" -DefaultValue "")
+$profileLabel = if ($selectedProfile) { $selectedProfile } else { "current/default profile" }
+
+function Test-ExpectedExtensionInstallation {
+    param(
+        [AllowNull()][object]$Installation,
+        [string]$ExpectedPath,
+        [string]$ExpectedVersion,
+        [string]$ExpectedProfile
+    )
+    if ($null -eq $Installation) { return $false }
+    $storedPath = [string](Get-OptionalPropertyValue -InputObject $Installation -Name "StoredPath" -DefaultValue "")
+    $manifestVersion = [string](Get-OptionalPropertyValue -InputObject $Installation -Name "ManifestVersion" -DefaultValue "")
+    $profileName = [string](Get-OptionalPropertyValue -InputObject $Installation -Name "ProfileName" -DefaultValue "")
+    if ([string]::IsNullOrWhiteSpace($storedPath)) { return $false }
+    try {
+        $normalizedStored = [System.IO.Path]::GetFullPath($storedPath).TrimEnd("\")
+        $normalizedExpected = [System.IO.Path]::GetFullPath($ExpectedPath).TrimEnd("\")
+    } catch {
+        return $false
+    }
+    if ($normalizedStored -ne $normalizedExpected) { return $false }
+    if ($manifestVersion -ne $ExpectedVersion) { return $false }
+    if ($ExpectedProfile -and $profileName -ne $ExpectedProfile) { return $false }
+    return $true
+}
+
+$upworkInstallation = Find-CodistanBrowserExtension `
+    -Browser $browser `
+    -ExtensionName "Codistan Upwork Opportunity Capture" `
+    -ExpectedPath $upworkPath `
+    -PreferredProfileName $selectedProfile
+$linkedinInstallation = Find-CodistanBrowserExtension `
+    -Browser $browser `
+    -ExtensionName "Codistan LinkedIn & Sales Navigator Capture" `
+    -ExpectedPath $linkedinPath `
+    -PreferredProfileName $selectedProfile
+
+$canReuse = (
+    $ReuseExistingExtensions -and
+    (Test-ExpectedExtensionInstallation -Installation $upworkInstallation -ExpectedPath $upworkPath -ExpectedVersion $upworkVersion -ExpectedProfile $selectedProfile) -and
+    (Test-ExpectedExtensionInstallation -Installation $linkedinInstallation -ExpectedPath $linkedinPath -ExpectedVersion $linkedinVersion -ExpectedProfile $selectedProfile)
+)
 
 $instructionsPath = Join-Path $StateRoot "BROWSER-EXTENSION-SETUP.txt"
 @"
 CODISTAN SALES AUTOMATION — ONE-TIME BROWSER SETUP
 
 Selected browser: $($browser.Name)
+Selected profile: $profileLabel
 Extensions page: $($browser.ExtensionsUrl)
 
 1. In the extensions page, turn Developer mode ON.
@@ -50,37 +101,44 @@ Safety boundary:
 - They never bypass login, verification or platform controls.
 "@ | Set-Content -LiteralPath $instructionsPath -Encoding UTF8
 
-Start-Process explorer.exe -ArgumentList ('"' + $upworkPath + '"') | Out-Null
-Start-Process explorer.exe -ArgumentList ('"' + $linkedinPath + '"') | Out-Null
-Start-CodistanBrowser -Browser $browser -Arguments @("--new-window", [string]$browser.ExtensionsUrl)
-Start-Process notepad.exe -ArgumentList ('"' + $instructionsPath + '"') | Out-Null
+if ($canReuse) {
+    Write-Host "Existing extension installations were verified in $($browser.Name), profile $profileLabel." -ForegroundColor Green
+} else {
+    Start-Process explorer.exe -ArgumentList ('"' + $upworkPath + '"') | Out-Null
+    Start-Process explorer.exe -ArgumentList ('"' + $linkedinPath + '"') | Out-Null
+    Start-CodistanBrowser -Browser $browser -Arguments @("--new-window", [string]$browser.ExtensionsUrl)
+    Start-Process notepad.exe -ArgumentList ('"' + $instructionsPath + '"') | Out-Null
 
-Write-Host ""
-Write-Host "ONE-TIME BROWSER SETUP" -ForegroundColor Cyan
-Write-Host "Browser: $($browser.Name)" -ForegroundColor White
-Write-Host "Load these two unpacked extension folders in $($browser.ExtensionsUrl):"
-Write-Host "  1. $upworkPath" -ForegroundColor White
-Write-Host "  2. $linkedinPath" -ForegroundColor White
-Write-Host "Expected versions: Upwork $upworkVersion; LinkedIn/Sales Navigator $linkedinVersion"
-Write-Host ""
-Write-Host "After loading them, sign into Upwork and LinkedIn in this same browser profile."
-Write-Host "No proposal or outreach action is automated."
-Write-Host ""
+    Write-Host ""
+    Write-Host "ONE-TIME BROWSER SETUP" -ForegroundColor Cyan
+    Write-Host "Browser: $($browser.Name)" -ForegroundColor White
+    Write-Host "Profile: $profileLabel" -ForegroundColor White
+    Write-Host "Load these two unpacked extension folders in $($browser.ExtensionsUrl):"
+    Write-Host "  1. $upworkPath" -ForegroundColor White
+    Write-Host "  2. $linkedinPath" -ForegroundColor White
+    Write-Host "Expected versions: Upwork $upworkVersion; LinkedIn/Sales Navigator $linkedinVersion"
+    Write-Host ""
+    Write-Host "After loading them, keep Upwork and LinkedIn signed in in this same profile."
+    Write-Host "No proposal or outreach action is automated."
+    Write-Host ""
 
-$confirmation = Read-Host "Type LOADED after both extensions are visible and enabled"
-if ($confirmation.Trim().ToUpperInvariant() -ne "LOADED") {
-    throw "Extension setup was not confirmed. No setup marker was written."
+    $confirmation = Read-Host "Type LOADED after both extensions are visible and enabled"
+    if ($confirmation.Trim().ToUpperInvariant() -ne "LOADED") {
+        throw "Extension setup was not confirmed. No setup marker was written."
+    }
+
+    Start-Sleep -Seconds 2
+    $upworkInstallation = Find-CodistanBrowserExtension `
+        -Browser $browser `
+        -ExtensionName "Codistan Upwork Opportunity Capture" `
+        -ExpectedPath $upworkPath `
+        -PreferredProfileName $selectedProfile
+    $linkedinInstallation = Find-CodistanBrowserExtension `
+        -Browser $browser `
+        -ExtensionName "Codistan LinkedIn & Sales Navigator Capture" `
+        -ExpectedPath $linkedinPath `
+        -PreferredProfileName $selectedProfile
 }
-
-Start-Sleep -Seconds 2
-$upworkInstallation = Find-CodistanBrowserExtension `
-    -Browser $browser `
-    -ExtensionName "Codistan Upwork Opportunity Capture" `
-    -ExpectedPath $upworkPath
-$linkedinInstallation = Find-CodistanBrowserExtension `
-    -Browser $browser `
-    -ExtensionName "Codistan LinkedIn & Sales Navigator Capture" `
-    -ExpectedPath $linkedinPath
 
 $configRoot = Join-Path $StateRoot "config"
 New-Item -ItemType Directory -Force -Path $configRoot | Out-Null
@@ -94,11 +152,12 @@ $markerPath = Join-Path $configRoot "browser-extensions-confirmed.json"
     browser_name = [string]$browser.Name
     browser_executable = [string]$browser.Executable
     browser_extensions_url = [string]$browser.ExtensionsUrl
-    browser_profile = if ($linkedinInstallation) { [string]$linkedinInstallation.ProfileName } elseif ($upworkInstallation) { [string]$upworkInstallation.ProfileName } else { "" }
+    browser_profile = $selectedProfile
+    browser_profile_argument = [string](Get-OptionalPropertyValue -InputObject $browser -Name "BrowserArgument" -DefaultValue "")
     upwork_extension_version = $upworkVersion
-    upwork_extension_id = if ($upworkInstallation) { [string]$upworkInstallation.Id } else { "" }
+    upwork_extension_id = $(if ($upworkInstallation) { [string]$upworkInstallation.Id } else { "" })
     linkedin_sales_navigator_extension_version = $linkedinVersion
-    linkedin_sales_navigator_extension_id = if ($linkedinInstallation) { [string]$linkedinInstallation.Id } else { "" }
+    linkedin_sales_navigator_extension_id = $(if ($linkedinInstallation) { [string]$linkedinInstallation.Id } else { "" })
     upwork_extension_path = $upworkPath
     linkedin_extension_path = $linkedinPath
     external_actions_enabled = $false
@@ -118,8 +177,9 @@ if (Test-Path -LiteralPath $campaignCommand) {
 }
 
 Write-Host "Browser extension setup confirmed: $markerPath" -ForegroundColor Green
+Write-Host "Configured browser/profile: $($browser.Name) / $profileLabel" -ForegroundColor Green
 if (-not $upworkInstallation -or -not $linkedinInstallation) {
-    Write-Warning "The browser did not expose one or both extension IDs yet. Capture can still work; restart the browser once if an extension does not respond."
+    Write-Warning "The browser did not expose one or both extension IDs yet. Capture can still work; restart the configured Chrome profile once if an extension does not respond."
 }
 Write-Host "A Sales Navigator Campaigns shortcut is available on the desktop."
 
