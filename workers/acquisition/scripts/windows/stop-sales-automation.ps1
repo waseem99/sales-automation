@@ -42,6 +42,18 @@ function Stop-RecordedProcess([string]$PidFile) {
     Remove-Item -LiteralPath $PidFile -Force -ErrorAction SilentlyContinue
 }
 
+# Close only Codistan-managed browser workspace tabs. Unrelated Chrome tabs,
+# windows and sessions are never touched. This is best-effort so runtime stop
+# and state preservation cannot be blocked by browser availability.
+$workspaceGovernance = Join-Path $StateRoot "app-current\workers\acquisition\scripts\windows\govern-sales-automation-workspace.ps1"
+if ((Get-Process chrome -ErrorAction SilentlyContinue) -and (Test-Path -LiteralPath $workspaceGovernance)) {
+    try {
+        & $workspaceGovernance -StateRoot $StateRoot -Mode Close -Quiet
+    } catch {
+        Write-Warning "Codistan-managed browser tabs could not be closed automatically: $($_.Exception.Message)"
+    }
+}
+
 $watchdogPidFile = Join-Path $StateRoot "watchdog.pid"
 $runtimePidFile = Join-Path $StateRoot "runtime.pid"
 $watchdogLockFile = Join-Path $StateRoot "watchdog.lock"
@@ -78,4 +90,5 @@ if ($stopped.Count -eq 0) {
 } else {
     Write-Host "Stopped Sales Automation process IDs: $($stopped -join ', ')"
 }
+Write-Host "Codistan-managed browser tabs were closed where Chrome was running; unrelated tabs were untouched."
 Write-Host "Operational state preserved at: $StateRoot"
