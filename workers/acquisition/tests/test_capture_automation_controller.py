@@ -5,7 +5,7 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 import unittest
 
-from acquisition_v4.automation_controller import AutomationController
+from acquisition_v4.automation_controller_v2 import AutomationController
 from acquisition_v4.qualification_router_v2 import _apply_route_resolution, route_scores
 from acquisition_v4.review_v5 import write_review_outputs
 
@@ -32,6 +32,18 @@ class CaptureAutomationControllerTests(unittest.TestCase):
             self.assertFalse(controller.control("run_now")["paused"])
             with self.assertRaises(ValueError):
                 controller.control("send_message")
+
+    def test_controller_rejects_events_outside_active_source_stage(self) -> None:
+        with TemporaryDirectory() as directory:
+            controller = AutomationController(Path(directory))
+            controller.running_cycle_id = "cycle-one"
+            controller.running_source = "upwork"
+            with self.assertRaises(ValueError):
+                controller.report_event({"source": "linkedin", "cycle_id": "cycle-one", "ok": True})
+            with self.assertRaises(ValueError):
+                controller.report_event({"source": "upwork", "cycle_id": "old-cycle", "ok": True})
+            accepted = controller.report_event({"source": "upwork", "cycle_id": "cycle-one", "ok": True})
+            self.assertTrue(accepted["accepted"])
 
     def test_fintech_software_request_routes_to_software_not_animation(self) -> None:
         record = {
@@ -103,17 +115,23 @@ class CaptureAutomationControllerTests(unittest.TestCase):
         linkedin_trigger = (root / "extensions" / "linkedin" / "automation-trigger.js").read_text(encoding="utf-8")
         detail = (root / "extensions" / "upwork" / "detail-enrichment.js").read_text(encoding="utf-8")
         supervisor = (root / "acquisition_v4" / "supervisor.py").read_text(encoding="utf-8")
+        controller = (root / "acquisition_v4" / "automation_controller_v2.py").read_text(encoding="utf-8")
 
         for content in (upwork_trigger, linkedin_trigger):
             self.assertIn("/event", content)
             self.assertIn("chrome.tabs.remove", content)
             self.assertNotIn("submitProposal", content)
             self.assertNotIn("sendMessageToBuyer", content)
+        self.assertNotIn("next_extension_id", upwork_trigger)
+        self.assertIn('self.running_source = "upwork"', controller)
+        self.assertIn('self.running_source = "linkedin"', controller)
+        self.assertIn('self.running_source = "sales_navigator"', controller)
         self.assertIn("MAX_DETAIL_RECORDS = 5", detail)
         self.assertIn("active: false", detail)
         self.assertIn("chrome.tabs.remove", detail)
         self.assertIn("external_action_performed: false", detail)
         self.assertIn("AutomationController", supervisor)
+        self.assertIn("automation_controller_v2", supervisor)
         self.assertIn("127.0.0.1:8795/status", supervisor)
 
     def test_extension_manifests_pin_controller_permissions_and_versions(self) -> None:
