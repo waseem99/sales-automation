@@ -142,48 +142,6 @@ function Get-CodistanBrowserCandidates {
     return @($available)
 }
 
-function Get-CodistanChromiumBrowser {
-    param([string]$StateRoot = "")
-
-    $available = @(Get-CodistanBrowserCandidates)
-    if ($available.Count -eq 0) {
-        throw "No supported Chromium browser was found. Install or enable Opera, Google Chrome, Microsoft Edge, or Brave."
-    }
-
-    if ($StateRoot) {
-        $markerPath = Join-Path $StateRoot "config\browser-extensions-confirmed.json"
-        if (Test-Path -LiteralPath $markerPath) {
-            try {
-                $marker = Get-Content -LiteralPath $markerPath -Raw | ConvertFrom-Json
-                $configuredId = [string](Get-OptionalPropertyValue -InputObject $marker -Name "browser_id" -DefaultValue "")
-                $configuredExecutable = [string](Get-OptionalPropertyValue -InputObject $marker -Name "browser_executable" -DefaultValue "")
-                $configured = $available | Where-Object {
-                    [string](Get-OptionalPropertyValue -InputObject $_ -Name "Id" -DefaultValue "") -eq $configuredId -and
-                    [string](Get-OptionalPropertyValue -InputObject $_ -Name "Executable" -DefaultValue "") -eq $configuredExecutable
-                } | Select-Object -First 1
-                if ($configured) { return $configured }
-            } catch {}
-        }
-    }
-
-    $hint = Get-CodistanDefaultBrowserHint
-    if ($hint) {
-        foreach ($candidate in $available) {
-            foreach ($pattern in @(Get-OptionalPropertyValue -InputObject $candidate -Name "ProgIdPatterns" -DefaultValue @())) {
-                if ($hint -match [regex]::Escape([string]$pattern)) { return $candidate }
-            }
-        }
-    }
-
-    foreach ($preferredId in @("opera", "opera_gx", "chrome", "edge", "brave")) {
-        $candidate = $available | Where-Object {
-            [string](Get-OptionalPropertyValue -InputObject $_ -Name "Id" -DefaultValue "") -eq $preferredId
-        } | Select-Object -First 1
-        if ($candidate) { return $candidate }
-    }
-    return $available[0]
-}
-
 function Get-CodistanBrowserProfileDirectories {
     param([Parameter(Mandatory = $true)][object]$Browser)
     $profiles = @()
@@ -213,11 +171,103 @@ function Get-CodistanBrowserProfileDirectories {
     return @($profiles)
 }
 
+function Set-CodistanBrowserProfile {
+    param(
+        [Parameter(Mandatory = $true)][object]$Browser,
+        [string]$ProfileName = "",
+        [switch]$RequireProfile
+    )
+
+    $selectedProfile = $null
+    if (-not [string]::IsNullOrWhiteSpace($ProfileName)) {
+        $selectedProfile = @(Get-CodistanBrowserProfileDirectories -Browser $Browser) | Where-Object {
+            [string](Get-OptionalPropertyValue -InputObject $_ -Name "Name" -DefaultValue "") -eq $ProfileName
+        } | Select-Object -First 1
+        if (-not $selectedProfile -and $RequireProfile) {
+            throw "The requested browser profile '$ProfileName' was not found in $([string](Get-OptionalPropertyValue -InputObject $Browser -Name 'Name' -DefaultValue 'the selected browser'))."
+        }
+    }
+
+    return [pscustomobject]@{
+        Id = [string](Get-OptionalPropertyValue -InputObject $Browser -Name "Id" -DefaultValue "")
+        Name = [string](Get-OptionalPropertyValue -InputObject $Browser -Name "Name" -DefaultValue "")
+        Executable = [string](Get-OptionalPropertyValue -InputObject $Browser -Name "Executable" -DefaultValue "")
+        ExtensionsUrl = [string](Get-OptionalPropertyValue -InputObject $Browser -Name "ExtensionsUrl" -DefaultValue "")
+        ProgIdPatterns = @(Get-OptionalPropertyValue -InputObject $Browser -Name "ProgIdPatterns" -DefaultValue @())
+        ProfileRoots = @(Get-OptionalPropertyValue -InputObject $Browser -Name "ProfileRoots" -DefaultValue @())
+        ProfileName = $(if ($selectedProfile) { [string]$selectedProfile.Name } else { "" })
+        ProfilePath = $(if ($selectedProfile) { [string]$selectedProfile.Path } else { "" })
+        BrowserArgument = $(if ($selectedProfile) { [string]$selectedProfile.BrowserArgument } else { "" })
+    }
+}
+
+function Get-CodistanChromiumBrowser {
+    param(
+        [string]$StateRoot = "",
+        [string]$PreferredBrowserId = "",
+        [string]$PreferredProfileName = ""
+    )
+
+    $available = @(Get-CodistanBrowserCandidates)
+    if ($available.Count -eq 0) {
+        throw "No supported Chromium browser was found. Install or enable Opera, Google Chrome, Microsoft Edge, or Brave."
+    }
+
+    if (-not [string]::IsNullOrWhiteSpace($PreferredBrowserId)) {
+        $preferred = $available | Where-Object {
+            [string](Get-OptionalPropertyValue -InputObject $_ -Name "Id" -DefaultValue "") -eq $PreferredBrowserId
+        } | Select-Object -First 1
+        if (-not $preferred) {
+            throw "The requested browser '$PreferredBrowserId' is not installed or available."
+        }
+        return Set-CodistanBrowserProfile -Browser $preferred -ProfileName $PreferredProfileName -RequireProfile:($PreferredProfileName -ne "")
+    }
+
+    if ($StateRoot) {
+        $markerPath = Join-Path $StateRoot "config\browser-extensions-confirmed.json"
+        if (Test-Path -LiteralPath $markerPath) {
+            try {
+                $marker = Get-Content -LiteralPath $markerPath -Raw | ConvertFrom-Json
+                $configuredId = [string](Get-OptionalPropertyValue -InputObject $marker -Name "browser_id" -DefaultValue "")
+                $configuredExecutable = [string](Get-OptionalPropertyValue -InputObject $marker -Name "browser_executable" -DefaultValue "")
+                $configuredProfile = [string](Get-OptionalPropertyValue -InputObject $marker -Name "browser_profile" -DefaultValue "")
+                $configured = $available | Where-Object {
+                    [string](Get-OptionalPropertyValue -InputObject $_ -Name "Id" -DefaultValue "") -eq $configuredId -and
+                    [string](Get-OptionalPropertyValue -InputObject $_ -Name "Executable" -DefaultValue "") -eq $configuredExecutable
+                } | Select-Object -First 1
+                if ($configured) {
+                    return Set-CodistanBrowserProfile -Browser $configured -ProfileName $configuredProfile -RequireProfile:($configuredProfile -ne "")
+                }
+            } catch {}
+        }
+    }
+
+    $hint = Get-CodistanDefaultBrowserHint
+    if ($hint) {
+        foreach ($candidate in $available) {
+            foreach ($pattern in @(Get-OptionalPropertyValue -InputObject $candidate -Name "ProgIdPatterns" -DefaultValue @())) {
+                if ($hint -match [regex]::Escape([string]$pattern)) {
+                    return Set-CodistanBrowserProfile -Browser $candidate
+                }
+            }
+        }
+    }
+
+    foreach ($preferredId in @("chrome", "opera", "opera_gx", "edge", "brave")) {
+        $candidate = $available | Where-Object {
+            [string](Get-OptionalPropertyValue -InputObject $_ -Name "Id" -DefaultValue "") -eq $preferredId
+        } | Select-Object -First 1
+        if ($candidate) { return Set-CodistanBrowserProfile -Browser $candidate }
+    }
+    return Set-CodistanBrowserProfile -Browser $available[0]
+}
+
 function Find-CodistanBrowserExtension {
     param(
         [Parameter(Mandatory = $true)][object]$Browser,
         [Parameter(Mandatory = $true)][string]$ExtensionName,
-        [string]$ExpectedPath = ""
+        [string]$ExpectedPath = "",
+        [string]$PreferredProfileName = ""
     )
 
     $normalizedExpectedPath = ""
@@ -226,6 +276,8 @@ function Find-CodistanBrowserExtension {
     }
 
     foreach ($profile in @(Get-CodistanBrowserProfileDirectories -Browser $Browser)) {
+        $profileName = [string](Get-OptionalPropertyValue -InputObject $profile -Name "Name" -DefaultValue "")
+        if (-not [string]::IsNullOrWhiteSpace($PreferredProfileName) -and $profileName -ne $PreferredProfileName) { continue }
         $profilePath = [string](Get-OptionalPropertyValue -InputObject $profile -Name "Path" -DefaultValue "")
         if ([string]::IsNullOrWhiteSpace($profilePath)) { continue }
         foreach ($preferenceName in @("Preferences", "Secure Preferences")) {
@@ -240,6 +292,7 @@ function Find-CodistanBrowserExtension {
                     $storedPath = [string](Get-OptionalPropertyValue -InputObject $setting -Name "path" -DefaultValue "")
                     $manifest = Get-OptionalPropertyValue -InputObject $setting -Name "manifest" -DefaultValue $null
                     $manifestName = [string](Get-OptionalPropertyValue -InputObject $manifest -Name "name" -DefaultValue "")
+                    $manifestVersion = [string](Get-OptionalPropertyValue -InputObject $manifest -Name "version" -DefaultValue "")
                     $normalizedStoredPath = ""
                     if ($storedPath) {
                         try { $normalizedStoredPath = [System.IO.Path]::GetFullPath($storedPath).TrimEnd("\") } catch {}
@@ -247,10 +300,11 @@ function Find-CodistanBrowserExtension {
                     if ($manifestName -eq $ExtensionName -or ($normalizedExpectedPath -and $normalizedStoredPath -eq $normalizedExpectedPath)) {
                         return [pscustomobject]@{
                             Id = [string]$property.Name
-                            ProfileName = [string](Get-OptionalPropertyValue -InputObject $profile -Name "Name" -DefaultValue "")
+                            ProfileName = $profileName
                             ProfilePath = $profilePath
                             BrowserArgument = [string](Get-OptionalPropertyValue -InputObject $profile -Name "BrowserArgument" -DefaultValue "")
                             StoredPath = $storedPath
+                            ManifestVersion = $manifestVersion
                         }
                     }
                 }
@@ -271,5 +325,11 @@ function Start-CodistanBrowser {
     if ([string]::IsNullOrWhiteSpace($executable) -or -not (Test-Path -LiteralPath $executable)) {
         throw "The configured Chromium browser executable is unavailable."
     }
-    Start-Process -FilePath $executable -ArgumentList $Arguments | Out-Null
+    $launchArguments = @()
+    $profileArgument = [string](Get-OptionalPropertyValue -InputObject $Browser -Name "BrowserArgument" -DefaultValue "")
+    if (-not [string]::IsNullOrWhiteSpace($profileArgument) -and $Arguments -notcontains $profileArgument) {
+        $launchArguments += $profileArgument
+    }
+    $launchArguments += @($Arguments)
+    Start-Process -FilePath $executable -ArgumentList $launchArguments | Out-Null
 }
