@@ -13,14 +13,18 @@ $browser = Get-CodistanChromiumBrowser -StateRoot $StateRoot
 $expectedPath = [System.IO.Path]::GetFullPath((Join-Path $StateRoot "extensions\linkedin")).TrimEnd("\")
 $extensionId = ""
 $markerPath = Join-Path $StateRoot "config\browser-extensions-confirmed.json"
-$profileName = [string](Get-OptionalPropertyValue -InputObject $browser -Name "ProfileName" -DefaultValue "")
+$profileDirectory = [string](Get-OptionalPropertyValue -InputObject $browser -Name "ProfileDirectoryName" -DefaultValue "")
 
 if (Test-Path -LiteralPath $markerPath) {
     try {
         $marker = Get-Content -LiteralPath $markerPath -Raw | ConvertFrom-Json
+        $markerProfileDirectory = [string](Get-OptionalPropertyValue -InputObject $marker -Name "browser_profile_directory" -DefaultValue "")
+        if ([string]::IsNullOrWhiteSpace($markerProfileDirectory)) {
+            $markerProfileDirectory = [string](Get-OptionalPropertyValue -InputObject $marker -Name "browser_profile" -DefaultValue "")
+        }
         if (
             [string](Get-OptionalPropertyValue -InputObject $marker -Name "browser_id" -DefaultValue "") -eq [string]$browser.Id -and
-            [string](Get-OptionalPropertyValue -InputObject $marker -Name "browser_profile" -DefaultValue "") -eq $profileName
+            $markerProfileDirectory -eq $profileDirectory
         ) {
             $extensionId = [string](Get-OptionalPropertyValue -InputObject $marker -Name "linkedin_sales_navigator_extension_id" -DefaultValue "")
         }
@@ -32,7 +36,7 @@ if (-not $extensionId) {
         -Browser $browser `
         -ExtensionName "Codistan LinkedIn & Sales Navigator Capture" `
         -ExpectedPath $expectedPath `
-        -PreferredProfileName $profileName
+        -PreferredProfileName $profileDirectory
     if ($installation) {
         $extensionId = [string]$installation.Id
     }
@@ -40,14 +44,19 @@ if (-not $extensionId) {
 
 if ($extensionId) {
     Start-CodistanBrowser -Browser $browser -Arguments @(
-        "--new-window",
         "chrome-extension://$extensionId/sales-nav-options.html"
     )
-    $profileSuffix = $(if ($profileName) { ", profile $profileName" } else { "" })
-    Write-Host "Opened Sales Navigator campaign settings in $($browser.Name)$profileSuffix."
+    Start-Sleep -Milliseconds 600
+    $governanceScript = Join-Path $PSScriptRoot "govern-sales-automation-workspace.ps1"
+    if (Test-Path -LiteralPath $governanceScript) {
+        & $governanceScript -StateRoot $StateRoot -Mode Dedupe -Quiet
+    }
+    $profileDisplayName = [string](Get-OptionalPropertyValue -InputObject $browser -Name "ProfileDisplayName" -DefaultValue "")
+    $profileLabel = if ($profileDisplayName) { $profileDisplayName } elseif ($profileDirectory) { $profileDirectory } else { "current profile" }
+    Write-Host "Opened one Sales Navigator campaign-settings tab in $($browser.Name), profile $profileLabel."
     Write-Host "Register licensed lead-search URLs, run a manual campaign, and keep the no-confirmed-intent warning."
     exit 0
 }
 
-Start-CodistanBrowser -Browser $browser -Arguments @("--new-window", [string]$browser.ExtensionsUrl)
-throw "The Codistan LinkedIn extension ID could not be located in $($browser.Name), profile $profileName. Confirm the unpacked extension is loaded in that profile, then rerun this shortcut."
+Start-CodistanBrowser -Browser $browser -Arguments @([string]$browser.ExtensionsUrl)
+throw "The Codistan LinkedIn extension ID could not be located in $($browser.Name), profile $profileDirectory. Confirm the unpacked extension is loaded in that profile, then rerun this shortcut."
