@@ -7,6 +7,7 @@ const root = path.resolve("extensions/linkedin");
 const manifest = JSON.parse(fs.readFileSync(path.join(root, "manifest.json"), "utf8"));
 const entry = fs.readFileSync(path.join(root, "background-entry.js"), "utf8");
 const background = fs.readFileSync(path.join(root, "background.js"), "utf8");
+const automationTrigger = fs.readFileSync(path.join(root, "automation-trigger.js"), "utf8");
 const hardening = fs.readFileSync(path.join(root, "parser-hardening.js"), "utf8");
 const adapter = fs.readFileSync(path.join(root, "dom-adapter.js"), "utf8");
 const resolver = fs.readFileSync(path.join(root, "search-resolver.js"), "utf8");
@@ -17,7 +18,7 @@ const popupHtml = fs.readFileSync(path.join(root, "popup.html"), "utf8");
 const signalSource = fs.readFileSync(path.join(root, "signal.js"), "utf8");
 
 assert.equal(manifest.manifest_version, 3);
-assert.equal(manifest.version, "1.6.1");
+assert.equal(manifest.version, "1.6.2");
 assert.deepEqual([...manifest.permissions].sort(), ["alarms", "scripting", "storage", "tabs"]);
 assert(!manifest.permissions.includes("activeTab"));
 assert(entry.includes("background.js"));
@@ -30,6 +31,7 @@ assert.deepEqual(manifest.content_scripts[1].js, ["parser-hardening.js", "sales-
 assert(manifest.permissions.includes("scripting"));
 assert(manifest.permissions.includes("alarms"));
 assert(manifest.host_permissions.includes("http://127.0.0.1:8775/*"));
+assert(manifest.host_permissions.includes("http://127.0.0.1:8795/*"));
 
 for (const marker of [
   'source: "linkedin"',
@@ -48,6 +50,15 @@ for (const marker of [
   'CODISTAN_GET_LINKEDIN_AUTOMATION_STATUS',
   'CODISTAN_SET_LINKEDIN_AUTOMATION',
 ]) assert(background.includes(marker), `missing warm LinkedIn marker: ${marker}`);
+
+for (const marker of [
+  'cycle_id',
+  'controller_port',
+  'CODISTAN_RUN_LINKEDIN_SCHEDULED_SCAN_NOW',
+  'CODISTAN_RUN_SALES_NAV_CAMPAIGNS_NOW',
+  'http://127.0.0.1:${controllerPort}/event',
+  'chrome.tabs.remove',
+]) assert(automationTrigger.includes(marker), `missing local automation trigger marker: ${marker}`);
 
 for (const searchId of [
   'id: "software_delivery"',
@@ -115,7 +126,7 @@ for (const marker of ["plausibleCard", "nearestCardFromActor", "annotate"]) {
   assert(adapter.includes(marker), `missing LinkedIn adapter marker: ${marker}`);
 }
 
-for (const source of [entry, background, hardening, adapter, resolver, content, salesNav, popup, signalSource]) {
+for (const source of [entry, background, automationTrigger, hardening, adapter, resolver, content, salesNav, popup, signalSource]) {
   assert.doesNotThrow(() => new vm.Script(source));
 }
 
