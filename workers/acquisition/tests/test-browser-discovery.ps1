@@ -8,8 +8,8 @@ if (-not (Test-Path -LiteralPath $browserScript)) {
 }
 
 $content = Get-Content -LiteralPath $browserScript -Raw
-if ($content -match '\(\s*if\s*\(') {
-    throw "Browser discovery contains an inline parenthesized if-expression that is incompatible with Windows PowerShell 5.1."
+if ($content -match '(?<!\$)\(\s*if\s*\(') {
+    throw "Browser discovery contains a parenthesized if-command that is incompatible with Windows PowerShell 5.1."
 }
 
 . $browserScript
@@ -28,6 +28,7 @@ $chromeUserData = Join-Path $env:LOCALAPPDATA "Google\Chrome\User Data"
 $profilePath = Join-Path $chromeUserData "Profile 1"
 $profilePreferences = Join-Path $profilePath "Preferences"
 $createdProfile = $false
+$createdPreferences = $false
 $stateRoot = Join-Path $env:RUNNER_TEMP "Codistan-Browser-Profile-Test"
 
 try {
@@ -37,6 +38,7 @@ try {
     }
     if (-not (Test-Path -LiteralPath $profilePreferences)) {
         "{}" | Set-Content -LiteralPath $profilePreferences -Encoding UTF8
+        $createdPreferences = $true
     }
 
     $browser = Get-CodistanChromiumBrowser `
@@ -80,5 +82,7 @@ try {
     Remove-Item -LiteralPath $stateRoot -Recurse -Force -ErrorAction SilentlyContinue
     if ($createdProfile) {
         Remove-Item -LiteralPath $profilePath -Recurse -Force -ErrorAction SilentlyContinue
+    } elseif ($createdPreferences) {
+        Remove-Item -LiteralPath $profilePreferences -Force -ErrorAction SilentlyContinue
     }
 }
