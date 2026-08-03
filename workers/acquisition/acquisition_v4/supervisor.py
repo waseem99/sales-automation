@@ -6,7 +6,7 @@ from pathlib import Path
 import signal
 import threading
 
-from .automation_controller import AutomationController
+from .automation_controller_v2 import AutomationController
 from .runtime_v5 import CollectorServer, create_server
 
 DEFAULT_PORTS = {"upwork": 8765, "linkedin": 8775, "sales_navigator": 8785}
