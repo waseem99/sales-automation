@@ -44,7 +44,7 @@ class WindowsOperationalPilotTests(unittest.TestCase):
             "BraveSoftware\\Brave-Browser",
         ]:
             self.assertIn(marker, content)
-        self.assertNotIn("(if (", content)
+        self.assertNotRegex(content, r"(?<!\$)\(\s*if\s*\(")
 
     def test_extension_setup_persists_explicit_profile_and_can_reuse_it(self) -> None:
         content = self.read("scripts/windows/setup-sales-automation-extensions.ps1")
